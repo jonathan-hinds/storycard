@@ -149,14 +149,14 @@ function updateCarouselPositions() {
     if (delta > total / 2) delta -= total;
     if (delta < -total / 2) delta += total;
 
-    const clamped = Math.max(-3, Math.min(3, delta));
-    const scale = 1 - Math.abs(clamped) * 0.08;
-    const opacity = Math.max(0.25, 1 - Math.abs(clamped) * 0.2);
-    const blur = Math.max(0, Math.abs(clamped) - 0.5) * 1.2;
+    const clamped = Math.max(-4, Math.min(4, delta));
+    const scale = 1 - Math.abs(clamped) * 0.1;
+    const opacity = Math.max(0.25, 1 - Math.abs(clamped) * 0.18);
+    const blur = Math.max(0, Math.abs(clamped) - 0.5) * 1.3;
 
     cardEl.style.setProperty('--offset', clamped);
     cardEl.style.setProperty('--scale', scale.toFixed(2));
-    cardEl.style.setProperty('--rotate', `${clamped * -6}deg`);
+    cardEl.style.setProperty('--rotate', `${clamped * -7}deg`);
     cardEl.style.setProperty('--blur', `${blur}px`);
     cardEl.style.setProperty('--opacity', opacity.toFixed(2));
     cardEl.style.zIndex = 10 - Math.abs(clamped);
