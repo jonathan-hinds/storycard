@@ -1,0 +1,19 @@
+{
+  "name": "storycard",
+  "version": "1.0.0",
+  "description": "Minimalist retro-styled launcher for Storystack with instructions API",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --check server.js && node --check public/app.js"
+  },
+  "keywords": [
+    "story",
+    "cards",
+    "retro",
+    "node"
+  ],
+  "author": "",
+  "license": "ISC"
+}
