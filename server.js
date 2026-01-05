@@ -5,12 +5,21 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const publicDir = path.join(__dirname, 'public');
 const instructionsPath = path.join(__dirname, 'instructions.txt');
+const packPath = path.join(__dirname, 'pack.json');
 
 let instructionsText = 'Instructions unavailable.';
+let packData = null;
 try {
   instructionsText = fs.readFileSync(instructionsPath, 'utf8');
 } catch (error) {
   console.error('Failed to load instructions:', error);
+}
+
+try {
+  const rawPack = fs.readFileSync(packPath, 'utf8');
+  packData = JSON.parse(rawPack);
+} catch (error) {
+  console.error('Failed to load pack data:', error);
 }
 
 const mimeTypes = {
@@ -32,6 +41,17 @@ function sendNotFound(res) {
 function serveInstructions(res) {
   res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify({ instructions: instructionsText }));
+}
+
+function servePack(res) {
+  if (!packData) {
+    res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Pack data unavailable.' }));
+    return;
+  }
+
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(packData));
 }
 
 function serveStatic(pathname, res) {
@@ -73,6 +93,11 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'GET' && pathname === '/api/instructions') {
     serveInstructions(res);
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/pack') {
+    servePack(res);
     return;
   }
 

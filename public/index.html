@@ -31,6 +31,64 @@
           </div>
           <pre id="instructions-content"></pre>
         </section>
+
+        <section class="panel" id="pack-panel" hidden>
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Pack browser</p>
+              <h2 id="pack-name">Pack</h2>
+            </div>
+            <div class="pack-meta">
+              <span id="card-counter">0 cards</span>
+              <span id="filter-status" class="muted">No filters</span>
+            </div>
+          </div>
+
+          <div class="filters">
+            <label class="filter">
+              <span>Card type</span>
+              <select id="filter-type"></select>
+            </label>
+            <label class="filter">
+              <span>Beat tag</span>
+              <select id="filter-tag"></select>
+            </label>
+            <label class="filter">
+              <span>Beat lane</span>
+              <select id="filter-map"></select>
+            </label>
+          </div>
+
+          <div class="carousel" aria-live="polite">
+            <button class="button ghost nav" data-direction="-1" aria-label="Previous card">◂</button>
+            <div class="card-shell">
+              <div class="card-face" id="card-face">
+                <div class="card-title" id="card-title">Pick a card</div>
+                <div class="card-thumb" aria-hidden="true"></div>
+                <div class="card-attributes">
+                  <div>
+                    <span class="label">Type</span>
+                    <span id="card-type">—</span>
+                  </div>
+                  <div>
+                    <span class="label">Beat tag</span>
+                    <span id="card-tag">—</span>
+                  </div>
+                </div>
+                <div class="card-description" id="card-description">
+                  Use the filters to explore the pack.
+                </div>
+                <div class="card-map" id="card-map">—</div>
+              </div>
+            </div>
+            <button class="button ghost nav" data-direction="1" aria-label="Next card">▸</button>
+          </div>
+
+          <div class="carousel-meta">
+            <span id="card-position">0 / 0</span>
+            <span class="muted" id="card-map-hint">Available in beats</span>
+          </div>
+        </section>
       </main>
     </div>
 
