@@ -1,0 +1,271 @@
+## STORYSTACK (Pack 1) — Rulebook
+
+A collaborative card game where players take turns building a satisfying story outline. You’ll create characters, goals, plans, complications, twists, and a finale—then “skin” the outline into a full story after the game.
+
+---
+
+# 1) What’s in the Box
+
+* **160 Cards** (Pack 1)
+
+  * 10 **Story Pattern** cards
+  * 150 story-building cards (Cast, Relationship, Goal & Stakes, Obstacle & Complication, Revelation & Twist, Structure, Midpoint, Crisis, Climax, Resolution)
+* **1 Story Board** with **8 Beat Lanes** (each lane is a stack):
+
+  1. Setup
+  2. Inciting Incident
+  3. Commitment / Crossing the Threshold
+  4. Complications / Rising Action
+  5. Midpoint
+  6. Crisis / Dark Night
+  7. Climax
+  8. Resolution
+* **Tag Tracker** (paper, app, or tokens) to count Beat Tags as they’re played:
+
+  * SETUP, INCITING, GOAL, PLAN, TEAM, TRIALS, COMPLICATION, REVELATION, BETRAYAL, SACRIFICE, SHOWDOWN, AFTERMATH
+
+---
+
+# 2) The Goal
+
+Work together to complete **both** objectives:
+
+### Objective A — Fill the Beat Lanes
+
+Create a coherent outline by adding cards to the board’s beat lanes.
+
+### Objective B — Satisfy the Story Pattern
+
+The chosen **Story Pattern** requires certain **Beat Tags** to appear a minimum number of times in the final outline.
+
+You win when:
+
+* The story reaches a valid ending (Resolution), **and**
+* All Pattern tag requirements are met, **and**
+* Each beat lane has at least **one** card (see “Beat Minimums”).
+
+---
+
+# 3) Core Concepts
+
+### Beats
+
+The board has 8 beats. Each beat is a **lane that can hold multiple cards** in a stack.
+
+### Card Type vs Beat Tag
+
+* **Card Type** controls *where* a card is allowed to be played (which beat lanes).
+* **Beat Tag** controls *what it counts for* toward the Pattern requirements.
+
+Example:
+
+* A **Relationship** card might be legal in many beats (Type rule),
+* but it might carry the **BETRAYAL** tag (Pattern rule).
+
+### Characters and Referencing Rule (Important)
+
+* You may only reference a character if they have been created by a **Cast** card.
+* **Relationship** and many other cards require choosing existing characters.
+* If you can’t legally choose required targets, you can’t play the card.
+
+---
+
+# 4) Setup
+
+1. Place the **Story Board** in the center.
+
+2. Shuffle the **Story Pattern** cards.
+
+   * Reveal 3 at random.
+   * As a group, pick 1 to play this game. Put it face-up near the board.
+
+3. Shuffle all non-pattern cards into one **Story Deck**.
+
+4. Deal **5 cards** to each player.
+
+5. Choose a first player. (Oldest player, last person who read a book, etc.)
+
+---
+
+# 5) Beat Lane Placement Rules (Type → Beat)
+
+When you play a card, its **Type** must be allowed in that beat lane:
+
+* **Setup:** Cast, Relationship, Goal & Stakes, Structure
+* **Inciting Incident:** Goal & Stakes, Obstacle & Complication, Revelation & Twist, Structure, Relationship
+* **Commitment / Crossing the Threshold:** Goal & Stakes, Relationship, Structure, Cast
+* **Complications / Rising Action:** Obstacle & Complication, Revelation & Twist, Relationship, Structure, Goal & Stakes, Cast
+* **Midpoint:** Midpoint, Revelation & Twist, Structure, Goal & Stakes
+* **Crisis / Dark Night:** Crisis / Dark Night, Relationship, Revelation & Twist, Goal & Stakes
+* **Climax:** Climax, Obstacle & Complication, Revelation & Twist, Relationship, Structure
+* **Resolution:** Resolution, Relationship, Goal & Stakes, Cast, Structure
+
+If a card can’t be legally placed in a beat lane, you can’t play it there.
+
+---
+
+# 6) Beat Minimums (What “Filled” Means)
+
+A beat lane is considered “present” if it has **at least 1 card**.
+
+Additionally, these beats have **required card types**:
+
+* **Midpoint lane** must contain **at least 1 Midpoint card**
+* **Crisis lane** must contain **at least 1 Crisis / Dark Night card**
+* **Climax lane** must contain **at least 1 Climax card**
+* **Resolution lane** must contain **at least 1 Resolution card**
+
+You can still stack extra cards in those lanes—just ensure the required type appears.
+
+---
+
+# 7) Turn Structure
+
+On your turn:
+
+### Step 1 — Play 1 Card
+
+Choose **one** card from your hand and play it into a legal beat lane.
+
+When you play a card:
+
+* Place it in the chosen beat lane stack.
+* Immediately apply any choices on the card (choose characters, define objects, set costs, etc.).
+* Add its **Beat Tag** to the Tag Tracker (increase the count for that tag by 1), if it has one.
+
+### Step 2 — Draw Back Up
+
+Draw 1 card from the Story Deck.
+
+Your hand returns to 5 cards (unless the deck is empty).
+
+---
+
+# 8) Shared Story State (Keeping Things Consistent)
+
+You’ll maintain a simple shared state as the outline grows. A notebook works great.
+
+Track:
+
+* **Characters** (A, B, C…) and their notes (wants, needs, wounds, lies, etc.)
+* **Objects / Locations / Factions / Threats** as they appear
+* **Active Threads** (Main Thread A, optional Thread B from Structure cards)
+* **Tag Counts** toward the Pattern card
+
+If a new card contradicts an old one, resolve it immediately using “Retcon Rule.”
+
+---
+
+# 9) The Retcon Rule (When Cards Conflict)
+
+If a played card contradicts something already established:
+
+The active player chooses one:
+
+1. **Reframe:** Interpret both as true by adding an explanation (“It seemed like X, but actually Y.”)
+2. **Override:** The new card replaces the old detail.
+3. **Branch:** Use a Structure card effect in fiction (“Parallel Plots,” “Flashback Reframe,” “Secret Connection”) to justify the shift.
+
+You should keep the outline moving. Don’t stall on perfect logic.
+
+---
+
+# 10) Thread Rules (Subplots)
+
+Subplots aren’t separate lanes—subplots are created using **Structure** cards.
+
+### Creating Thread B
+
+* Playing **PARALLEL PLOTS** creates a second active thread: **Thread B**.
+* Once Thread B exists, players may interpret later cards as supporting either thread during the “Skinning” phase.
+
+### Keeping Subplots Useful
+
+Thread B should either:
+
+* produce a clue (REVELATION),
+* escalate pressure (COMPLICATION/TRIALS),
+* trigger betrayal (BETRAYAL),
+* or pay off emotionally (AFTERMATH).
+
+---
+
+# 11) Pattern Requirements (How You Actually Win)
+
+Your chosen Story Pattern lists minimum counts for certain **Beat Tags**.
+
+Example (simplified):
+
+* TRIALS(≥2) means you must have played at least 2 cards tagged TRIALS anywhere on the board.
+
+Tags can appear in any beat lane—placement is governed by **Type**, not by Tag.
+
+---
+
+# 12) Ending the Game
+
+The game ends when a player successfully plays a **Resolution** card **and** all of the following are true:
+
+1. Every beat lane has at least **one** card.
+2. Midpoint/Crisis/Climax/Resolution lanes contain their required type at least once.
+3. The Pattern card’s Beat Tag requirements are satisfied.
+
+If a Resolution card is played but requirements aren’t met:
+
+* The Resolution stays in play (it happened “early”).
+* Continue playing until requirements are met (you can add more after the ending as epilogue context).
+
+---
+
+# 13) If You Get Stuck (No Legal Plays)
+
+If you cannot legally play any card from your hand:
+
+1. Reveal the top card of the Story Deck.
+2. If you can play it, you must play it immediately.
+3. If you still can’t play, discard your hand and draw 5 new cards.
+4. If the deck is empty, the table may:
+
+   * move one card to a different legal beat lane (once per game), or
+   * declare the story a “Broken Outline” and score it anyway (see next section).
+
+---
+
+# 14) Optional Scoring (If You Want a Winner)
+
+If you want competitive play:
+
+Each player scores:
+
+* **+1** per card they played that matches a required Pattern tag (up to the requirement cap)
+* **+2** if they played the **first** Midpoint / Crisis / Climax / Resolution card
+* **+1** for each Relationship card they played that pays off in Resolution (group decides)
+
+Highest score wins. Ties share victory.
+
+---
+
+# 15) The Skinning Phase (After the Game)
+
+Now turn the outline into a story pitch.
+
+As a group:
+
+1. Give real names to Characters A, B, C…
+2. Decide setting details for Locations and Factions
+3. Write 1–2 sentences per card, in beat order, to create the final synopsis
+
+You now have a complete plot outline built by play.
+
+---
+
+## Quick Start Summary (1 minute)
+
+* Pick a Pattern.
+* Deal 5 cards.
+* Each turn: play 1 legal card → update shared state → count its tag → draw 1.
+* Keep going until the story has Midpoint, Crisis, Climax, and Resolution—and the Pattern tag requirements are met.
+
+---
+
+If you want, I can also format this as a **single printable one-page rules sheet** and a **separate reference card** that lists beat lanes + allowed types + tag pool.
