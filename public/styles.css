@@ -196,12 +196,62 @@ h2 {
   padding-inline: 12px;
 }
 
+.carousel-window {
+  position: relative;
+  overflow: hidden;
+  padding: 24px 12px 12px;
+  perspective: 1200px;
+}
+
+.carousel-window::before,
+.carousel-window::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  pointer-events: none;
+  z-index: 20;
+  background: linear-gradient(to right, var(--bg), transparent);
+}
+
+.carousel-window::after {
+  right: 0;
+  transform: rotate(180deg);
+}
+
+.carousel-window::before {
+  left: 0;
+}
+
+.carousel-track {
+  position: relative;
+  height: 540px;
+  transform-style: preserve-3d;
+}
+
 .card-shell {
+  --offset: 0;
+  --scale: 1;
+  --rotate: 0deg;
+  --blur: 0px;
+  --opacity: 1;
   background: radial-gradient(circle at 50% 30%, #0f0f0f, #040404 60%);
   border: 1px solid var(--border);
   box-shadow: inset 0 0 0 1px #0f0f0f, var(--glow);
   padding: 16px;
-  min-height: 340px;
+  width: min(320px, 82vw);
+  aspect-ratio: 2.5 / 3.5;
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate3d(calc(-50% + var(--offset) * 170px), 0, 0)
+    rotateY(var(--rotate)) scale(var(--scale));
+  filter: blur(var(--blur));
+  opacity: var(--opacity);
+  transition: transform 350ms ease, filter 350ms ease, opacity 350ms ease,
+    box-shadow 350ms ease;
+  cursor: pointer;
 }
 
 .card-face {
@@ -210,7 +260,7 @@ h2 {
   height: 100%;
   display: grid;
   grid-template-rows: auto 140px auto 1fr auto;
-  gap: 10px;
+  gap: 12px;
   background: linear-gradient(135deg, #050505, #0b0b0b);
   box-shadow: inset 0 0 0 1px #0f0f0f, 0 0 0 2px #000;
 }
@@ -251,6 +301,7 @@ h2 {
   font-size: 14px;
   line-height: 1.4;
   white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 .card-map {
@@ -258,6 +309,17 @@ h2 {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+.card-shell.active {
+  box-shadow: inset 0 0 0 1px #0f0f0f, 0 0 0 2px #000,
+    0 14px 28px #000000aa, 0 0 12px #ffffff44;
+  opacity: 1;
+  filter: none;
+}
+
+.card-shell.empty {
+  pointer-events: none;
 }
 
 .carousel-meta {
@@ -283,7 +345,15 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .carousel-window {
+    padding-inline: 0;
+  }
+
   .carousel .nav {
     width: 100%;
+  }
+
+  .carousel-track {
+    height: 480px;
   }
 }
