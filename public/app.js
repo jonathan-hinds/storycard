@@ -11,11 +11,8 @@ const filterType = document.getElementById('filter-type');
 const filterTag = document.getElementById('filter-tag');
 const filterMap = document.getElementById('filter-map');
 const navButtons = document.querySelectorAll('.carousel .nav');
-const cardTitle = document.getElementById('card-title');
-const cardType = document.getElementById('card-type');
-const cardTag = document.getElementById('card-tag');
-const cardDescription = document.getElementById('card-description');
-const cardMap = document.getElementById('card-map');
+const carouselTrack = document.getElementById('carousel-track');
+const cardTemplate = document.getElementById('card-template');
 const cardPosition = document.getElementById('card-position');
 const cardMapHint = document.getElementById('card-map-hint');
 
@@ -99,26 +96,88 @@ function updateCounter() {
   cardPosition.textContent = `${carouselIndex + 1} / ${filteredCards.length}`;
 }
 
-function renderCard(card) {
-  cardTitle.textContent = card.name;
-  cardType.textContent = card.type;
-  cardTag.textContent = card.tag || '—';
-  cardDescription.textContent = card.description;
-  cardMap.textContent = `Beat lanes: ${card.map.join(' • ')}`;
-  cardMapHint.textContent = `Playable on: ${card.map.join(' • ')}`;
+function formatMap(map) {
+  if (!map || !map.length) return 'Beat lanes: —';
+  return `Beat lanes: ${map.join(' • ')}`;
+}
+
+function createCardElement(card, index) {
+  const cardNode = cardTemplate.content.firstElementChild.cloneNode(true);
+  cardNode.dataset.index = index;
+
+  cardNode.querySelector('[data-field="title"]').textContent = card.name;
+  cardNode.querySelector('[data-field="type"]').textContent = card.type;
+  cardNode.querySelector('[data-field="tag"]').textContent = card.tag || '—';
+  cardNode.querySelector('[data-field="description"]').textContent = card.description;
+  cardNode.querySelector('[data-field="map"]').textContent = formatMap(card.map);
+
+  return cardNode;
 }
 
 function renderEmptyState(message) {
-  cardTitle.textContent = 'No results';
-  cardType.textContent = '—';
-  cardTag.textContent = '—';
-  cardDescription.textContent = message;
-  cardMap.textContent = '—';
+  carouselTrack.replaceChildren();
+  const placeholderCard = createCardElement(
+    {
+      name: 'No results',
+      type: '—',
+      tag: '—',
+      description: message,
+      map: ['—'],
+    },
+    0,
+  );
+
+  placeholderCard.classList.add('empty');
+  carouselTrack.appendChild(placeholderCard);
+
   cardMapHint.textContent = 'Adjust filters to see cards.';
   cardPosition.textContent = '0 / 0';
   navButtons.forEach((btn) => {
     btn.disabled = true;
   });
+}
+
+function updateCarouselPositions() {
+  const cards = Array.from(carouselTrack.children);
+  if (!cards.length) return;
+
+  const total = filteredCards.length;
+  cards.forEach((cardEl) => {
+    const idx = Number(cardEl.dataset.index);
+    let delta = idx - carouselIndex;
+
+    if (delta > total / 2) delta -= total;
+    if (delta < -total / 2) delta += total;
+
+    const clamped = Math.max(-3, Math.min(3, delta));
+    const scale = 1 - Math.abs(clamped) * 0.08;
+    const opacity = Math.max(0.25, 1 - Math.abs(clamped) * 0.2);
+    const blur = Math.max(0, Math.abs(clamped) - 0.5) * 1.2;
+
+    cardEl.style.setProperty('--offset', clamped);
+    cardEl.style.setProperty('--scale', scale.toFixed(2));
+    cardEl.style.setProperty('--rotate', `${clamped * -6}deg`);
+    cardEl.style.setProperty('--blur', `${blur}px`);
+    cardEl.style.setProperty('--opacity', opacity.toFixed(2));
+    cardEl.style.zIndex = 10 - Math.abs(clamped);
+    cardEl.classList.toggle('active', clamped === 0);
+  });
+
+  const activeCard = filteredCards[carouselIndex];
+  if (activeCard) {
+    cardMapHint.textContent = `Playable on: ${activeCard.map.join(' • ')}`;
+  }
+}
+
+function renderCarousel() {
+  carouselTrack.replaceChildren();
+
+  filteredCards.forEach((card, index) => {
+    const cardNode = createCardElement(card, index);
+    carouselTrack.appendChild(cardNode);
+  });
+
+  updateCarouselPositions();
 }
 
 function showCardAt(index) {
@@ -128,8 +187,8 @@ function showCardAt(index) {
   }
 
   carouselIndex = (index + filteredCards.length) % filteredCards.length;
-  renderCard(filteredCards[carouselIndex]);
   updateCounter();
+  updateCarouselPositions();
   navButtons.forEach((btn) => {
     btn.disabled = filteredCards.length < 2;
   });
@@ -155,6 +214,7 @@ function applyFilters() {
     return;
   }
 
+  renderCarousel();
   showCardAt(carouselIndex);
 }
 
@@ -222,6 +282,13 @@ navButtons.forEach((button) => {
     const direction = Number(button.getAttribute('data-direction'));
     showCardAt(carouselIndex + direction);
   });
+});
+
+carouselTrack.addEventListener('click', (event) => {
+  const shell = event.target.closest('.card-shell');
+  if (!shell || !filteredCards.length) return;
+  const idx = Number(shell.dataset.index);
+  showCardAt(idx);
 });
 
 setStatus('Ready to play.');
