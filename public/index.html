@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Storycard Arcade</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="scanline"></div>
+    <div class="frame">
+      <header class="hero">
+        <p class="eyebrow">minimal retro ui</p>
+        <h1>Storycard Arcade</h1>
+        <p class="tagline">A monochrome launcher for your collaborative story game.</p>
+      </header>
+
+      <main>
+        <section class="actions">
+          <button class="button" data-action="play">Play ▸</button>
+          <button class="button" data-action="instructions">Instructions ▸</button>
+          <button class="button" data-action="packs">Packs ▸</button>
+        </section>
+
+        <section class="panel" id="status-panel" aria-live="polite"></section>
+
+        <section class="panel" id="instructions-panel" hidden>
+          <div class="panel-header">
+            <span>Storystack Rulebook</span>
+            <button class="button ghost" data-action="close">×</button>
+          </div>
+          <pre id="instructions-content"></pre>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
