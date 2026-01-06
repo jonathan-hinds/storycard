@@ -87,9 +87,22 @@ Example:
 
 ---
 
-# 5) Beat Lane Placement Rules (Type → Beat)
+# 5) Opening Lanes by Round
 
-When you play a card, its **Type** must be allowed in that beat lane:
+The story board starts **locked** except for **Lane 1 (Setup)**.
+
+* **Round Robin play:** Players take turns in order. While only Lane 1 is open, cards may only be played to Lane 1 (following Type rules below).
+* **Advancing the round:** At any time by group agreement, you may **advance to the next round**, which opens the next lane (e.g., moving from Round 1 → Round 2 opens Lane 2: Inciting Incident). Keep the player order the same.
+* **Playing once multiple lanes are open:** On your turn you may play to **any already-open lane** (1 through the current round’s lane), but **not** to lanes that belong to future rounds.
+* **Pacing tip:** Don’t rush. Stay in an earlier lane if you need more context before opening the next one.
+
+Opening lanes continues this way until all eight lanes are available.
+
+---
+
+# 6) Beat Lane Placement Rules (Type → Beat)
+
+When you play a card, its **Type** must be allowed in that beat lane (and the lane must be open for the current round):
 
 * **Setup:** Cast, Relationship, Goal & Stakes, Structure
 * **Inciting Incident:** Goal & Stakes, Obstacle & Complication, Revelation & Twist, Structure, Relationship
@@ -104,7 +117,7 @@ If a card can’t be legally placed in a beat lane, you can’t play it there.
 
 ---
 
-# 6) Beat Minimums (What “Filled” Means)
+# 7) Beat Minimums (What “Filled” Means)
 
 A beat lane is considered “present” if it has **at least 1 card**.
 
@@ -119,7 +132,7 @@ You can still stack extra cards in those lanes—just ensure the required type a
 
 ---
 
-# 7) Turn Structure
+# 8) Turn Structure
 
 On your turn:
 
@@ -141,7 +154,7 @@ Your hand returns to 5 cards (unless the deck is empty).
 
 ---
 
-# 8) Shared Story State (Keeping Things Consistent)
+# 9) Shared Story State (Keeping Things Consistent)
 
 You’ll maintain a simple shared state as the outline grows. A notebook works great.
 
@@ -156,7 +169,7 @@ If a new card contradicts an old one, resolve it immediately using “Retcon Rul
 
 ---
 
-# 9) The Retcon Rule (When Cards Conflict)
+# 10) The Retcon Rule (When Cards Conflict)
 
 If a played card contradicts something already established:
 
@@ -170,7 +183,7 @@ You should keep the outline moving. Don’t stall on perfect logic.
 
 ---
 
-# 10) Thread Rules (Subplots)
+# 11) Thread Rules (Subplots)
 
 Subplots aren’t separate lanes—subplots are created using **Structure** cards.
 
@@ -190,7 +203,7 @@ Thread B should either:
 
 ---
 
-# 11) Pattern Requirements (How You Actually Win)
+# 12) Pattern Requirements (How You Actually Win)
 
 Your chosen Story Pattern lists minimum counts for certain **Beat Tags**.
 
@@ -202,7 +215,7 @@ Tags can appear in any beat lane—placement is governed by **Type**, not by Tag
 
 ---
 
-# 12) Ending the Game
+# 13) Ending the Game
 
 The game ends when a player successfully plays a **Resolution** card **and** all of the following are true:
 
@@ -217,7 +230,7 @@ If a Resolution card is played but requirements aren’t met:
 
 ---
 
-# 13) If You Get Stuck (No Legal Plays)
+# 14) If You Get Stuck (No Legal Plays)
 
 If you cannot legally play any card from your hand:
 
@@ -231,7 +244,7 @@ If you cannot legally play any card from your hand:
 
 ---
 
-# 14) Optional Scoring (If You Want a Winner)
+# 15) Optional Scoring (If You Want a Winner)
 
 If you want competitive play:
 
@@ -245,7 +258,7 @@ Highest score wins. Ties share victory.
 
 ---
 
-# 15) The Skinning Phase (After the Game)
+# 16) The Skinning Phase (After the Game)
 
 Now turn the outline into a story pitch.
 
