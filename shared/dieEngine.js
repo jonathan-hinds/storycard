@@ -273,8 +273,17 @@
     }
 
     const finalFrame = frames[frames.length - 1];
+    const renderedOrientation = finalFrame && typeof finalFrame.qx === 'number'
+      ? {
+        x: finalFrame.qx,
+        y: finalFrame.qy,
+        z: finalFrame.qz,
+        w: finalFrame.qw,
+      }
+      : orientation;
+
     const outcome = sides === 6
-      ? d6OutcomeFromOrientation(orientation)
+      ? d6OutcomeFromOrientation(renderedOrientation)
       : angleToOutcome(finalFrame.angle, sides);
 
     return {
