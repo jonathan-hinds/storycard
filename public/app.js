@@ -95,23 +95,44 @@ function createD6Materials() {
   }));
 }
 
-function orientSettledOutcome(mesh, sides, outcome) {
+function getSettledOutcomeQuaternion(sides, outcome) {
   const safeOutcome = Math.max(1, Math.min(sides, outcome || 1));
+  const targetRotation = new THREE.Euler(0, 0, 0);
 
   if (sides === 6) {
     // Outcome mapping for d6 based on face values in createD6Materials.
-    if (safeOutcome === 1) mesh.rotation.set(0, 0, 0);
-    else if (safeOutcome === 2) mesh.rotation.set(-Math.PI / 2, 0, 0);
-    else if (safeOutcome === 3) mesh.rotation.set(0, 0, Math.PI / 2);
-    else if (safeOutcome === 4) mesh.rotation.set(0, 0, -Math.PI / 2);
-    else if (safeOutcome === 5) mesh.rotation.set(Math.PI / 2, 0, 0);
-    else mesh.rotation.set(Math.PI, 0, 0);
+    if (safeOutcome === 1) targetRotation.set(0, 0, 0);
+    else if (safeOutcome === 2) targetRotation.set(-Math.PI / 2, 0, 0);
+    else if (safeOutcome === 3) targetRotation.set(0, 0, Math.PI / 2);
+    else if (safeOutcome === 4) targetRotation.set(0, 0, -Math.PI / 2);
+    else if (safeOutcome === 5) targetRotation.set(Math.PI / 2, 0, 0);
+    else targetRotation.set(Math.PI, 0, 0);
   } else {
     const yaw = ((safeOutcome - 1) / sides) * Math.PI * 2;
-    mesh.rotation.set(0, yaw, 0);
+    targetRotation.set(0, yaw, 0);
   }
 
-  mesh.position.y = 0.23;
+  return new THREE.Quaternion().setFromEuler(targetRotation);
+}
+
+function startSettleAnimation(visual) {
+  visual.animation = {
+    phase: 'settle',
+    frame: 0,
+    duration: 20,
+    fromY: visual.mesh.position.y,
+    toY: 0.23,
+    startQuat: visual.mesh.quaternion.clone(),
+    targetQuat: getSettledOutcomeQuaternion(visual.die.sides, visual.animation.outcome),
+  };
+}
+
+function applySettledOutcome(mesh, animation) {
+  const progress = Math.min(1, animation.frame / animation.duration);
+  const eased = 1 - ((1 - progress) ** 3);
+
+  mesh.quaternion.copy(animation.startQuat).slerp(animation.targetQuat, eased);
+  mesh.position.y = THREE.MathUtils.lerp(animation.fromY, animation.toY, eased);
 }
 
 function createDieMesh(sides) {
@@ -280,6 +301,7 @@ function animateRoll(dieId, roll) {
   if (!visual) return;
 
   visual.animation = {
+    phase: 'roll',
     frames: roll.frames,
     index: 0,
     outcome: roll.outcome,
@@ -318,13 +340,20 @@ function tick() {
 
   for (const visual of dieVisuals.values()) {
     if (!visual.animation) continue;
-    const frame = visual.animation.frames[visual.animation.index];
-    if (frame) {
-      applyFrameToMesh(visual.mesh, frame);
-      visual.animation.index += 1;
+    if (visual.animation.phase === 'roll') {
+      const frame = visual.animation.frames[visual.animation.index];
+      if (frame) {
+        applyFrameToMesh(visual.mesh, frame);
+        visual.animation.index += 1;
+      } else {
+        startSettleAnimation(visual);
+      }
     } else {
-      orientSettledOutcome(visual.mesh, visual.die.sides, visual.animation.outcome);
-      visual.animation = null;
+      applySettledOutcome(visual.mesh, visual.animation);
+      visual.animation.frame += 1;
+      if (visual.animation.frame > visual.animation.duration) {
+        visual.animation = null;
+      }
     }
   }
 
