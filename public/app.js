@@ -10,19 +10,18 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x11131a);
 
-const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
-camera.position.set(0, 15, 0.001);
+const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+camera.position.set(0, 8.6, 0.001);
 camera.lookAt(0, 0, 0);
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.9);
+const ambient = new THREE.AmbientLight(0xffffff, 1.0);
 scene.add(ambient);
 
-const topLight = new THREE.DirectionalLight(0xffffff, 0.6);
-topLight.position.set(0, 8, 2);
+const topLight = new THREE.DirectionalLight(0xffffff, 0.75);
+topLight.position.set(0, 8, 0.8);
 scene.add(topLight);
 
 const dieVisuals = new Map();
-const dieWorldPosition = new THREE.Vector3();
 let selectedDieId = null;
 
 function resize() {
@@ -95,6 +94,39 @@ function createConfinedArea(offsetX, offsetZ) {
   const group = new THREE.Group();
   group.position.set(offsetX, 0, offsetZ);
 
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(8.3, 8.3),
+    new THREE.MeshStandardMaterial({ color: 0x202636, roughness: 0.95, metalness: 0.05 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0;
+  group.add(floor);
+
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x3b445e, roughness: 0.8, metalness: 0.1 });
+  const wallLength = 8.3;
+  const wallHeight = 0.75;
+  const wallThickness = 0.2;
+  const half = wallLength / 2;
+
+  const northSouth = new THREE.BoxGeometry(wallLength, wallHeight, wallThickness);
+  const eastWest = new THREE.BoxGeometry(wallThickness, wallHeight, wallLength);
+
+  const north = new THREE.Mesh(northSouth, wallMaterial);
+  north.position.set(0, wallHeight / 2, half);
+  group.add(north);
+
+  const south = north.clone();
+  south.position.z = -half;
+  group.add(south);
+
+  const east = new THREE.Mesh(eastWest, wallMaterial);
+  east.position.set(half, wallHeight / 2, 0);
+  group.add(east);
+
+  const west = east.clone();
+  west.position.x = -half;
+  group.add(west);
+
   scene.add(group);
   return group;
 }
@@ -113,18 +145,14 @@ function layoutDieAreas() {
   });
 }
 
-function applyFrameToMesh(mesh, frame, state) {
-  mesh.position.set(frame.x, 0.23, frame.y);
+function applyFrameToMesh(mesh, frame) {
+  mesh.position.set(frame.x, frame.y ?? 0.23, frame.z ?? frame.y ?? 0);
 
-  const tumbleX = frame.vy * 0.09;
-  const tumbleZ = -frame.vx * 0.09;
-  const spinY = frame.angularV * 0.06;
-
-  state.rx += tumbleX;
-  state.ry += spinY;
-  state.rz += tumbleZ;
-
-  mesh.rotation.set(state.rx, state.ry, state.rz);
+  if (typeof frame.qx === 'number') {
+    mesh.quaternion.set(frame.qx, frame.qy, frame.qz, frame.qw);
+  } else {
+    mesh.rotation.set((frame.vz || 0) * 0.1, frame.angle || 0, -(frame.vx || 0) * 0.1);
+  }
 }
 
 function renderDieList(dice) {
@@ -204,11 +232,6 @@ function animateRoll(dieId, roll) {
   visual.animation = {
     frames: roll.frames,
     index: 0,
-    rotationState: {
-      rx: visual.mesh.rotation.x,
-      ry: visual.mesh.rotation.y,
-      rz: visual.mesh.rotation.z,
-    },
   };
 }
 
@@ -246,7 +269,7 @@ function tick() {
     if (!visual.animation) continue;
     const frame = visual.animation.frames[visual.animation.index];
     if (frame) {
-      applyFrameToMesh(visual.mesh, frame, visual.animation.rotationState);
+      applyFrameToMesh(visual.mesh, frame);
       visual.animation.index += 1;
     } else {
       visual.animation = null;
@@ -256,13 +279,9 @@ function tick() {
   if (selectedDieId) {
     const selected = dieVisuals.get(selectedDieId);
     if (selected) {
-      selected.mesh.getWorldPosition(dieWorldPosition);
-      const targetY = dieWorldPosition.y + 8.8;
-
-      camera.position.x += (dieWorldPosition.x - camera.position.x) * 0.2;
-      camera.position.y += (targetY - camera.position.y) * 0.15;
-      camera.position.z += (dieWorldPosition.z + 0.001 - camera.position.z) * 0.2;
-      camera.lookAt(dieWorldPosition.x, dieWorldPosition.y, dieWorldPosition.z);
+      const gp = selected.group.position;
+      camera.position.set(gp.x, 8.6, gp.z + 0.001);
+      camera.lookAt(gp.x, 0.2, gp.z);
     }
   }
 
