@@ -23,6 +23,8 @@ scene.add(topLight);
 
 const dieVisuals = new Map();
 let selectedDieId = null;
+const cameraOffset = new THREE.Vector3(0, 5.57, 0.001);
+const dieWorldPosition = new THREE.Vector3();
 
 function resize() {
   const width = canvas.clientWidth;
@@ -329,12 +331,9 @@ function tick() {
   if (selectedDieId) {
     const selected = dieVisuals.get(selectedDieId);
     if (selected) {
-      const gp = selected.group.position;
-      const mp = selected.mesh.position;
-      const dieWorldX = gp.x + mp.x;
-      const dieWorldZ = gp.z + mp.z;
-      camera.position.set(dieWorldX, 5.8, dieWorldZ + 0.001);
-      camera.lookAt(dieWorldX, 0.25, dieWorldZ);
+      selected.mesh.getWorldPosition(dieWorldPosition);
+      camera.position.copy(dieWorldPosition).add(cameraOffset);
+      camera.lookAt(dieWorldPosition);
     }
   }
 
