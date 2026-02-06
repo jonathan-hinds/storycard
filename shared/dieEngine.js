@@ -7,6 +7,32 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   const TWO_PI = Math.PI * 2;
 
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function normalizeQuat(q) {
+    const length = Math.hypot(q.x, q.y, q.z, q.w) || 1;
+    q.x /= length;
+    q.y /= length;
+    q.z /= length;
+    q.w /= length;
+    return q;
+  }
+
+  function integrateQuaternion(q, wx, wy, wz, dt) {
+    const halfDt = dt * 0.5;
+    const dx = halfDt * (wx * q.w + wy * q.z - wz * q.y);
+    const dy = halfDt * (-wx * q.z + wy * q.w + wz * q.x);
+    const dz = halfDt * (wx * q.y - wy * q.x + wz * q.w);
+    const dw = halfDt * (-wx * q.x - wy * q.y - wz * q.z);
+    q.x += dx;
+    q.y += dy;
+    q.z += dz;
+    q.w += dw;
+    return normalizeQuat(q);
+  }
+
   function normalizeSides(input) {
     const sides = Number.parseInt(input, 10);
     if (!Number.isFinite(sides) || sides < 3) {
@@ -69,65 +95,89 @@
     const max = halfArea - 0.5;
 
     let px = (rng() * 2 - 1) * (areaSize * 0.2);
-    let py = (rng() * 2 - 1) * (areaSize * 0.2);
+    let pz = (rng() * 2 - 1) * (areaSize * 0.2);
     let vx = (rng() * 2 - 1) * 7;
-    let vy = (rng() * 2 - 1) * 7;
+    let vz = (rng() * 2 - 1) * 7;
     let angle = rng() * TWO_PI;
-    let angularV = (rng() * 2 - 1) * 20;
+    let wx = (rng() * 2 - 1) * 20;
+    let wy = (rng() * 2 - 1) * 20;
+    let wz = (rng() * 2 - 1) * 20;
+    const orientation = normalizeQuat({ x: 0, y: 0, z: 0, w: 1 });
 
     const frames = [];
 
     for (let i = 0; i < steps; i += 1) {
       px += vx * dt;
-      py += vy * dt;
-      angle = normalizeAngle(angle + angularV * dt);
+      pz += vz * dt;
+      integrateQuaternion(orientation, wx, wy, wz, dt);
 
       let bounced = false;
       if (px < min) {
         px = min;
         vx = Math.abs(vx) * 0.75;
-        angularV *= 0.9;
+        wy += (rng() * 2 - 1) * 2.5;
+        wz *= 0.9;
         bounced = true;
       }
       if (px > max) {
         px = max;
         vx = -Math.abs(vx) * 0.75;
-        angularV *= 0.9;
+        wy += (rng() * 2 - 1) * 2.5;
+        wz *= 0.9;
         bounced = true;
       }
-      if (py < min) {
-        py = min;
-        vy = Math.abs(vy) * 0.75;
-        angularV *= 0.9;
+      if (pz < min) {
+        pz = min;
+        vz = Math.abs(vz) * 0.75;
+        wx += (rng() * 2 - 1) * 2.5;
+        wz *= 0.9;
         bounced = true;
       }
-      if (py > max) {
-        py = max;
-        vy = -Math.abs(vy) * 0.75;
-        angularV *= 0.9;
+      if (pz > max) {
+        pz = max;
+        vz = -Math.abs(vz) * 0.75;
+        wx += (rng() * 2 - 1) * 2.5;
+        wz *= 0.9;
         bounced = true;
       }
 
       const drag = bounced ? 0.94 : 0.97;
       vx *= drag;
-      vy *= drag;
-      angularV *= 0.965;
+      vz *= drag;
+      wx *= 0.965;
+      wy *= 0.965;
+      wz *= 0.965;
+
+      const travel = Math.hypot(vx, vz);
+      angle = normalizeAngle(angle + (wy * dt) + travel * 0.015);
 
       if (Math.abs(vx) < 0.02) vx = 0;
-      if (Math.abs(vy) < 0.02) vy = 0;
-      if (Math.abs(angularV) < 0.02) angularV = 0;
+      if (Math.abs(vz) < 0.02) vz = 0;
+      if (Math.abs(wx) < 0.02) wx = 0;
+      if (Math.abs(wy) < 0.02) wy = 0;
+      if (Math.abs(wz) < 0.02) wz = 0;
+
+      const lift = clamp((Math.hypot(vx, vz) + Math.hypot(wx, wy, wz) * 0.1) * 0.03, 0, 0.6);
+      const bob = Math.abs(Math.sin(i * 0.35 + angle)) * lift;
 
       frames.push({
         step: i,
         x: Number(px.toFixed(4)),
-        y: Number(py.toFixed(4)),
+        y: Number((0.23 + bob).toFixed(4)),
+        z: Number(pz.toFixed(4)),
         angle: Number(angle.toFixed(5)),
         vx: Number(vx.toFixed(4)),
-        vy: Number(vy.toFixed(4)),
-        angularV: Number(angularV.toFixed(4)),
+        vz: Number(vz.toFixed(4)),
+        wx: Number(wx.toFixed(4)),
+        wy: Number(wy.toFixed(4)),
+        wz: Number(wz.toFixed(4)),
+        qx: Number(orientation.x.toFixed(6)),
+        qy: Number(orientation.y.toFixed(6)),
+        qz: Number(orientation.z.toFixed(6)),
+        qw: Number(orientation.w.toFixed(6)),
       });
 
-      if (vx === 0 && vy === 0 && angularV === 0 && i > 20) {
+      if (vx === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0 && i > 20) {
         break;
       }
     }
