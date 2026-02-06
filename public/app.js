@@ -10,8 +10,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x11131a);
 
-const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-camera.position.set(0, 8.6, 0.001);
+const camera = new THREE.PerspectiveCamera(24, 1, 0.1, 100);
+camera.position.set(0, 5.8, 0.001);
 camera.lookAt(0, 0, 0);
 
 const ambient = new THREE.AmbientLight(0xffffff, 1.0);
@@ -35,7 +35,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-function makeDieTexture(sides) {
+function makeDieTexture(label) {
   const texCanvas = document.createElement('canvas');
   texCanvas.width = 512;
   texCanvas.height = 512;
@@ -43,23 +43,15 @@ function makeDieTexture(sides) {
   ctx.fillStyle = '#f8fafc';
   ctx.fillRect(0, 0, 512, 512);
 
-  ctx.translate(256, 256);
-  ctx.strokeStyle = '#0f172a';
-  ctx.lineWidth = 7;
-  ctx.beginPath();
-  ctx.arc(0, 0, 220, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 14;
+  ctx.strokeRect(30, 30, 452, 452);
 
-  for (let i = 0; i < sides; i += 1) {
-    const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
-    const x = Math.cos(angle) * 170;
-    const y = Math.sin(angle) * 170;
-    ctx.fillStyle = '#111827';
-    ctx.font = 'bold 30px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), x, y);
-  }
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 180px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, 256, 280);
 
   const texture = new THREE.CanvasTexture(texCanvas);
   texture.needsUpdate = true;
@@ -121,22 +113,23 @@ function orientSettledOutcome(mesh, sides, outcome) {
 }
 
 function createDieMesh(sides) {
+  const sideCount = Number.parseInt(sides, 10);
   let geometry;
-  if (sides === 3) geometry = new THREE.ConeGeometry(0.95, 1.3, 3);
-  else if (sides === 4) geometry = new THREE.TetrahedronGeometry(1);
-  else if (sides === 6) geometry = new THREE.BoxGeometry(1.35, 1.35, 1.35);
-  else if (sides === 8) geometry = new THREE.OctahedronGeometry(1);
-  else if (sides === 12) geometry = new THREE.DodecahedronGeometry(1);
-  else if (sides === 20) geometry = new THREE.IcosahedronGeometry(1);
-  else geometry = new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sides, 64));
+  if (sideCount === 3) geometry = new THREE.ConeGeometry(0.95, 1.3, 3);
+  else if (sideCount === 4) geometry = new THREE.TetrahedronGeometry(1);
+  else if (sideCount === 6) geometry = new THREE.BoxGeometry(1.35, 1.35, 1.35);
+  else if (sideCount === 8) geometry = new THREE.OctahedronGeometry(1);
+  else if (sideCount === 12) geometry = new THREE.DodecahedronGeometry(1);
+  else if (sideCount === 20) geometry = new THREE.IcosahedronGeometry(1);
+  else geometry = new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sideCount, 64));
 
-  const material = sides === 6
+  const material = sideCount === 6
     ? createD6Materials()
     : new THREE.MeshStandardMaterial({
       color: 0xe2e8f0,
       metalness: 0.18,
       roughness: 0.4,
-      map: makeDieTexture(sides),
+      map: makeDieTexture(`d${sideCount}`),
     });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -145,12 +138,12 @@ function createDieMesh(sides) {
   return mesh;
 }
 
-function createConfinedArea(offsetX, offsetZ) {
+function createConfinedArea(offsetX, offsetZ, areaSize) {
   const group = new THREE.Group();
   group.position.set(offsetX, 0, offsetZ);
 
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(8.3, 8.3),
+    new THREE.PlaneGeometry(areaSize, areaSize),
     new THREE.MeshStandardMaterial({ color: 0x202636, roughness: 0.95, metalness: 0.05 })
   );
   floor.rotation.x = -Math.PI / 2;
@@ -158,7 +151,7 @@ function createConfinedArea(offsetX, offsetZ) {
   group.add(floor);
 
   const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x3b445e, roughness: 0.8, metalness: 0.1 });
-  const wallLength = 8.3;
+  const wallLength = areaSize;
   const wallHeight = 0.75;
   const wallThickness = 0.2;
   const half = wallLength / 2;
@@ -262,7 +255,7 @@ async function createDie(sides) {
   }
 
   const die = data.die;
-  const group = createConfinedArea(0, 0);
+  const group = createConfinedArea(0, 0, die.areaSize + 0.3);
   const mesh = createDieMesh(die.sides);
   group.add(mesh);
 
@@ -337,8 +330,9 @@ function tick() {
     const selected = dieVisuals.get(selectedDieId);
     if (selected) {
       const gp = selected.group.position;
-      camera.position.set(gp.x, 8.6, gp.z + 0.001);
-      camera.lookAt(gp.x, 0.2, gp.z);
+      const mp = selected.mesh.position;
+      camera.position.set(gp.x + mp.x * 0.22, 5.8, gp.z + 0.001 + mp.z * 0.22);
+      camera.lookAt(gp.x + mp.x * 0.12, 0.25, gp.z + mp.z * 0.12);
     }
   }
 

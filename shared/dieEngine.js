@@ -94,10 +94,11 @@
     const min = -halfArea + 0.5;
     const max = halfArea - 0.5;
 
-    let px = (rng() * 2 - 1) * (areaSize * 0.2);
-    let pz = (rng() * 2 - 1) * (areaSize * 0.2);
-    let vx = (rng() * 2 - 1) * 7;
-    let vz = (rng() * 2 - 1) * 7;
+    const roamRadius = areaSize * 0.26;
+    let px = (rng() * 2 - 1) * (areaSize * 0.08);
+    let pz = (rng() * 2 - 1) * (areaSize * 0.08);
+    let vx = (rng() * 2 - 1) * 5;
+    let vz = (rng() * 2 - 1) * 5;
     let angle = rng() * TWO_PI;
     let wx = (rng() * 2 - 1) * 20;
     let wy = (rng() * 2 - 1) * 20;
@@ -107,6 +108,10 @@
     const frames = [];
 
     for (let i = 0; i < steps; i += 1) {
+      const centerForce = 2.1;
+      vx += -px * centerForce * dt;
+      vz += -pz * centerForce * dt;
+
       px += vx * dt;
       pz += vz * dt;
       integrateQuaternion(orientation, wx, wy, wz, dt);
@@ -141,7 +146,19 @@
         bounced = true;
       }
 
-      const drag = bounced ? 0.94 : 0.97;
+      const radial = Math.hypot(px, pz);
+      if (radial > roamRadius) {
+        const nx = px / radial;
+        const nz = pz / radial;
+        px = nx * roamRadius;
+        pz = nz * roamRadius;
+        const dot = vx * nx + vz * nz;
+        vx = (vx - 1.6 * dot * nx) * 0.85;
+        vz = (vz - 1.6 * dot * nz) * 0.85;
+        bounced = true;
+      }
+
+      const drag = bounced ? 0.93 : 0.965;
       vx *= drag;
       vz *= drag;
       wx *= 0.965;
