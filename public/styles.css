@@ -1,1 +1,75 @@
-/* Intentionally left blank. */
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #11131a;
+  color: #eef2ff;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  min-height: 100vh;
+}
+
+.controls {
+  padding: 1rem;
+  border-right: 1px solid #252b3a;
+  background: #171b25;
+}
+
+.card {
+  display: grid;
+  gap: 0.5rem;
+  background: #202636;
+  padding: 0.8rem;
+  border-radius: 0.6rem;
+}
+
+input,
+button {
+  border: 1px solid #3f4b67;
+  border-radius: 0.4rem;
+  background: #121723;
+  color: #eef2ff;
+  padding: 0.45rem 0.6rem;
+}
+
+button {
+  cursor: pointer;
+}
+
+.die-list {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.die-item {
+  background: #202636;
+  border: 1px solid #2b3448;
+  border-radius: 0.6rem;
+  padding: 0.7rem;
+}
+
+.die-item .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.viewer {
+  padding: 1rem;
+}
+
+#die-canvas {
+  width: 100%;
+  height: calc(100vh - 2rem);
+  border-radius: 0.8rem;
+  background: radial-gradient(circle at center, #2b3142, #131723 70%);
+  display: block;
+}
