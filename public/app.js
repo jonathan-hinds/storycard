@@ -101,10 +101,11 @@ function getSettledOutcomeQuaternion(sides, outcome) {
 
   if (sides === 6) {
     // Outcome mapping for d6 based on face values in createD6Materials.
+    // These orientations intentionally keep the top face text in a readable direction.
     if (safeOutcome === 1) targetRotation.set(0, 0, 0);
     else if (safeOutcome === 2) targetRotation.set(-Math.PI / 2, 0, 0);
-    else if (safeOutcome === 3) targetRotation.set(0, 0, Math.PI / 2);
-    else if (safeOutcome === 4) targetRotation.set(0, 0, -Math.PI / 2);
+    else if (safeOutcome === 3) targetRotation.set(0, 0, -Math.PI / 2);
+    else if (safeOutcome === 4) targetRotation.set(0, 0, Math.PI / 2);
     else if (safeOutcome === 5) targetRotation.set(Math.PI / 2, 0, 0);
     else targetRotation.set(Math.PI, 0, 0);
   } else {
