@@ -331,8 +331,10 @@ function tick() {
     if (selected) {
       const gp = selected.group.position;
       const mp = selected.mesh.position;
-      camera.position.set(gp.x + mp.x * 0.22, 5.8, gp.z + 0.001 + mp.z * 0.22);
-      camera.lookAt(gp.x + mp.x * 0.12, 0.25, gp.z + mp.z * 0.12);
+      const dieWorldX = gp.x + mp.x;
+      const dieWorldZ = gp.z + mp.z;
+      camera.position.set(dieWorldX, 5.8, dieWorldZ + 0.001);
+      camera.lookAt(dieWorldX, 0.25, dieWorldZ);
     }
   }
 
