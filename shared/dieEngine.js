@@ -82,6 +82,53 @@
     return (Math.floor(normalized / slice) % sides) + 1;
   }
 
+  function rotateVectorByQuat(vector, q) {
+    const x = vector.x;
+    const y = vector.y;
+    const z = vector.z;
+
+    const qx = q.x;
+    const qy = q.y;
+    const qz = q.z;
+    const qw = q.w;
+
+    const ix = qw * x + qy * z - qz * y;
+    const iy = qw * y + qz * x - qx * z;
+    const iz = qw * z + qx * y - qy * x;
+    const iw = -qx * x - qy * y - qz * z;
+
+    return {
+      x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
+      y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
+      z: iz * qw + iw * -qz + ix * -qy - iy * -qx,
+    };
+  }
+
+  function d6OutcomeFromOrientation(orientation) {
+    const up = { x: 0, y: 1, z: 0 };
+    const faces = [
+      { value: 3, normal: { x: 1, y: 0, z: 0 } },
+      { value: 4, normal: { x: -1, y: 0, z: 0 } },
+      { value: 1, normal: { x: 0, y: 1, z: 0 } },
+      { value: 6, normal: { x: 0, y: -1, z: 0 } },
+      { value: 2, normal: { x: 0, y: 0, z: 1 } },
+      { value: 5, normal: { x: 0, y: 0, z: -1 } },
+    ];
+
+    let winningValue = 1;
+    let bestDot = Number.NEGATIVE_INFINITY;
+    for (const face of faces) {
+      const worldNormal = rotateVectorByQuat(face.normal, orientation);
+      const dot = worldNormal.x * up.x + worldNormal.y * up.y + worldNormal.z * up.z;
+      if (dot > bestDot) {
+        bestDot = dot;
+        winningValue = face.value;
+      }
+    }
+
+    return winningValue;
+  }
+
   function simulateRoll(options) {
     const sides = normalizeSides(options.sides);
     const seed = String(options.seed || Date.now());
@@ -96,8 +143,10 @@
 
     const roamRadius = areaSize * 0.26;
     let px = (rng() * 2 - 1) * (areaSize * 0.08);
+    let py = 1.1 + rng() * 0.5;
     let pz = (rng() * 2 - 1) * (areaSize * 0.08);
     let vx = (rng() * 2 - 1) * 5;
+    let vy = 0;
     let vz = (rng() * 2 - 1) * 5;
     let angle = rng() * TWO_PI;
     let wx = (rng() * 2 - 1) * 20;
@@ -108,40 +157,63 @@
     const frames = [];
 
     for (let i = 0; i < steps; i += 1) {
+      const gravity = 24;
       const centerForce = 2.1;
       vx += -px * centerForce * dt;
       vz += -pz * centerForce * dt;
+      vy -= gravity * dt;
 
       px += vx * dt;
+      py += vy * dt;
       pz += vz * dt;
       integrateQuaternion(orientation, wx, wy, wz, dt);
 
       let bounced = false;
+      const floorY = 0.23;
+      if (py < floorY) {
+        py = floorY;
+        if (Math.abs(vy) > 0.3) {
+          vy = Math.abs(vy) * 0.42;
+          wx += (rng() * 2 - 1) * 2.7;
+          wz += (rng() * 2 - 1) * 2.7;
+        } else {
+          vy = 0;
+        }
+        vx *= 0.86;
+        vz *= 0.86;
+        bounced = true;
+      }
+
+      const wallSpinImpulse = 2.2;
       if (px < min) {
         px = min;
-        vx = Math.abs(vx) * 0.75;
-        wy += (rng() * 2 - 1) * 2.5;
+        vx = Math.abs(vx) * 0.7;
+        vy += Math.abs(vx) * 0.15;
+        wy += (rng() * 2 - 1) * wallSpinImpulse;
         wz *= 0.9;
         bounced = true;
       }
       if (px > max) {
         px = max;
-        vx = -Math.abs(vx) * 0.75;
-        wy += (rng() * 2 - 1) * 2.5;
+        vx = -Math.abs(vx) * 0.7;
+        vy += Math.abs(vx) * 0.15;
+        wy += (rng() * 2 - 1) * wallSpinImpulse;
         wz *= 0.9;
         bounced = true;
       }
       if (pz < min) {
         pz = min;
-        vz = Math.abs(vz) * 0.75;
-        wx += (rng() * 2 - 1) * 2.5;
+        vz = Math.abs(vz) * 0.7;
+        vy += Math.abs(vz) * 0.15;
+        wx += (rng() * 2 - 1) * wallSpinImpulse;
         wz *= 0.9;
         bounced = true;
       }
       if (pz > max) {
         pz = max;
-        vz = -Math.abs(vz) * 0.75;
-        wx += (rng() * 2 - 1) * 2.5;
+        vz = -Math.abs(vz) * 0.7;
+        vy += Math.abs(vz) * 0.15;
+        wx += (rng() * 2 - 1) * wallSpinImpulse;
         wz *= 0.9;
         bounced = true;
       }
@@ -158,32 +230,33 @@
         bounced = true;
       }
 
-      const drag = bounced ? 0.93 : 0.965;
+      const drag = py <= floorY + 0.001 ? 0.935 : 0.985;
       vx *= drag;
+      vy *= bounced ? 0.94 : 0.995;
       vz *= drag;
-      wx *= 0.965;
-      wy *= 0.965;
-      wz *= 0.965;
+      const spinDrag = py <= floorY + 0.001 ? 0.955 : 0.975;
+      wx *= spinDrag;
+      wy *= spinDrag;
+      wz *= spinDrag;
 
       const travel = Math.hypot(vx, vz);
       angle = normalizeAngle(angle + (wy * dt) + travel * 0.015);
 
       if (Math.abs(vx) < 0.02) vx = 0;
+      if (Math.abs(vy) < 0.02) vy = 0;
       if (Math.abs(vz) < 0.02) vz = 0;
       if (Math.abs(wx) < 0.02) wx = 0;
       if (Math.abs(wy) < 0.02) wy = 0;
       if (Math.abs(wz) < 0.02) wz = 0;
 
-      const lift = clamp((Math.hypot(vx, vz) + Math.hypot(wx, wy, wz) * 0.1) * 0.03, 0, 0.6);
-      const bob = Math.abs(Math.sin(i * 0.35 + angle)) * lift;
-
       frames.push({
         step: i,
         x: Number(px.toFixed(4)),
-        y: Number((0.23 + bob).toFixed(4)),
+        y: Number(py.toFixed(4)),
         z: Number(pz.toFixed(4)),
         angle: Number(angle.toFixed(5)),
         vx: Number(vx.toFixed(4)),
+        vy: Number(vy.toFixed(4)),
         vz: Number(vz.toFixed(4)),
         wx: Number(wx.toFixed(4)),
         wy: Number(wy.toFixed(4)),
@@ -194,13 +267,15 @@
         qw: Number(orientation.w.toFixed(6)),
       });
 
-      if (vx === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0 && i > 20) {
+      if (vx === 0 && vy === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0 && i > 35) {
         break;
       }
     }
 
     const finalFrame = frames[frames.length - 1];
-    const outcome = angleToOutcome(finalFrame.angle, sides);
+    const outcome = sides === 6
+      ? d6OutcomeFromOrientation(orientation)
+      : angleToOutcome(finalFrame.angle, sides);
 
     return {
       seed,

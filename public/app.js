@@ -146,15 +146,15 @@ function createConfinedArea(offsetX, offsetZ, areaSize) {
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(areaSize, areaSize),
-    new THREE.MeshStandardMaterial({ color: 0x202636, roughness: 0.95, metalness: 0.05 })
+    new THREE.MeshStandardMaterial({ color: 0x141821, roughness: 1, metalness: 0.02, transparent: true, opacity: 0.35 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0;
   group.add(floor);
 
-  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x3b445e, roughness: 0.8, metalness: 0.1 });
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x1a2030, roughness: 0.95, metalness: 0.04, transparent: true, opacity: 0.18 });
   const wallLength = areaSize;
-  const wallHeight = 0.75;
+  const wallHeight = 0.52;
   const wallThickness = 0.2;
   const half = wallLength / 2;
 
