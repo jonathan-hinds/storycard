@@ -1,17 +1,18 @@
 {
   "name": "storycard",
   "version": "1.0.0",
-  "description": "Simple hello world site",
+  "description": "Server-authoritative 3D N-sided dice module and demo",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node --check server.js"
+    "test": "node --check server.js && node --check shared/dieEngine.js"
   },
   "keywords": [
-    "hello",
-    "world",
-    "node"
+    "dice",
+    "threejs",
+    "node",
+    "multiplayer"
   ],
   "author": "",
   "license": "ISC"
