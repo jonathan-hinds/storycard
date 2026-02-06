@@ -23,6 +23,10 @@ scene.add(topLight);
 
 const dieVisuals = new Map();
 let selectedDieId = null;
+const cameraFollowOffset = new THREE.Vector3(0, 5.8, 0.001);
+const cameraLookOffset = new THREE.Vector3(0, 0.25, 0);
+const cameraTargetPosition = new THREE.Vector3();
+const cameraTargetLookAt = new THREE.Vector3();
 
 function resize() {
   const width = canvas.clientWidth;
@@ -331,8 +335,10 @@ function tick() {
     if (selected) {
       const gp = selected.group.position;
       const mp = selected.mesh.position;
-      camera.position.set(gp.x + mp.x * 0.22, 5.8, gp.z + 0.001 + mp.z * 0.22);
-      camera.lookAt(gp.x + mp.x * 0.12, 0.25, gp.z + mp.z * 0.12);
+      cameraTargetPosition.set(gp.x + mp.x, mp.y, gp.z + mp.z).add(cameraFollowOffset);
+      cameraTargetLookAt.set(gp.x + mp.x, mp.y, gp.z + mp.z).add(cameraLookOffset);
+      camera.position.lerp(cameraTargetPosition, 0.2);
+      camera.lookAt(cameraTargetLookAt);
     }
   }
 
