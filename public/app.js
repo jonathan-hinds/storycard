@@ -8,6 +8,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true 
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x11131a);
 
 const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
 camera.position.set(0, 15, 0.001);
@@ -21,6 +22,7 @@ topLight.position.set(0, 8, 2);
 scene.add(topLight);
 
 const dieVisuals = new Map();
+const dieWorldPosition = new THREE.Vector3();
 let selectedDieId = null;
 
 function resize() {
@@ -60,60 +62,38 @@ function makeDieTexture(sides) {
     ctx.fillText(String(i + 1), x, y);
   }
 
-  ctx.fillStyle = '#0f172a';
-  ctx.beginPath();
-  ctx.moveTo(0, -30);
-  ctx.lineTo(22, 20);
-  ctx.lineTo(-22, 20);
-  ctx.closePath();
-  ctx.fill();
-
   const texture = new THREE.CanvasTexture(texCanvas);
   texture.needsUpdate = true;
   return texture;
 }
 
 function createDieMesh(sides) {
-  const radius = 0.8;
-  const height = 0.35;
-  const geometry = new THREE.CylinderGeometry(radius, radius, height, sides);
+  let geometry;
+  if (sides === 3) geometry = new THREE.ConeGeometry(0.95, 1.3, 3);
+  else if (sides === 4) geometry = new THREE.TetrahedronGeometry(1);
+  else if (sides === 6) geometry = new THREE.BoxGeometry(1.35, 1.35, 1.35);
+  else if (sides === 8) geometry = new THREE.OctahedronGeometry(1);
+  else if (sides === 12) geometry = new THREE.DodecahedronGeometry(1);
+  else if (sides === 20) geometry = new THREE.IcosahedronGeometry(1);
+  else geometry = new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sides, 64));
+
   const texture = makeDieTexture(sides);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xe2e8f0,
+    metalness: 0.18,
+    roughness: 0.4,
+    map: texture,
+  });
 
-  const materials = [
-    new THREE.MeshStandardMaterial({ color: 0x334155 }),
-    new THREE.MeshStandardMaterial({ map: texture }),
-    new THREE.MeshStandardMaterial({ color: 0x1e293b }),
-  ];
-
-  return new THREE.Mesh(geometry, materials);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  return mesh;
 }
 
-function createConfinedArea(offsetX, offsetZ, areaSize) {
+function createConfinedArea(offsetX, offsetZ) {
   const group = new THREE.Group();
   group.position.set(offsetX, 0, offsetZ);
-
-  const floorGeom = new THREE.PlaneGeometry(areaSize, areaSize);
-  const floor = new THREE.Mesh(
-    floorGeom,
-    new THREE.MeshStandardMaterial({ color: 0x192031, transparent: true, opacity: 0.6 }),
-  );
-  floor.rotation.x = -Math.PI / 2;
-  group.add(floor);
-
-  const box = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(areaSize, 0.05, areaSize)),
-    new THREE.LineBasicMaterial({ color: 0x94a3b8 }),
-  );
-  box.position.y = 0.02;
-  group.add(box);
-
-  const pointer = new THREE.Mesh(
-    new THREE.ConeGeometry(0.2, 0.35, 3),
-    new THREE.MeshStandardMaterial({ color: 0xeab308 }),
-  );
-  pointer.position.set(0, 0.22, -areaSize / 2 + 0.45);
-  pointer.rotation.x = Math.PI;
-  group.add(pointer);
 
   scene.add(group);
   return group;
@@ -133,9 +113,18 @@ function layoutDieAreas() {
   });
 }
 
-function applyFrameToMesh(mesh, frame) {
+function applyFrameToMesh(mesh, frame, state) {
   mesh.position.set(frame.x, 0.23, frame.y);
-  mesh.rotation.set(0, -frame.angle, 0);
+
+  const tumbleX = frame.vy * 0.09;
+  const tumbleZ = -frame.vx * 0.09;
+  const spinY = frame.angularV * 0.06;
+
+  state.rx += tumbleX;
+  state.ry += spinY;
+  state.rz += tumbleZ;
+
+  mesh.rotation.set(state.rx, state.ry, state.rz);
 }
 
 function renderDieList(dice) {
@@ -190,7 +179,7 @@ async function createDie(sides) {
   }
 
   const die = data.die;
-  const group = createConfinedArea(0, 0, die.areaSize);
+  const group = createConfinedArea(0, 0);
   const mesh = createDieMesh(die.sides);
   group.add(mesh);
 
@@ -215,6 +204,11 @@ function animateRoll(dieId, roll) {
   visual.animation = {
     frames: roll.frames,
     index: 0,
+    rotationState: {
+      rx: visual.mesh.rotation.x,
+      ry: visual.mesh.rotation.y,
+      rz: visual.mesh.rotation.z,
+    },
   };
 }
 
@@ -252,7 +246,7 @@ function tick() {
     if (!visual.animation) continue;
     const frame = visual.animation.frames[visual.animation.index];
     if (frame) {
-      applyFrameToMesh(visual.mesh, frame);
+      applyFrameToMesh(visual.mesh, frame, visual.animation.rotationState);
       visual.animation.index += 1;
     } else {
       visual.animation = null;
@@ -262,9 +256,13 @@ function tick() {
   if (selectedDieId) {
     const selected = dieVisuals.get(selectedDieId);
     if (selected) {
-      camera.position.x += (selected.group.position.x - camera.position.x) * 0.08;
-      camera.position.z += (selected.group.position.z + 0.001 - camera.position.z) * 0.08;
-      camera.lookAt(selected.group.position.x, 0, selected.group.position.z);
+      selected.mesh.getWorldPosition(dieWorldPosition);
+      const targetY = dieWorldPosition.y + 8.8;
+
+      camera.position.x += (dieWorldPosition.x - camera.position.x) * 0.2;
+      camera.position.y += (targetY - camera.position.y) * 0.15;
+      camera.position.z += (dieWorldPosition.z + 0.001 - camera.position.z) * 0.2;
+      camera.lookAt(dieWorldPosition.x, dieWorldPosition.y, dieWorldPosition.z);
     }
   }
 
