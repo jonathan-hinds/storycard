@@ -66,6 +66,60 @@ function makeDieTexture(sides) {
   return texture;
 }
 
+function makeFaceTexture(value) {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = 512;
+  texCanvas.height = 512;
+  const ctx = texCanvas.getContext('2d');
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, 512, 512);
+
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 14;
+  ctx.strokeRect(30, 30, 452, 452);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 280px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(value), 256, 276);
+
+  const texture = new THREE.CanvasTexture(texCanvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createD6Materials() {
+  // BoxGeometry material order: +x, -x, +y, -y, +z, -z
+  const faceValues = [3, 4, 1, 6, 2, 5];
+  return faceValues.map((value) => new THREE.MeshStandardMaterial({
+    color: 0xe2e8f0,
+    metalness: 0.16,
+    roughness: 0.45,
+    map: makeFaceTexture(value),
+  }));
+}
+
+function orientSettledOutcome(mesh, sides, outcome) {
+  const safeOutcome = Math.max(1, Math.min(sides, outcome || 1));
+
+  if (sides === 6) {
+    // Outcome mapping for d6 based on face values in createD6Materials.
+    if (safeOutcome === 1) mesh.rotation.set(0, 0, 0);
+    else if (safeOutcome === 2) mesh.rotation.set(-Math.PI / 2, 0, 0);
+    else if (safeOutcome === 3) mesh.rotation.set(0, 0, Math.PI / 2);
+    else if (safeOutcome === 4) mesh.rotation.set(0, 0, -Math.PI / 2);
+    else if (safeOutcome === 5) mesh.rotation.set(Math.PI / 2, 0, 0);
+    else mesh.rotation.set(Math.PI, 0, 0);
+  } else {
+    const yaw = ((safeOutcome - 1) / sides) * Math.PI * 2;
+    mesh.rotation.set(0, yaw, 0);
+  }
+
+  mesh.position.y = 0.23;
+}
+
 function createDieMesh(sides) {
   let geometry;
   if (sides === 3) geometry = new THREE.ConeGeometry(0.95, 1.3, 3);
@@ -76,13 +130,14 @@ function createDieMesh(sides) {
   else if (sides === 20) geometry = new THREE.IcosahedronGeometry(1);
   else geometry = new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sides, 64));
 
-  const texture = makeDieTexture(sides);
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xe2e8f0,
-    metalness: 0.18,
-    roughness: 0.4,
-    map: texture,
-  });
+  const material = sides === 6
+    ? createD6Materials()
+    : new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      metalness: 0.18,
+      roughness: 0.4,
+      map: makeDieTexture(sides),
+    });
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.castShadow = false;
@@ -232,6 +287,7 @@ function animateRoll(dieId, roll) {
   visual.animation = {
     frames: roll.frames,
     index: 0,
+    outcome: roll.outcome,
   };
 }
 
@@ -272,6 +328,7 @@ function tick() {
       applyFrameToMesh(visual.mesh, frame);
       visual.animation.index += 1;
     } else {
+      orientSettledOutcome(visual.mesh, visual.die.sides, visual.animation.outcome);
       visual.animation = null;
     }
   }
