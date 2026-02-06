@@ -1,17 +1,16 @@
 {
   "name": "storycard",
   "version": "1.0.0",
-  "description": "Minimalist retro-styled launcher for Storystack with instructions API",
+  "description": "Simple hello world site",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node --check server.js && node --check public/app.js"
+    "test": "node --check server.js"
   },
   "keywords": [
-    "story",
-    "cards",
-    "retro",
+    "hello",
+    "world",
     "node"
   ],
   "author": "",
