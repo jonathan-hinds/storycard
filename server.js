@@ -60,13 +60,14 @@ function createDie(body) {
   return die;
 }
 
-function rollDie(die) {
+function rollDie(die, options = {}) {
   rollCounter += 1;
   const seed = `${die.id}:${Date.now()}:${rollCounter}`;
   const sim = DiceEngine.simulateRoll({
     sides: die.sides,
     seed,
     areaSize: die.areaSize,
+    debug: options.debug,
   });
 
   const roll = {
@@ -121,7 +122,20 @@ async function handleApi(req, res, pathname) {
       sendJson(res, 404, { error: 'Die not found' });
       return true;
     }
-    const roll = rollDie(die);
+    let body = {};
+    try {
+      body = await readRequestJson(req);
+    } catch (error) {
+      body = {};
+    }
+
+    const roll = rollDie(die, { debug: body.debugPhysics });
+    if (body.debugPhysics && roll.metadata?.diagnostics) {
+      console.log(`[physics-debug] die=${dieId} sides=${die.sides} dotUp=${roll.metadata.diagnostics.topDotUp.toFixed(4)} contacts=${roll.metadata.diagnostics.contactPoints}`);
+      for (const line of roll.metadata.diagnostics.logs || []) {
+        console.log(`[physics-debug] ${line}`);
+      }
+    }
     sendJson(res, 200, { dieId, roll });
     return true;
   }

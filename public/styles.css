@@ -94,3 +94,18 @@ button {
     border-bottom: 1px solid #252b3a;
   }
 }
+
+
+.toggle {
+  margin-top: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #d2dbf2;
+}
+
+.debug-pill {
+  font-size: 0.78rem;
+  color: #9ab0d8;
+}

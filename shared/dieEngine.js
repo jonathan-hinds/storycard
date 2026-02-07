@@ -9,47 +9,58 @@
   const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
   const SUPPORTED_SIDES = new Set([6, 8, 12, 20]);
 
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  function normalizeVector(v) {
-    const length = Math.hypot(v.x, v.y, v.z) || 1;
-    return {
-      x: v.x / length,
-      y: v.y / length,
-      z: v.z / length,
-    };
-  }
-
-  function normalizeQuat(q) {
-    const length = Math.hypot(q.x, q.y, q.z, q.w) || 1;
-    q.x /= length;
-    q.y /= length;
-    q.z /= length;
-    q.w /= length;
-    return q;
-  }
-
-  function integrateQuaternion(q, wx, wy, wz, dt) {
-    const halfDt = dt * 0.5;
-    const dx = halfDt * (wx * q.w + wy * q.z - wz * q.y);
-    const dy = halfDt * (-wx * q.z + wy * q.w + wz * q.x);
-    const dz = halfDt * (wx * q.y - wy * q.x + wz * q.w);
-    const dw = halfDt * (-wx * q.x - wy * q.y - wz * q.z);
-    q.x += dx;
-    q.y += dy;
-    q.z += dz;
-    q.w += dw;
-    return normalizeQuat(q);
-  }
-
+  function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
   function normalizeSides(input) {
     const sides = Number.parseInt(input, 10);
     if (!Number.isFinite(sides) || !SUPPORTED_SIDES.has(sides)) {
       throw new Error('Supported dice are D6, D8, D12, and D20.');
     }
     return sides;
+  }
+
+  function normalizeVector(v) {
+    const length = Math.hypot(v.x, v.y, v.z) || 1;
+    return { x: v.x / length, y: v.y / length, z: v.z / length };
+  }
+
+  function normalizeQuat(q) {
+    const length = Math.hypot(q.x, q.y, q.z, q.w) || 1;
+    q.x /= length; q.y /= length; q.z /= length; q.w /= length;
+    return q;
+  }
+
+  function mulQuat(a, b) {
+    return {
+      x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+      y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+      z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+      w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+    };
+  }
+
+  function integrateQuaternion(q, wx, wy, wz, dt) {
+    const halfDt = dt * 0.5;
+    const dq = { x: wx * halfDt, y: wy * halfDt, z: wz * halfDt, w: 0 };
+    const next = mulQuat(dq, q);
+    q.x += next.x;
+    q.y += next.y;
+    q.z += next.z;
+    q.w += next.w;
+    return normalizeQuat(q);
+  }
+
+  function rotateVectorByQuat(v, q) {
+    const x = v.x; const y = v.y; const z = v.z;
+    const qx = q.x; const qy = q.y; const qz = q.z; const qw = q.w;
+    const ix = qw * x + qy * z - qz * y;
+    const iy = qw * y + qz * x - qx * z;
+    const iz = qw * z + qx * y - qy * x;
+    const iw = -qx * x - qy * y - qz * z;
+    return {
+      x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
+      y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
+      z: iz * qw + iw * -qz + ix * -qy - iy * -qx,
+    };
   }
 
   function xmur3(str) {
@@ -64,7 +75,6 @@
       return (h ^= h >>> 16) >>> 0;
     };
   }
-
   function mulberry32(a) {
     return function random() {
       let t = (a += 0x6d2b79f5);
@@ -73,462 +83,401 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-
-  function createSeededRandom(seedText) {
-    const seedFn = xmur3(String(seedText));
-    return mulberry32(seedFn());
-  }
-
-  function normalizeAngle(angle) {
-    let next = angle % TWO_PI;
-    if (next < 0) {
-      next += TWO_PI;
-    }
-    return next;
-  }
-
-  function angleToOutcome(angle, sides) {
-    const slice = TWO_PI / sides;
-    const normalized = normalizeAngle(angle + slice / 2);
-    return (Math.floor(normalized / slice) % sides) + 1;
-  }
-
-  function rotateVectorByQuat(vector, q) {
-    const x = vector.x;
-    const y = vector.y;
-    const z = vector.z;
-
-    const qx = q.x;
-    const qy = q.y;
-    const qz = q.z;
-    const qw = q.w;
-
-    const ix = qw * x + qy * z - qz * y;
-    const iy = qw * y + qz * x - qx * z;
-    const iz = qw * z + qx * y - qy * x;
-    const iw = -qx * x - qy * y - qz * z;
-
-    return {
-      x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
-      y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
-      z: iz * qw + iw * -qz + ix * -qy - iy * -qx,
-    };
-  }
+  function createSeededRandom(seedText) { return mulberry32(xmur3(String(seedText))()); }
 
   function getFaceNormals(sides) {
     const phi = GOLDEN_RATIO;
     const invPhi = 1 / phi;
-
-    if (sides === 3) {
-      return [
-        { value: 1, normal: normalizeVector({ x: 1, y: 0.35, z: 0 }) },
-        { value: 2, normal: normalizeVector({ x: -0.5, y: 0.35, z: Math.sqrt(3) / 2 }) },
-        { value: 3, normal: normalizeVector({ x: -0.5, y: 0.35, z: -Math.sqrt(3) / 2 }) },
-      ];
-    }
-
-    if (sides === 4) {
-      return [
-        { value: 1, normal: normalizeVector({ x: 1, y: 1, z: 1 }) },
-        { value: 2, normal: normalizeVector({ x: -1, y: -1, z: 1 }) },
-        { value: 3, normal: normalizeVector({ x: -1, y: 1, z: -1 }) },
-        { value: 4, normal: normalizeVector({ x: 1, y: -1, z: -1 }) },
-      ];
-    }
-
-    if (sides === 6) {
-      return [
-        { value: 3, normal: { x: 1, y: 0, z: 0 } },
-        { value: 4, normal: { x: -1, y: 0, z: 0 } },
-        { value: 1, normal: { x: 0, y: 1, z: 0 } },
-        { value: 6, normal: { x: 0, y: -1, z: 0 } },
-        { value: 2, normal: { x: 0, y: 0, z: 1 } },
-        { value: 5, normal: { x: 0, y: 0, z: -1 } },
-      ];
-    }
-
+    if (sides === 6) return [
+      { value: 3, normal: { x: 1, y: 0, z: 0 } },
+      { value: 4, normal: { x: -1, y: 0, z: 0 } },
+      { value: 1, normal: { x: 0, y: 1, z: 0 } },
+      { value: 6, normal: { x: 0, y: -1, z: 0 } },
+      { value: 2, normal: { x: 0, y: 0, z: 1 } },
+      { value: 5, normal: { x: 0, y: 0, z: -1 } },
+    ];
     if (sides === 8) {
-      const normals = [];
-      let value = 1;
-      for (const x of [-1, 1]) {
-        for (const y of [-1, 1]) {
-          for (const z of [-1, 1]) {
-            normals.push({ value, normal: normalizeVector({ x, y, z }) });
-            value += 1;
-          }
-        }
+      const normals = []; let value = 1;
+      for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
+        normals.push({ value, normal: normalizeVector({ x, y, z }) }); value += 1;
       }
       return normals;
     }
-
-    if (sides === 12) {
-      return [
-        { value: 1, normal: normalizeVector({ x: 0, y: 1, z: phi }) },
-        { value: 2, normal: normalizeVector({ x: 0, y: 1, z: -phi }) },
-        { value: 3, normal: normalizeVector({ x: 0, y: -1, z: phi }) },
-        { value: 4, normal: normalizeVector({ x: 0, y: -1, z: -phi }) },
-        { value: 5, normal: normalizeVector({ x: 1, y: phi, z: 0 }) },
-        { value: 6, normal: normalizeVector({ x: 1, y: -phi, z: 0 }) },
-        { value: 7, normal: normalizeVector({ x: -1, y: phi, z: 0 }) },
-        { value: 8, normal: normalizeVector({ x: -1, y: -phi, z: 0 }) },
-        { value: 9, normal: normalizeVector({ x: phi, y: 0, z: 1 }) },
-        { value: 10, normal: normalizeVector({ x: phi, y: 0, z: -1 }) },
-        { value: 11, normal: normalizeVector({ x: -phi, y: 0, z: 1 }) },
-        { value: 12, normal: normalizeVector({ x: -phi, y: 0, z: -1 }) },
-      ];
-    }
-
+    if (sides === 12) return [
+      { value: 1, normal: normalizeVector({ x: 0, y: 1, z: phi }) },
+      { value: 2, normal: normalizeVector({ x: 0, y: 1, z: -phi }) },
+      { value: 3, normal: normalizeVector({ x: 0, y: -1, z: phi }) },
+      { value: 4, normal: normalizeVector({ x: 0, y: -1, z: -phi }) },
+      { value: 5, normal: normalizeVector({ x: 1, y: phi, z: 0 }) },
+      { value: 6, normal: normalizeVector({ x: 1, y: -phi, z: 0 }) },
+      { value: 7, normal: normalizeVector({ x: -1, y: phi, z: 0 }) },
+      { value: 8, normal: normalizeVector({ x: -1, y: -phi, z: 0 }) },
+      { value: 9, normal: normalizeVector({ x: phi, y: 0, z: 1 }) },
+      { value: 10, normal: normalizeVector({ x: phi, y: 0, z: -1 }) },
+      { value: 11, normal: normalizeVector({ x: -phi, y: 0, z: 1 }) },
+      { value: 12, normal: normalizeVector({ x: -phi, y: 0, z: -1 }) },
+    ];
     if (sides === 20) {
-      const points = [
+      const pts = [
         { x: 1, y: 1, z: 1 }, { x: 1, y: 1, z: -1 }, { x: 1, y: -1, z: 1 }, { x: 1, y: -1, z: -1 },
         { x: -1, y: 1, z: 1 }, { x: -1, y: 1, z: -1 }, { x: -1, y: -1, z: 1 }, { x: -1, y: -1, z: -1 },
         { x: 0, y: invPhi, z: phi }, { x: 0, y: invPhi, z: -phi }, { x: 0, y: -invPhi, z: phi }, { x: 0, y: -invPhi, z: -phi },
         { x: invPhi, y: phi, z: 0 }, { x: invPhi, y: -phi, z: 0 }, { x: -invPhi, y: phi, z: 0 }, { x: -invPhi, y: -phi, z: 0 },
         { x: phi, y: 0, z: invPhi }, { x: phi, y: 0, z: -invPhi }, { x: -phi, y: 0, z: invPhi }, { x: -phi, y: 0, z: -invPhi },
       ];
-      return points.map((point, index) => ({ value: index + 1, normal: normalizeVector(point) }));
+      return pts.map((p, i) => ({ value: i + 1, normal: normalizeVector(p) }));
     }
-
     return [];
   }
 
   function topFaceInfo(orientation, sides) {
     const up = { x: 0, y: 1, z: 0 };
-    const faces = getFaceNormals(sides);
-
-    let winningFace = faces[0];
+    let winner = null;
     let bestDot = Number.NEGATIVE_INFINITY;
-    let winningNormal = { x: 0, y: 1, z: 0 };
-    for (const face of faces) {
+    for (const face of getFaceNormals(sides)) {
       const worldNormal = rotateVectorByQuat(face.normal, orientation);
       const dot = worldNormal.x * up.x + worldNormal.y * up.y + worldNormal.z * up.z;
       if (dot > bestDot) {
         bestDot = dot;
-        winningFace = face;
-        winningNormal = worldNormal;
+        winner = { value: face.value, normal: worldNormal, alignment: dot };
       }
     }
-
-    return {
-      value: winningFace.value,
-      alignment: bestDot,
-      normal: winningNormal,
-    };
+    return winner;
   }
 
-  function alignOrientationToTopFace(orientation, sides) {
-    const faceInfo = topFaceInfo(orientation, sides);
-    const axis = {
-      x: faceInfo.normal.z,
-      y: 0,
-      z: -faceInfo.normal.x,
-    };
-    const axisLength = Math.hypot(axis.x, axis.y, axis.z);
-    const alignment = clamp(faceInfo.alignment, -1, 1);
-    const angle = Math.acos(alignment);
+  function dieVertices(sides) {
+    const phi = GOLDEN_RATIO;
+    const invPhi = 1 / phi;
+    if (sides === 6) {
+      const a = 0.675;
+      return [
+        { x: -a, y: -a, z: -a }, { x: a, y: -a, z: -a }, { x: a, y: a, z: -a }, { x: -a, y: a, z: -a },
+        { x: -a, y: -a, z: a }, { x: a, y: -a, z: a }, { x: a, y: a, z: a }, { x: -a, y: a, z: a },
+      ];
+    }
+    if (sides === 8) {
+      const a = 1;
+      return [{ x: a, y: 0, z: 0 }, { x: -a, y: 0, z: 0 }, { x: 0, y: a, z: 0 }, { x: 0, y: -a, z: 0 }, { x: 0, y: 0, z: a }, { x: 0, y: 0, z: -a }];
+    }
+    if (sides === 12) {
+      const vertices = [];
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) vertices.push({ x: sx, y: sy, z: sz });
+      for (const sy of [-invPhi, invPhi]) for (const sz of [-phi, phi]) vertices.push({ x: 0, y: sy, z: sz });
+      for (const sx of [-invPhi, invPhi]) for (const sy of [-phi, phi]) vertices.push({ x: sx, y: sy, z: 0 });
+      for (const sx of [-phi, phi]) for (const sz of [-invPhi, invPhi]) vertices.push({ x: sx, y: 0, z: sz });
+      return vertices.map((v) => ({ x: v.x * 0.8, y: v.y * 0.8, z: v.z * 0.8 }));
+    }
+    if (sides === 20) {
+      const vertices = [];
+      for (const sy of [-1, 1]) for (const sz of [-phi, phi]) vertices.push({ x: 0, y: sy, z: sz });
+      for (const sx of [-1, 1]) for (const sy of [-phi, phi]) vertices.push({ x: sx, y: sy, z: 0 });
+      for (const sx of [-phi, phi]) for (const sz of [-1, 1]) vertices.push({ x: sx, y: 0, z: sz });
+      return vertices.map((v) => ({ x: v.x * 0.72, y: v.y * 0.72, z: v.z * 0.72 }));
+    }
+    return [];
+  }
 
-    if (axisLength <= 1e-8 || angle <= 1e-8) {
-      return {
-        orientation: normalizeQuat({
-          x: orientation.x,
-          y: orientation.y,
-          z: orientation.z,
-          w: orientation.w,
-        }),
-        alignment,
-      };
+  class PhysicsWorld {
+    constructor({ areaSize = 8, gravity = -18, fixedDt = 1 / 60, maxSubSteps = 5, debug = false } = {}) {
+      this.areaSize = areaSize;
+      this.gravity = gravity;
+      this.fixedDt = fixedDt;
+      this.maxSubSteps = maxSubSteps;
+      this.debug = debug;
+      const half = areaSize / 2 - 0.4;
+      this.planes = [
+        { id: 'ground', n: { x: 0, y: 1, z: 0 }, offset: 0 },
+        { id: 'north', n: { x: 0, y: 0, z: -1 }, offset: -half },
+        { id: 'south', n: { x: 0, y: 0, z: 1 }, offset: -half },
+        { id: 'east', n: { x: -1, y: 0, z: 0 }, offset: -half },
+        { id: 'west', n: { x: 1, y: 0, z: 0 }, offset: -half },
+      ];
     }
 
-    const halfAngle = angle * 0.5;
-    const sinHalf = Math.sin(halfAngle);
-    const invLength = 1 / axisLength;
-    const correction = {
-      x: axis.x * invLength * sinHalf,
-      y: axis.y * invLength * sinHalf,
-      z: axis.z * invLength * sinHalf,
-      w: Math.cos(halfAngle),
-    };
+    step(entity, dt) {
+      const steps = Math.min(this.maxSubSteps, Math.max(1, Math.ceil(dt / this.fixedDt)));
+      const subDt = dt / steps;
+      let totalContacts = 0;
+      for (let s = 0; s < steps; s += 1) {
+        entity.velocity.y += this.gravity * subDt;
+        entity.velocity.x *= 1 - entity.linearDamping * subDt;
+        entity.velocity.y *= 1 - entity.linearDamping * subDt;
+        entity.velocity.z *= 1 - entity.linearDamping * subDt;
+        entity.angularVelocity.x *= 1 - entity.angularDamping * subDt;
+        entity.angularVelocity.y *= 1 - entity.angularDamping * subDt;
+        entity.angularVelocity.z *= 1 - entity.angularDamping * subDt;
 
-    const q = orientation;
-    const cx = correction.x;
-    const cy = correction.y;
-    const cz = correction.z;
-    const cw = correction.w;
+        entity.position.x += entity.velocity.x * subDt;
+        entity.position.y += entity.velocity.y * subDt;
+        entity.position.z += entity.velocity.z * subDt;
+        integrateQuaternion(entity.orientation, entity.angularVelocity.x, entity.angularVelocity.y, entity.angularVelocity.z, subDt);
 
-    const snapped = normalizeQuat({
-      x: cw * q.x + cx * q.w + cy * q.z - cz * q.y,
-      y: cw * q.y - cx * q.z + cy * q.w + cz * q.x,
-      z: cw * q.z + cx * q.y - cy * q.x + cz * q.w,
-      w: cw * q.w - cx * q.x - cy * q.y - cz * q.z,
-    });
+        totalContacts += this.solveContacts(entity, subDt);
+      }
+      return totalContacts;
+    }
 
-    return {
-      orientation: snapped,
-      alignment,
-    };
+    solveContacts(entity) {
+      const worldVerts = entity.worldVertices();
+      let contacts = 0;
+      for (const plane of this.planes) {
+        for (const vw of worldVerts) {
+          const dist = plane.n.x * vw.x + plane.n.y * vw.y + plane.n.z * vw.z + plane.offset;
+          if (dist >= 0) continue;
+          contacts += 1;
+          const r = { x: vw.x - entity.position.x, y: vw.y - entity.position.y, z: vw.z - entity.position.z };
+          const wxr = {
+            x: entity.angularVelocity.y * r.z - entity.angularVelocity.z * r.y,
+            y: entity.angularVelocity.z * r.x - entity.angularVelocity.x * r.z,
+            z: entity.angularVelocity.x * r.y - entity.angularVelocity.y * r.x,
+          };
+          const rv = { x: entity.velocity.x + wxr.x, y: entity.velocity.y + wxr.y, z: entity.velocity.z + wxr.z };
+          const vn = rv.x * plane.n.x + rv.y * plane.n.y + rv.z * plane.n.z;
+          if (vn < 0 || dist < -0.001) {
+            const rn = {
+              x: r.y * plane.n.z - r.z * plane.n.y,
+              y: r.z * plane.n.x - r.x * plane.n.z,
+              z: r.x * plane.n.y - r.y * plane.n.x,
+            };
+            const invInertiaRn = {
+              x: rn.x * entity.invInertia.x,
+              y: rn.y * entity.invInertia.y,
+              z: rn.z * entity.invInertia.z,
+            };
+            const k = entity.invMass + plane.n.x * (invInertiaRn.y * r.z - invInertiaRn.z * r.y)
+              + plane.n.y * (invInertiaRn.z * r.x - invInertiaRn.x * r.z)
+              + plane.n.z * (invInertiaRn.x * r.y - invInertiaRn.y * r.x);
+            const impulseN = Math.max(0, (-(1 + entity.restitution) * vn + (-dist * 25)) / (k || 1));
+            entity.applyImpulse(plane.n, impulseN, r);
+
+            const tangent = {
+              x: rv.x - vn * plane.n.x,
+              y: rv.y - vn * plane.n.y,
+              z: rv.z - vn * plane.n.z,
+            };
+            const tLen = Math.hypot(tangent.x, tangent.y, tangent.z);
+            if (tLen > 1e-6) {
+              const tx = tangent.x / tLen; const ty = tangent.y / tLen; const tz = tangent.z / tLen;
+              const vt = rv.x * tx + rv.y * ty + rv.z * tz;
+              const jt = clamp(-vt / (entity.invMass || 1), -entity.friction * impulseN, entity.friction * impulseN);
+              entity.applyImpulse({ x: tx, y: ty, z: tz }, jt, r);
+            }
+          }
+        }
+      }
+      return contacts;
+    }
   }
 
-  function outcomeFromOrientation(orientation, sides) {
-    return topFaceInfo(orientation, sides).value;
+  class DieEntity {
+    constructor({ sides, random, areaSize }) {
+      this.sides = sides;
+      this.vertices = dieVertices(sides);
+      const half = areaSize / 2;
+      this.position = { x: (random() * 2 - 1) * areaSize * 0.08, y: 2 + random() * 0.6, z: (random() * 2 - 1) * areaSize * 0.08 };
+      this.orientation = normalizeQuat({ x: random() * 0.4, y: random() * 0.4, z: random() * 0.4, w: 1 });
+      this.velocity = { x: (random() * 2 - 1) * 6, y: 0, z: (random() * 2 - 1) * 6 };
+      this.angularVelocity = { x: (random() * 2 - 1) * 18, y: (random() * 2 - 1) * 18, z: (random() * 2 - 1) * 18 };
+      this.mass = 1;
+      this.invMass = 1 / this.mass;
+      const bounds = this.vertices.reduce((acc, v) => ({
+        minX: Math.min(acc.minX, v.x), maxX: Math.max(acc.maxX, v.x),
+        minY: Math.min(acc.minY, v.y), maxY: Math.max(acc.maxY, v.y),
+        minZ: Math.min(acc.minZ, v.z), maxZ: Math.max(acc.maxZ, v.z),
+      }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity });
+      const sx = bounds.maxX - bounds.minX; const sy = bounds.maxY - bounds.minY; const sz = bounds.maxZ - bounds.minZ;
+      this.invInertia = {
+        x: 12 / (this.mass * (sy * sy + sz * sz)),
+        y: 12 / (this.mass * (sx * sx + sz * sz)),
+        z: 12 / (this.mass * (sx * sx + sy * sy)),
+      };
+      this.friction = 0.42;
+      this.restitution = 0.12;
+      this.linearDamping = 0.28;
+      this.angularDamping = 0.42;
+      this.sleepLinearThreshold = 0.1;
+      this.sleepAngularThreshold = 0.2;
+      this.sleepFrames = 0;
+      this.maxX = half - 0.2;
+      this.maxZ = half - 0.2;
+    }
+
+    worldVertices() {
+      return this.vertices.map((v) => {
+        const r = rotateVectorByQuat(v, this.orientation);
+        return { x: this.position.x + r.x, y: this.position.y + r.y, z: this.position.z + r.z };
+      });
+    }
+
+    applyImpulse(direction, impulse, r) {
+      this.velocity.x += direction.x * impulse * this.invMass;
+      this.velocity.y += direction.y * impulse * this.invMass;
+      this.velocity.z += direction.z * impulse * this.invMass;
+      const torque = {
+        x: r.y * direction.z - r.z * direction.y,
+        y: r.z * direction.x - r.x * direction.z,
+        z: r.x * direction.y - r.y * direction.x,
+      };
+      this.angularVelocity.x += torque.x * impulse * this.invInertia.x;
+      this.angularVelocity.y += torque.y * impulse * this.invInertia.y;
+      this.angularVelocity.z += torque.z * impulse * this.invInertia.z;
+    }
+
+    settleInfo(contactPoints) {
+      const linearSpeed = Math.hypot(this.velocity.x, this.velocity.y, this.velocity.z);
+      const angularSpeed = Math.hypot(this.angularVelocity.x, this.angularVelocity.y, this.angularVelocity.z);
+      const minGroundDist = Math.min(...this.worldVertices().map((v) => v.y));
+      const top = topFaceInfo(this.orientation, this.sides);
+      return {
+        linearSpeed,
+        angularSpeed,
+        minGroundDist,
+        topDot: top.alignment,
+        topValue: top.value,
+        contactPoints,
+      };
+    }
+  }
+
+  class DebugRenderer {
+    constructor(enabled) { this.enabled = enabled; this.logs = []; }
+    log(msg) { if (this.enabled) this.logs.push(msg); }
+  }
+
+  class DieRoller {
+    constructor({ sides, seed, areaSize, debug }) {
+      this.random = createSeededRandom(seed);
+      this.world = new PhysicsWorld({ areaSize, debug });
+      this.die = new DieEntity({ sides, random: this.random, areaSize });
+      this.debug = new DebugRenderer(debug);
+    }
+
+    run() {
+      const frames = [];
+      const dt = this.world.fixedDt;
+      const maxFrames = 1500;
+      let settled = false;
+      let finalDiagnostics = null;
+
+      for (let i = 0; i < maxFrames; i += 1) {
+        const contacts = this.world.step(this.die, dt);
+        const info = this.die.settleInfo(contacts);
+
+        const linearOk = info.linearSpeed < this.die.sleepLinearThreshold;
+        const angularOk = info.angularSpeed < this.die.sleepAngularThreshold;
+        const noPenetration = info.minGroundDist > -0.002;
+        const hasGroundContact = info.contactPoints > 0 || info.minGroundDist < 0.02;
+        if (linearOk && angularOk && noPenetration && hasGroundContact) this.die.sleepFrames += 1;
+        else this.die.sleepFrames = 0;
+
+        frames.push({
+          step: i,
+          x: Number(this.die.position.x.toFixed(4)),
+          y: Number(this.die.position.y.toFixed(4)),
+          z: Number(this.die.position.z.toFixed(4)),
+          vx: Number(this.die.velocity.x.toFixed(4)),
+          vy: Number(this.die.velocity.y.toFixed(4)),
+          vz: Number(this.die.velocity.z.toFixed(4)),
+          wx: Number(this.die.angularVelocity.x.toFixed(4)),
+          wy: Number(this.die.angularVelocity.y.toFixed(4)),
+          wz: Number(this.die.angularVelocity.z.toFixed(4)),
+          qx: Number(this.die.orientation.x.toFixed(6)),
+          qy: Number(this.die.orientation.y.toFixed(6)),
+          qz: Number(this.die.orientation.z.toFixed(6)),
+          qw: Number(this.die.orientation.w.toFixed(6)),
+        });
+
+        if (this.die.sleepFrames >= 24 && i > 40) {
+          finalDiagnostics = info;
+          this.debug.log(`settled frame=${i} pos=(${this.die.position.x.toFixed(3)},${this.die.position.y.toFixed(3)},${this.die.position.z.toFixed(3)}) lin=${info.linearSpeed.toFixed(4)} ang=${info.angularSpeed.toFixed(4)} dotUp=${info.topDot.toFixed(4)} contacts=${info.contactPoints}`);
+          settled = true;
+          break;
+        }
+      }
+
+      if (!finalDiagnostics) {
+        finalDiagnostics = this.die.settleInfo(0);
+        const fallbackSettled = finalDiagnostics.linearSpeed < this.die.sleepLinearThreshold
+          && finalDiagnostics.angularSpeed < this.die.sleepAngularThreshold
+          && finalDiagnostics.minGroundDist > -0.002
+          && finalDiagnostics.topDot > 0.92;
+        if (fallbackSettled) {
+          settled = true;
+          this.debug.log(`settled-fallback pos=(${this.die.position.x.toFixed(3)},${this.die.position.y.toFixed(3)},${this.die.position.z.toFixed(3)}) lin=${finalDiagnostics.linearSpeed.toFixed(4)} ang=${finalDiagnostics.angularSpeed.toFixed(4)} dotUp=${finalDiagnostics.topDot.toFixed(4)} contacts=${finalDiagnostics.contactPoints}`);
+        }
+      }
+      if (finalDiagnostics.topDot < 0.95) {
+        const before = topFaceInfo(this.die.orientation, this.die.sides);
+        const axis = { x: before.normal.z, y: 0, z: -before.normal.x };
+        const axisLen = Math.hypot(axis.x, axis.y, axis.z);
+        if (axisLen > 1e-6) {
+          const angle = Math.acos(clamp(before.alignment, -1, 1));
+          const s = Math.sin(angle / 2) / axisLen;
+          const correction = normalizeQuat({ x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(angle / 2) });
+          this.die.orientation = normalizeQuat(mulQuat(correction, this.die.orientation));
+          this.die.velocity = { x: 0, y: 0, z: 0 };
+          this.die.angularVelocity = { x: 0, y: 0, z: 0 };
+        }
+      }
+
+      const top = topFaceInfo(this.die.orientation, this.die.sides);
+      const last = frames[frames.length - 1];
+      if (last) {
+        last.qx = Number(this.die.orientation.x.toFixed(6));
+        last.qy = Number(this.die.orientation.y.toFixed(6));
+        last.qz = Number(this.die.orientation.z.toFixed(6));
+        last.qw = Number(this.die.orientation.w.toFixed(6));
+      }
+
+      return {
+        frames,
+        outcome: top.value,
+        settled,
+        diagnostics: {
+          finalPosition: { ...this.die.position },
+          finalVelocity: { ...this.die.velocity },
+          finalAngularVelocity: { ...this.die.angularVelocity },
+          topDotUp: top.alignment,
+          topFaceValue: top.value,
+          contactPoints: finalDiagnostics.contactPoints,
+          logs: this.debug.logs,
+          world: {
+            gravity: this.world.gravity,
+            fixedDt: this.world.fixedDt,
+            maxSubSteps: this.world.maxSubSteps,
+            colliders: this.world.planes.map((p) => ({ id: p.id, normal: p.n, offset: p.offset })),
+          },
+          collider: {
+            type: 'convex',
+            vertexCount: this.die.vertices.length,
+            sides: this.die.sides,
+          },
+        },
+      };
+    }
   }
 
   function simulateRoll(options) {
     const sides = normalizeSides(options.sides);
     const seed = String(options.seed || Date.now());
     const areaSize = Number.isFinite(options.areaSize) ? options.areaSize : 8;
-    const baseSteps = Number.isFinite(options.steps) ? options.steps : 200;
-    const steps = Math.max(baseSteps, 720);
-    const dt = Number.isFinite(options.dt) ? options.dt : 1 / 60;
-
-    const rng = createSeededRandom(seed);
-    const halfArea = areaSize / 2;
-    const min = -halfArea + 0.5;
-    const max = halfArea - 0.5;
-
-    const roamRadius = areaSize * 0.26;
-    let px = (rng() * 2 - 1) * (areaSize * 0.08);
-    let py = 1.1 + rng() * 0.5;
-    let pz = (rng() * 2 - 1) * (areaSize * 0.08);
-    let vx = (rng() * 2 - 1) * 5;
-    let vy = 0;
-    let vz = (rng() * 2 - 1) * 5;
-    let angle = rng() * TWO_PI;
-    let wx = (rng() * 2 - 1) * 20;
-    let wy = (rng() * 2 - 1) * 20;
-    let wz = (rng() * 2 - 1) * 20;
-    const orientation = normalizeQuat({ x: 0, y: 0, z: 0, w: 1 });
-    let stableFaceFrames = 0;
-
-    const settleProfile = {
-      floorLinearDrag: sides >= 12 ? 0.875 : 0.935,
-      floorSpinDrag: sides >= 12 ? 0.76 : 0.9,
-      baseAlignStrength: sides >= 12 ? 56 : 36,
-      fineAlignStrength: sides >= 12 ? 88 : 62,
-      flatAlignment: sides >= 12 ? 0.9996 : 0.9988,
-      stableFrames: sides >= 12 ? 28 : 15,
-    };
-
-    const frames = [];
-
-    for (let i = 0; i < steps; i += 1) {
-      const gravity = 24;
-      const centerForce = 2.1;
-      vx += -px * centerForce * dt;
-      vz += -pz * centerForce * dt;
-      vy -= gravity * dt;
-
-      px += vx * dt;
-      py += vy * dt;
-      pz += vz * dt;
-      integrateQuaternion(orientation, wx, wy, wz, dt);
-
-      let bounced = false;
-      const floorY = 0.23;
-      if (py < floorY) {
-        py = floorY;
-        if (Math.abs(vy) > 0.3) {
-          vy = Math.abs(vy) * 0.42;
-          wx += (rng() * 2 - 1) * 2.7;
-          wz += (rng() * 2 - 1) * 2.7;
-        } else {
-          vy = 0;
-        }
-        vx *= 0.86;
-        vz *= 0.86;
-        bounced = true;
-      }
-
-      const wallSpinImpulse = 2.2;
-      if (px < min) {
-        px = min;
-        vx = Math.abs(vx) * 0.7;
-        vy += Math.abs(vx) * 0.15;
-        wy += (rng() * 2 - 1) * wallSpinImpulse;
-        wz *= 0.9;
-        bounced = true;
-      }
-      if (px > max) {
-        px = max;
-        vx = -Math.abs(vx) * 0.7;
-        vy += Math.abs(vx) * 0.15;
-        wy += (rng() * 2 - 1) * wallSpinImpulse;
-        wz *= 0.9;
-        bounced = true;
-      }
-      if (pz < min) {
-        pz = min;
-        vz = Math.abs(vz) * 0.7;
-        vy += Math.abs(vz) * 0.15;
-        wx += (rng() * 2 - 1) * wallSpinImpulse;
-        wz *= 0.9;
-        bounced = true;
-      }
-      if (pz > max) {
-        pz = max;
-        vz = -Math.abs(vz) * 0.7;
-        vy += Math.abs(vz) * 0.15;
-        wx += (rng() * 2 - 1) * wallSpinImpulse;
-        wz *= 0.9;
-        bounced = true;
-      }
-
-      const radial = Math.hypot(px, pz);
-      if (radial > roamRadius) {
-        const nx = px / radial;
-        const nz = pz / radial;
-        px = nx * roamRadius;
-        pz = nz * roamRadius;
-        const dot = vx * nx + vz * nz;
-        vx = (vx - 1.6 * dot * nx) * 0.85;
-        vz = (vz - 1.6 * dot * nz) * 0.85;
-        bounced = true;
-      }
-
-      const drag = py <= floorY + 0.001 ? settleProfile.floorLinearDrag : 0.985;
-      vx *= drag;
-      vy *= bounced ? 0.94 : 0.995;
-      vz *= drag;
-      const spinDrag = py <= floorY + 0.001 ? settleProfile.floorSpinDrag : 0.975;
-      wx *= spinDrag;
-      wy *= spinDrag;
-      wz *= spinDrag;
-      if (py <= floorY + 0.001 && Math.abs(vy) < 0.25) {
-        vy = 0;
-      }
-
-      if (py <= floorY + 0.001) {
-        const faceInfo = topFaceInfo(orientation, sides);
-        const faceNormal = faceInfo.normal;
-        const correctionAxis = {
-          x: -faceNormal.z,
-          y: 0,
-          z: faceNormal.x,
-        };
-        const correctionMagnitude = Math.hypot(correctionAxis.x, correctionAxis.y, correctionAxis.z);
-        const correctionAngle = Math.acos(clamp(faceInfo.alignment, -1, 1));
-
-        if (correctionMagnitude > 1e-6 && correctionAngle > 0.0005) {
-          const invMagnitude = 1 / correctionMagnitude;
-          const alignStrength = correctionAngle < 0.35
-            ? settleProfile.fineAlignStrength
-            : settleProfile.baseAlignStrength;
-          const correctionSpeed = correctionAngle * alignStrength;
-          const cx = correctionAxis.x * invMagnitude;
-          const cy = correctionAxis.y * invMagnitude;
-          const cz = correctionAxis.z * invMagnitude;
-          integrateQuaternion(
-            orientation,
-            cx * correctionSpeed,
-            cy * correctionSpeed,
-            cz * correctionSpeed,
-            dt
-          );
-          wx *= 0.52;
-          wy *= 0.82;
-          wz *= 0.52;
-        }
-
-        if (faceInfo.alignment > 0.995) {
-          wx *= 0.58;
-          wz *= 0.58;
-        }
-        if (faceInfo.alignment > 0.999 && Math.hypot(vx, vz) < 0.05) {
-          wx = 0;
-          wz = 0;
-        }
-      }
-
-      const travel = Math.hypot(vx, vz);
-      angle = normalizeAngle(angle + (wy * dt) + travel * 0.015);
-
-      if (Math.abs(vx) < 0.02) vx = 0;
-      if (Math.abs(vy) < 0.02) vy = 0;
-      if (Math.abs(vz) < 0.02) vz = 0;
-      if (Math.abs(wx) < 0.02) wx = 0;
-      if (Math.abs(wy) < 0.02) wy = 0;
-      if (Math.abs(wz) < 0.02) wz = 0;
-
-      frames.push({
-        step: i,
-        x: Number(px.toFixed(4)),
-        y: Number(py.toFixed(4)),
-        z: Number(pz.toFixed(4)),
-        angle: Number(angle.toFixed(5)),
-        vx: Number(vx.toFixed(4)),
-        vy: Number(vy.toFixed(4)),
-        vz: Number(vz.toFixed(4)),
-        wx: Number(wx.toFixed(4)),
-        wy: Number(wy.toFixed(4)),
-        wz: Number(wz.toFixed(4)),
-        qx: Number(orientation.x.toFixed(6)),
-        qy: Number(orientation.y.toFixed(6)),
-        qz: Number(orientation.z.toFixed(6)),
-        qw: Number(orientation.w.toFixed(6)),
-      });
-
-      const isMostlyStill = Math.abs(vx) < 0.04
-        && Math.abs(vy) < 0.04
-        && Math.abs(vz) < 0.04
-        && Math.abs(wx) < 0.12
-        && Math.abs(wy) < 0.12
-        && Math.abs(wz) < 0.12
-        && py <= floorY + 0.001;
-
-      const faceInfo = topFaceInfo(orientation, sides);
-      const isFlatEnough = faceInfo.alignment > settleProfile.flatAlignment;
-      if (isMostlyStill && isFlatEnough) {
-        stableFaceFrames += 1;
-      } else {
-        stableFaceFrames = 0;
-      }
-
-      if (stableFaceFrames >= settleProfile.stableFrames && i > 35) {
-        break;
-      }
-    }
-
-    const finalFrame = frames[frames.length - 1];
-    const rawRenderedOrientation = finalFrame && typeof finalFrame.qx === 'number'
-      ? {
-        x: finalFrame.qx,
-        y: finalFrame.qy,
-        z: finalFrame.qz,
-        w: finalFrame.qw,
-      }
-      : orientation;
-
-    const snapped = alignOrientationToTopFace(rawRenderedOrientation, sides);
-    const renderedOrientation = snapped.orientation;
-    if (finalFrame) {
-      finalFrame.qx = Number(renderedOrientation.x.toFixed(6));
-      finalFrame.qy = Number(renderedOrientation.y.toFixed(6));
-      finalFrame.qz = Number(renderedOrientation.z.toFixed(6));
-      finalFrame.qw = Number(renderedOrientation.w.toFixed(6));
-      finalFrame.wx = 0;
-      finalFrame.wy = 0;
-      finalFrame.wz = 0;
-    }
-
-    const outcome = outcomeFromOrientation(renderedOrientation, sides) || angleToOutcome(finalFrame.angle, sides);
-
+    const debug = Boolean(options.debug);
+    const roller = new DieRoller({ sides, seed, areaSize, debug });
+    const result = roller.run();
     return {
       seed,
       sides,
       areaSize,
-      dt,
-      frames,
-      outcome,
+      dt: roller.world.fixedDt,
+      frames: result.frames,
+      outcome: result.outcome,
       metadata: {
-        totalFrames: frames.length,
+        totalFrames: result.frames.length,
+        settled: result.settled,
+        diagnostics: result.diagnostics,
       },
     };
   }
 
-  return {
-    normalizeSides,
-    normalizeAngle,
-    angleToOutcome,
-    createSeededRandom,
-    simulateRoll,
-  };
+  return { normalizeSides, createSeededRandom, simulateRoll };
 });
