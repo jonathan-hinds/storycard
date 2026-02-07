@@ -263,17 +263,8 @@ function selectNumberedFaces(faces, sides) {
 }
 
 function addFaceLabels(mesh, sides) {
-  const faces = getNumberedFacesForSides(mesh.geometry, sides);
   const values = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
-
-  faces.forEach((face, index) => {
-    mesh.add(createFaceLabelMesh(values[index], face));
-  });
-}
-
-function getNumberedFacesForSides(geometry, sides) {
-  const values = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
-  const faces = selectNumberedFaces(extractPlanarFaces(geometry), sides)
+  const faces = selectNumberedFaces(extractPlanarFaces(mesh.geometry), sides)
     .sort((a, b) => {
       if (Math.abs(a.center.y - b.center.y) > 1e-4) return b.center.y - a.center.y;
       const angleA = Math.atan2(a.center.z, a.center.x);
@@ -282,7 +273,9 @@ function getNumberedFacesForSides(geometry, sides) {
     })
     .slice(0, values.length);
 
-  return faces;
+  faces.forEach((face, index) => {
+    mesh.add(createFaceLabelMesh(values[index], face));
+  });
 }
 
 function createD3Geometry() {
@@ -361,97 +354,6 @@ function createDieMesh(sides) {
   const mesh = new THREE.Mesh(geometry, material);
   addFaceLabels(mesh, sideCount);
   return mesh;
-}
-
-function drawTemplatePolygon(ctx, points, x, y, width, height, lineWidth, fillStyle) {
-  if (!points.length) return;
-  ctx.beginPath();
-  points.forEach((point, index) => {
-    const px = x + point.x * width;
-    const py = y + (1 - point.y) * height;
-    if (index === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  });
-  ctx.closePath();
-  ctx.fillStyle = fillStyle;
-  ctx.fill();
-  ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = '#334155';
-  ctx.stroke();
-}
-
-function createDieTemplateCanvas(sides) {
-  const geometry = createDieGeometry(sides);
-  const faces = getNumberedFacesForSides(geometry, sides);
-  const cols = Math.ceil(Math.sqrt(faces.length));
-  const rows = Math.ceil(faces.length / cols);
-  const tile = 260;
-  const gutter = 24;
-  const padding = 36;
-  const canvas = document.createElement('canvas');
-
-  canvas.width = cols * tile + (cols - 1) * gutter + padding * 2;
-  canvas.height = rows * tile + (rows - 1) * gutter + padding * 2;
-
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  const labels = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
-
-  faces.forEach((face, index) => {
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    const tileX = padding + col * (tile + gutter);
-    const tileY = padding + row * (tile + gutter);
-    const polyPadding = 28;
-    const xs = face.points2D.map((p) => p.x);
-    const ys = face.points2D.map((p) => p.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-    const spanX = Math.max(maxX - minX, 1e-5);
-    const spanY = Math.max(maxY - minY, 1e-5);
-
-    const normalized = face.points2D.map((point) => ({
-      x: (point.x - minX) / spanX,
-      y: (point.y - minY) / spanY,
-    }));
-
-    drawTemplatePolygon(
-      ctx,
-      normalized,
-      tileX + polyPadding,
-      tileY + polyPadding,
-      tile - polyPadding * 2,
-      tile - polyPadding * 2,
-      4,
-      '#ffffff'
-    );
-
-    ctx.fillStyle = '#475569';
-    ctx.font = '600 20px Inter, Arial, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`Face ${labels[index]}`, tileX + 10, tileY + 10);
-  });
-
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '600 24px Inter, Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(`D${sides} face template`, padding, canvas.height - 10);
-
-  return canvas;
-}
-
-function downloadDieTemplate(sides) {
-  const canvas = createDieTemplateCanvas(sides);
-  const link = document.createElement('a');
-  link.href = canvas.toDataURL('image/png');
-  link.download = `d${sides}-face-template.png`;
-  link.click();
 }
 
 function createSceneForCanvas(canvas, sides) {
@@ -555,18 +457,7 @@ function buildDieCard(die, canvas) {
     await refreshDice();
   });
 
-  const templateBtn = document.createElement('button');
-  templateBtn.textContent = 'Download Face Template';
-  templateBtn.className = 'secondary-btn';
-  templateBtn.addEventListener('click', () => {
-    downloadDieTemplate(Number.parseInt(die.sides, 10));
-  });
-
-  const buttonRow = document.createElement('div');
-  buttonRow.className = 'die-actions';
-  buttonRow.append(rollBtn, templateBtn);
-
-  item.append(title, result, dieCanvas, buttonRow);
+  item.append(title, result, dieCanvas, rollBtn);
   return { item, canvas: dieCanvas };
 }
 
