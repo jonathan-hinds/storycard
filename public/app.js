@@ -22,6 +22,32 @@ const UV_PRECISION = 100000;
 const TEMPLATE_PADDING = 32;
 const TEMPLATE_MAX_SIZE = 2048;
 
+function createDebugGroundTexture() {
+  const size = 256;
+  const cells = 8;
+  const cellSize = size / cells;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  for (let y = 0; y < cells; y += 1) {
+    for (let x = 0; x < cells; x += 1) {
+      const isEven = (x + y) % 2 === 0;
+      ctx.fillStyle = isEven ? '#6ea8ff' : '#1f2a44';
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 1);
+  return texture;
+}
+
+const DEBUG_GROUND_TEXTURE = createDebugGroundTexture();
+
 function roundKey(value) {
   return Math.round(value * 10000) / 10000;
 }
@@ -774,6 +800,22 @@ function createSceneForCanvas(canvas, sides) {
   floor.rotation.x = -Math.PI / 2;
   group.add(floor);
 
+  const debugFloor = new THREE.Mesh(
+    new THREE.PlaneGeometry(areaSize, areaSize),
+    new THREE.MeshStandardMaterial({
+      map: DEBUG_GROUND_TEXTURE,
+      roughness: 1,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.68,
+      depthWrite: false,
+    })
+  );
+  debugFloor.rotation.x = -Math.PI / 2;
+  debugFloor.position.y = 0.004;
+  debugFloor.visible = Boolean(debugPhysicsToggle?.checked);
+  group.add(debugFloor);
+
   const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x1a2030, roughness: 0.95, metalness: 0.04, transparent: true, opacity: 0.18 });
   const wallHeight = 0.52;
   const wallThickness = 0.2;
@@ -821,6 +863,7 @@ function createSceneForCanvas(canvas, sides) {
     animation: null,
     currentValue: getCurrentRollValue(mesh, faceValueMap),
     debugHelpers,
+    debugFloor,
     diagnostics: null,
   };
 }
@@ -995,6 +1038,9 @@ function tick() {
       visual.debugHelpers.helperGroup.visible = Boolean(debugPhysicsToggle?.checked);
       visual.debugHelpers.dieCollider.position.copy(visual.mesh.position);
       visual.debugHelpers.dieCollider.quaternion.copy(visual.mesh.quaternion);
+    }
+    if (visual.debugFloor) {
+      visual.debugFloor.visible = Boolean(debugPhysicsToggle?.checked);
     }
 
     syncCameraToDie(visual);
