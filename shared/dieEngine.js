@@ -205,34 +205,6 @@
     return winningValue;
   }
 
-  function d6TopFaceFromOrientation(orientation) {
-    const up = { x: 0, y: 1, z: 0 };
-    const faces = [
-      { value: 3, normal: { x: 1, y: 0, z: 0 } },
-      { value: 4, normal: { x: -1, y: 0, z: 0 } },
-      { value: 1, normal: { x: 0, y: 1, z: 0 } },
-      { value: 6, normal: { x: 0, y: -1, z: 0 } },
-      { value: 2, normal: { x: 0, y: 0, z: 1 } },
-      { value: 5, normal: { x: 0, y: 0, z: -1 } },
-    ];
-
-    let winningFace = faces[2];
-    let bestDot = Number.NEGATIVE_INFINITY;
-    for (const face of faces) {
-      const worldNormal = rotateVectorByQuat(face.normal, orientation);
-      const dot = worldNormal.x * up.x + worldNormal.y * up.y + worldNormal.z * up.z;
-      if (dot > bestDot) {
-        bestDot = dot;
-        winningFace = face;
-      }
-    }
-
-    return {
-      value: winningFace.value,
-      dot: bestDot,
-    };
-  }
-
   function simulateRoll(options) {
     const sides = normalizeSides(options.sides);
     const seed = String(options.seed || Date.now());
@@ -260,14 +232,8 @@
     const orientation = normalizeQuat({ x: 0, y: 0, z: 0, w: 1 });
 
     const frames = [];
-    const maxSteps = sides === 6 ? steps * 3 : steps;
-    const settleDuration = 0.22;
-    const flatDotThreshold = 0.78;
-    let settledFlat = false;
-    let stableFaceValue = null;
-    let stableFlatTime = 0;
 
-    for (let i = 0; i < maxSteps; i += 1) {
+    for (let i = 0; i < steps; i += 1) {
       const gravity = 24;
       const centerForce = 2.1;
       vx += -px * centerForce * dt;
@@ -282,7 +248,7 @@
       let bounced = false;
       if (py < floorY) {
         py = floorY;
-        if (Math.abs(vy) > 0.55) {
+        if (Math.abs(vy) > 0.3) {
           vy = Math.abs(vy) * 0.42;
           wx += (rng() * 2 - 1) * 2.7;
           wz += (rng() * 2 - 1) * 2.7;
@@ -361,39 +327,16 @@
 
       const speed = Math.hypot(vx, vy, vz);
       const spin = Math.hypot(wx, wy, wz);
-      if (sides === 6) {
-        const onFloor = py <= floorY + 0.001;
-        const candidateStable = onFloor && speed < 0.3 && spin < 0.6;
-        if (candidateStable) {
-          const topFace = d6TopFaceFromOrientation(orientation);
-          if (topFace.dot >= flatDotThreshold || spin < 0.18) {
-            if (stableFaceValue === topFace.value) {
-              stableFlatTime += dt;
-            } else {
-              stableFaceValue = topFace.value;
-              stableFlatTime = dt;
-            }
-          } else {
-            stableFaceValue = null;
-            stableFlatTime = 0;
-          }
-        } else {
-          stableFaceValue = null;
-          stableFlatTime = 0;
-        }
-
-        if (!settledFlat && stableFlatTime >= settleDuration) {
-          py = floorY;
-          vx = 0;
-          vy = 0;
-          vz = 0;
-          wx = 0;
-          wy = 0;
-          wz = 0;
-          const flattened = snapD6OrientationFlat(orientation);
-          setQuaternion(orientation, flattened);
-          settledFlat = true;
-        }
+      if (sides === 6 && py <= floorY + 0.001 && speed < 0.2 && spin < 0.35) {
+        py = floorY;
+        vx = 0;
+        vy = 0;
+        vz = 0;
+        wx = 0;
+        wy = 0;
+        wz = 0;
+        const flattened = snapD6OrientationFlat(orientation);
+        setQuaternion(orientation, flattened);
       }
 
       frames.push({
@@ -415,9 +358,6 @@
       });
 
       if (vx === 0 && vy === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0 && i > 35) {
-        if (sides === 6 && !settledFlat) {
-          continue;
-        }
         break;
       }
     }
