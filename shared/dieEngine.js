@@ -166,6 +166,22 @@
   }
   function createSeededRandom(seedText) { return mulberry32(xmur3(String(seedText))()); }
 
+  function randomUnitQuaternion(random) {
+    const u1 = random();
+    const u2 = random();
+    const u3 = random();
+    const sqrt1MinusU1 = Math.sqrt(1 - u1);
+    const sqrtU1 = Math.sqrt(u1);
+    const theta1 = TWO_PI * u2;
+    const theta2 = TWO_PI * u3;
+    return {
+      x: sqrt1MinusU1 * Math.sin(theta1),
+      y: sqrt1MinusU1 * Math.cos(theta1),
+      z: sqrtU1 * Math.sin(theta2),
+      w: sqrtU1 * Math.cos(theta2),
+    };
+  }
+
   function getFaceNormals(sides) {
     const phi = GOLDEN_RATIO;
     const invPhi = 1 / phi;
@@ -374,7 +390,7 @@
       this.vertices = dieVertices(sides);
       const half = areaSize / 2;
       this.position = { x: (random() * 2 - 1) * areaSize * 0.08, y: 2 + random() * 0.6, z: (random() * 2 - 1) * areaSize * 0.08 };
-      this.orientation = normalizeQuat({ x: random() * 0.4, y: random() * 0.4, z: random() * 0.4, w: 1 });
+      this.orientation = randomUnitQuaternion(random);
       this.velocity = { x: 0, y: 0, z: 0 };
       this.angularVelocity = { x: 0, y: 0, z: 0 };
       this.mass = 1;
@@ -390,10 +406,10 @@
         y: 12 / (this.mass * (sx * sx + sz * sz)),
         z: 12 / (this.mass * (sx * sx + sy * sy)),
       };
-      this.friction = 0.56;
-      this.restitution = 0.06;
-      this.linearDamping = 0.45;
-      this.angularDamping = 0.68;
+      this.friction = 0.38;
+      this.restitution = 0.2;
+      this.linearDamping = 0.24;
+      this.angularDamping = 0.3;
       this.sleepLinearThreshold = rollConfig.settledLinearEps;
       this.sleepAngularThreshold = rollConfig.settledAngularEps;
       this.sleepFrames = 0;
@@ -406,7 +422,7 @@
       const linAngle = this.random() * TWO_PI;
       this.velocity = {
         x: Math.cos(linAngle) * linSpeed,
-        y: 0,
+        y: 1.2 + this.random() * 1.9,
         z: Math.sin(linAngle) * linSpeed,
       };
       const axis = normalizeVector({ x: this.random() * 2 - 1, y: this.random() * 2 - 1, z: this.random() * 2 - 1 });
