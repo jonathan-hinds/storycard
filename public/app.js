@@ -18,6 +18,8 @@ const BASE_DIE_COLOR = new THREE.Color(0xe2e8f0);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
 const UV_PRECISION = 100000;
+const TEMPLATE_PADDING = 32;
+const TEMPLATE_MAX_SIZE = 2048;
 
 function roundKey(value) {
   return Math.round(value * 10000) / 10000;
@@ -409,25 +411,19 @@ function generateUnwrappedNet(geometry, sideCount) {
   }));
 }
 
-function downloadUvTemplate(sides) {
-  const sideCount = Number.parseInt(sides, 10);
-  const geometry = createDieGeometry(sideCount);
-  const net = generateUnwrappedNet(geometry, sideCount);
-  geometry.dispose();
-
-  const padding = 32;
+function renderTemplateCanvas(net, options = {}) {
+  const { includeFaceValues = true } = options;
   const minX = Math.min(...net.flatMap((face) => face.points.map((point) => point.x)));
   const maxX = Math.max(...net.flatMap((face) => face.points.map((point) => point.x)));
   const minY = Math.min(...net.flatMap((face) => face.points.map((point) => point.y)));
   const maxY = Math.max(...net.flatMap((face) => face.points.map((point) => point.y)));
   const width = maxX - minX;
   const height = maxY - minY;
-  const size = 2048;
-  const scale = Math.min((size - padding * 2) / width, (size - padding * 2) / height);
+  const scale = Math.min((TEMPLATE_MAX_SIZE - TEMPLATE_PADDING * 2) / width, (TEMPLATE_MAX_SIZE - TEMPLATE_PADDING * 2) / height);
 
   const canvas = document.createElement('canvas');
-  canvas.width = Math.ceil(width * scale + padding * 2);
-  canvas.height = Math.ceil(height * scale + padding * 2);
+  canvas.width = Math.ceil(width * scale + TEMPLATE_PADDING * 2);
+  canvas.height = Math.ceil(height * scale + TEMPLATE_PADDING * 2);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -435,8 +431,8 @@ function downloadUvTemplate(sides) {
   ctx.lineWidth = 3;
 
   const toCanvas = (point) => new THREE.Vector2(
-    padding + (point.x - minX) * scale,
-    canvas.height - (padding + (point.y - minY) * scale)
+    TEMPLATE_PADDING + (point.x - minX) * scale,
+    canvas.height - (TEMPLATE_PADDING + (point.y - minY) * scale)
   );
 
   net.forEach((face) => {
@@ -449,19 +445,102 @@ function downloadUvTemplate(sides) {
     ctx.closePath();
     ctx.stroke();
 
-    const centroid = getPolygonCentroid(mapped);
-    const fontSize = Math.max(14, Math.sqrt(scale) * 2.5);
-    ctx.font = `500 ${fontSize}px Inter, Arial, sans-serif`;
-    ctx.fillStyle = '#475569';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(face.value), centroid.x, centroid.y);
+    if (includeFaceValues) {
+      const centroid = getPolygonCentroid(mapped);
+      const fontSize = Math.max(14, Math.sqrt(scale) * 2.5);
+      ctx.font = `500 ${fontSize}px Inter, Arial, sans-serif`;
+      ctx.fillStyle = '#475569';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(face.value), centroid.x, centroid.y);
+    }
   });
+
+  return {
+    canvas,
+    bounds: { minX, minY, width, height },
+  };
+}
+
+function downloadUvTemplate(sides) {
+  const sideCount = Number.parseInt(sides, 10);
+  const geometry = createDieGeometry(sideCount);
+  const net = generateUnwrappedNet(geometry, sideCount);
+  geometry.dispose();
+  const { canvas } = renderTemplateCanvas(net, { includeFaceValues: true });
 
   const link = document.createElement('a');
   link.download = `d${sideCount}-uv-template.png`;
   link.href = canvas.toDataURL('image/png');
   link.click();
+}
+
+function mapGeometryToNetUvs(geometry, net) {
+  const faces = extractFacePolygons3D(geometry, net.length);
+  const netById = new Map(net.map((face) => [face.id, face]));
+  const uvs = [];
+  const nonIndexed = geometry.index ? geometry.toNonIndexed() : geometry;
+  const positions = nonIndexed.attributes.position;
+
+  const minX = Math.min(...net.flatMap((face) => face.points.map((point) => point.x)));
+  const maxX = Math.max(...net.flatMap((face) => face.points.map((point) => point.x)));
+  const minY = Math.min(...net.flatMap((face) => face.points.map((point) => point.y)));
+  const maxY = Math.max(...net.flatMap((face) => face.points.map((point) => point.y)));
+  const width = Math.max(1e-6, maxX - minX);
+  const height = Math.max(1e-6, maxY - minY);
+
+  for (let i = 0; i < positions.count; i += 3) {
+    const triangle = [
+      new THREE.Vector3().fromBufferAttribute(positions, i),
+      new THREE.Vector3().fromBufferAttribute(positions, i + 1),
+      new THREE.Vector3().fromBufferAttribute(positions, i + 2),
+    ];
+
+    const centroid = triangle
+      .reduce((acc, vertex) => acc.add(vertex), new THREE.Vector3())
+      .multiplyScalar(1 / 3);
+
+    let bestFace = faces[0];
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (const face of faces) {
+      const normalScore = face.normal.dot(centroid.clone().normalize());
+      const planeDistance = Math.abs(face.normal.dot(centroid.clone().sub(face.center)));
+      const score = normalScore - planeDistance * 4;
+      if (score > bestScore) {
+        bestScore = score;
+        bestFace = face;
+      }
+    }
+
+    const netFace = netById.get(bestFace.id);
+    triangle.forEach((vertex) => {
+      let bestIndex = 0;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      bestFace.points3D.forEach((faceVertex, index) => {
+        const dist = faceVertex.distanceToSquared(vertex);
+        if (dist < bestDistance) {
+          bestDistance = dist;
+          bestIndex = index;
+        }
+      });
+
+      const netPoint = netFace.points[bestIndex] || netFace.points[0];
+      const u = (netPoint.x - minX) / width;
+      const v = (netPoint.y - minY) / height;
+      uvs.push(u, v);
+    });
+  }
+
+  nonIndexed.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  return nonIndexed;
+}
+
+function createDieTemplateTexture(sideCount, net) {
+  const { canvas } = renderTemplateCanvas(net, { includeFaceValues: true });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 function createFaceLabelMesh(value, face) {
@@ -582,14 +661,20 @@ function createDieGeometry(sideCount) {
 
 function createDieMesh(sides) {
   const sideCount = Number.parseInt(sides, 10);
-  const geometry = createDieGeometry(sideCount);
+  const baseGeometry = createDieGeometry(sideCount);
+  const net = generateUnwrappedNet(baseGeometry, sideCount);
+  const geometry = mapGeometryToNetUvs(baseGeometry, net);
+  if (geometry !== baseGeometry) {
+    baseGeometry.dispose();
+  }
+  const templateTexture = createDieTemplateTexture(sideCount, net);
   const material = new THREE.MeshStandardMaterial({
     color: BASE_DIE_COLOR,
+    map: templateTexture,
     metalness: 0.16,
     roughness: 0.45,
   });
   const mesh = new THREE.Mesh(geometry, material);
-  addFaceLabels(mesh, sideCount);
   return mesh;
 }
 
