@@ -2,6 +2,7 @@ import * as THREE from 'https://unpkg.com/three@0.164.1/build/three.module.js';
 
 const dieList = document.getElementById('die-list');
 const createDieForm = document.getElementById('create-die-form');
+const debugPhysicsToggle = document.getElementById('debug-physics');
 
 const dieVisuals = new Map();
 
@@ -707,6 +708,45 @@ function getCurrentRollValue(mesh, faceValueMap) {
   return winningValue;
 }
 
+
+function createPhysicsDebugHelpers(areaSize, mesh) {
+  const helperGroup = new THREE.Group();
+  const half = areaSize / 2 - 0.4;
+
+  const floor = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.PlaneGeometry(areaSize, areaSize)),
+    new THREE.LineBasicMaterial({ color: 0x4db0ff })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  helperGroup.add(floor);
+
+  const wallGeoA = new THREE.BoxGeometry(areaSize, 0.55, 0.02);
+  const wallGeoB = new THREE.BoxGeometry(0.02, 0.55, areaSize);
+  const wallMat = new THREE.LineBasicMaterial({ color: 0x4db0ff });
+
+  const north = new THREE.LineSegments(new THREE.EdgesGeometry(wallGeoA), wallMat);
+  north.position.set(0, 0.275, half);
+  helperGroup.add(north);
+  const south = north.clone();
+  south.position.z = -half;
+  helperGroup.add(south);
+  const east = new THREE.LineSegments(new THREE.EdgesGeometry(wallGeoB), wallMat);
+  east.position.set(half, 0.275, 0);
+  helperGroup.add(east);
+  const west = east.clone();
+  west.position.x = -half;
+  helperGroup.add(west);
+
+  const dieCollider = new THREE.LineSegments(
+    new THREE.EdgesGeometry(mesh.geometry.clone()),
+    new THREE.LineBasicMaterial({ color: 0xffaa44 })
+  );
+  helperGroup.add(dieCollider);
+
+  helperGroup.visible = Boolean(debugPhysicsToggle?.checked);
+  return { helperGroup, dieCollider };
+}
+
 function createSceneForCanvas(canvas, sides) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -762,6 +802,9 @@ function createSceneForCanvas(canvas, sides) {
   group.add(mesh);
   scene.add(group);
 
+  const debugHelpers = createPhysicsDebugHelpers(areaSize, mesh);
+  group.add(debugHelpers.helperGroup);
+
   const lookOffset = new THREE.Vector3(0, 0, 0);
   camera.position.copy(mesh.position).add(cameraOffset);
   camera.lookAt(mesh.position.clone().add(lookOffset));
@@ -776,6 +819,8 @@ function createSceneForCanvas(canvas, sides) {
     lookOffset,
     animation: null,
     currentValue: getCurrentRollValue(mesh, faceValueMap),
+    debugHelpers,
+    diagnostics: null,
   };
 }
 
@@ -870,6 +915,14 @@ function animateRoll(dieId, roll) {
     frames: roll.frames,
     index: 0,
   };
+  visual.diagnostics = roll.metadata?.diagnostics || null;
+  if (visual.diagnostics && debugPhysicsToggle?.checked) {
+    console.log('[physics-debug] world', visual.diagnostics.world);
+    console.log('[physics-debug] collider', visual.diagnostics.collider);
+    for (const line of visual.diagnostics.logs || []) {
+      console.log('[physics-debug]', line);
+    }
+  }
 }
 
 async function createDie(sides) {
@@ -886,7 +939,11 @@ async function createDie(sides) {
 }
 
 async function rollDie(dieId) {
-  const response = await fetch(`/api/dice/${dieId}/roll`, { method: 'POST' });
+  const response = await fetch(`/api/dice/${dieId}/roll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ debugPhysics: Boolean(debugPhysicsToggle?.checked) }),
+  });
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || 'Failed to roll die');
@@ -928,7 +985,15 @@ function tick() {
 
     visual.currentValue = getCurrentRollValue(visual.mesh, visual.faceValueMap);
     if (visual.resultElement) {
-      visual.resultElement.textContent = `Current roll value: ${visual.currentValue ?? '-'} | Rolls: ${visual.die.rolls}`;
+      const dot = visual.diagnostics?.topDotUp;
+      const extra = Number.isFinite(dot) ? ` | topDotUp=${dot.toFixed(3)}` : '';
+      visual.resultElement.textContent = `Current roll value: ${visual.currentValue ?? '-'} | Rolls: ${visual.die.rolls}${extra}`;
+    }
+
+    if (visual.debugHelpers) {
+      visual.debugHelpers.helperGroup.visible = Boolean(debugPhysicsToggle?.checked);
+      visual.debugHelpers.dieCollider.position.copy(visual.mesh.position);
+      visual.debugHelpers.dieCollider.quaternion.copy(visual.mesh.quaternion);
     }
 
     syncCameraToDie(visual);
