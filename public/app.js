@@ -58,7 +58,7 @@ function makeFaceTexture(value, shape = 'square') {
 
 function createFaceMaterials(sides) {
   const values = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
-  const faceShape = sides === 3 ? 'triangle' : 'square';
+  const faceShape = 'square';
   return values.map((value) => new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
     metalness: 0.16,
@@ -67,8 +67,63 @@ function createFaceMaterials(sides) {
   }));
 }
 
+function createD3Geometry() {
+  const radius = 0.85;
+  const height = 1.2;
+  const halfHeight = height / 2;
+
+  const points = [
+    new THREE.Vector3(radius, halfHeight, 0),
+    new THREE.Vector3(radius * Math.cos((2 * Math.PI) / 3), halfHeight, radius * Math.sin((2 * Math.PI) / 3)),
+    new THREE.Vector3(radius * Math.cos((4 * Math.PI) / 3), halfHeight, radius * Math.sin((4 * Math.PI) / 3)),
+  ];
+
+  const bottom = points.map((point) => new THREE.Vector3(point.x, -halfHeight, point.z));
+
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+
+  const addVertex = (vertex, normal, u, v) => {
+    positions.push(vertex.x, vertex.y, vertex.z);
+    normals.push(normal.x, normal.y, normal.z);
+    uvs.push(u, v);
+  };
+
+  const addFace = (topA, topB, bottomA, bottomB) => {
+    const edge = new THREE.Vector3().subVectors(topB, topA);
+    const down = new THREE.Vector3().subVectors(bottomA, topA);
+    const normal = new THREE.Vector3().crossVectors(edge, down).normalize();
+
+    addVertex(topA, normal, 0, 1);
+    addVertex(bottomA, normal, 0, 0);
+    addVertex(topB, normal, 1, 1);
+
+    addVertex(topB, normal, 1, 1);
+    addVertex(bottomA, normal, 0, 0);
+    addVertex(bottomB, normal, 1, 0);
+  };
+
+  for (let i = 0; i < 3; i += 1) {
+    const next = (i + 1) % 3;
+    addFace(points[i], points[next], bottom[i], bottom[next]);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+
+  geometry.clearGroups();
+  for (let i = 0; i < 3; i += 1) {
+    geometry.addGroup(i * 6, 6, i);
+  }
+
+  return geometry;
+}
+
 function createDieGeometry(sideCount) {
-  if (sideCount === 3) return new THREE.ConeGeometry(0.95, 1.3, 3, 1, true);
+  if (sideCount === 3) return createD3Geometry();
   if (sideCount === 4) return new THREE.TetrahedronGeometry(1);
   if (sideCount === 6) return new THREE.BoxGeometry(1.35, 1.35, 1.35);
   if (sideCount === 8) return new THREE.OctahedronGeometry(1);
