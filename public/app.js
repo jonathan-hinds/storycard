@@ -65,11 +65,6 @@ function getFaceFrame(normal) {
 function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
   const size = 512;
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, size, size);
-
   const xs = facePoints2D.map((p) => p.x);
   const ys = facePoints2D.map((p) => p.y);
   const minX = Math.min(...xs);
@@ -79,9 +74,20 @@ function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
   const width = Math.max(1e-5, maxX - minX);
   const height = Math.max(1e-5, maxY - minY);
 
+  if (width >= height) {
+    canvas.width = Math.max(size, Math.round((width / height) * size));
+    canvas.height = size;
+  } else {
+    canvas.width = size;
+    canvas.height = Math.max(size, Math.round((height / width) * size));
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
   const toCanvas = (point) => ({
-    x: ((point.x - minX) / width) * size,
-    y: ((maxY - point.y) / height) * size,
+    x: ((point.x - minX) / width) * canvas.width,
+    y: ((maxY - point.y) / height) * canvas.height,
   });
 
   const insetCanvas = insetPoints2D.map(toCanvas);
@@ -102,15 +108,15 @@ function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
   const centerY = (Math.min(...insetYs) + Math.max(...insetYs)) * 0.5;
 
   const text = String(value);
-  let low = 24;
-  let high = 420;
-  let best = 120;
+  let low = 16;
+  let high = Math.min(canvas.width, canvas.height) * 0.9;
+  let best = 60;
   for (let i = 0; i < 16; i += 1) {
     const mid = (low + high) / 2;
-    ctx.font = `700 ${mid}px Inter, Arial, sans-serif`;
+    ctx.font = `600 ${mid}px Inter, Arial, sans-serif`;
     const metrics = ctx.measureText(text);
     const textHeight = (metrics.actualBoundingBoxAscent || mid * 0.8) + (metrics.actualBoundingBoxDescent || mid * 0.2);
-    if (metrics.width <= safeWidth * 0.8 && textHeight <= safeHeight * 0.8) {
+    if (metrics.width <= safeWidth * 0.62 && textHeight <= safeHeight * 0.62) {
       best = mid;
       low = mid;
     } else {
@@ -119,7 +125,7 @@ function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
   }
 
   ctx.fillStyle = '#0b1021';
-  ctx.font = `700 ${best}px Inter, Arial, sans-serif`;
+  ctx.font = `600 ${best}px Inter, Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, centerX, centerY);
