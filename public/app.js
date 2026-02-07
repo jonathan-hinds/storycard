@@ -5,28 +5,14 @@ const createDieForm = document.getElementById('create-die-form');
 
 const dieVisuals = new Map();
 
-function makeDieTexture(label) {
-  const texCanvas = document.createElement('canvas');
-  texCanvas.width = 512;
-  texCanvas.height = 512;
-  const ctx = texCanvas.getContext('2d');
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(0, 0, 512, 512);
-
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 14;
-  ctx.strokeRect(30, 30, 452, 452);
-
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 180px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, 256, 280);
-
-  const texture = new THREE.CanvasTexture(texCanvas);
-  texture.needsUpdate = true;
-  return texture;
-}
+const DIE_FACE_LAYOUTS = {
+  3: [1, 2, 3],
+  4: [1, 2, 3, 4],
+  6: [3, 4, 1, 6, 2, 5],
+  8: [1, 2, 3, 4, 5, 6, 7, 8],
+  12: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  20: Array.from({ length: 20 }, (_, i) => i + 1),
+};
 
 function makeFaceTexture(value) {
   const texCanvas = document.createElement('canvas');
@@ -41,20 +27,22 @@ function makeFaceTexture(value) {
   ctx.lineWidth = 14;
   ctx.strokeRect(30, 30, 452, 452);
 
+  const text = String(value);
+  const fontSize = text.length > 1 ? 210 : 280;
   ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 280px sans-serif';
+  ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(value), 256, 276);
+  ctx.fillText(text, 256, 276);
 
   const texture = new THREE.CanvasTexture(texCanvas);
   texture.needsUpdate = true;
   return texture;
 }
 
-function createD6Materials() {
-  const faceValues = [3, 4, 1, 6, 2, 5];
-  return faceValues.map((value) => new THREE.MeshStandardMaterial({
+function createFaceMaterials(sides) {
+  const values = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
+  return values.map((value) => new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
     metalness: 0.16,
     roughness: 0.45,
@@ -62,27 +50,43 @@ function createD6Materials() {
   }));
 }
 
+function createDieGeometry(sideCount) {
+  if (sideCount === 3) return new THREE.ConeGeometry(0.95, 1.3, 3);
+  if (sideCount === 4) return new THREE.TetrahedronGeometry(1);
+  if (sideCount === 6) return new THREE.BoxGeometry(1.35, 1.35, 1.35);
+  if (sideCount === 8) return new THREE.OctahedronGeometry(1);
+  if (sideCount === 12) return new THREE.DodecahedronGeometry(1);
+  if (sideCount === 20) return new THREE.IcosahedronGeometry(1);
+  return new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sideCount, 64));
+}
+
+function ensureFaceGroups(geometry, sideCount) {
+  if (geometry.groups.length) {
+    return;
+  }
+  const indexCount = geometry.index ? geometry.index.count : geometry.attributes.position.count;
+  const faces = Math.max(1, Math.floor(indexCount / 3));
+  const groupsToUse = Math.min(sideCount, faces);
+  const triPerGroup = Math.max(1, Math.floor(faces / groupsToUse));
+
+  let cursor = 0;
+  for (let groupIndex = 0; groupIndex < groupsToUse; groupIndex += 1) {
+    const isLast = groupIndex === groupsToUse - 1;
+    const faceCount = isLast ? (faces - (triPerGroup * groupIndex)) : triPerGroup;
+    const count = faceCount * 3;
+    geometry.addGroup(cursor, count, groupIndex);
+    cursor += count;
+  }
+}
+
 function createDieMesh(sides) {
   const sideCount = Number.parseInt(sides, 10);
-  let geometry;
-  if (sideCount === 3) geometry = new THREE.ConeGeometry(0.95, 1.3, 3);
-  else if (sideCount === 4) geometry = new THREE.TetrahedronGeometry(1);
-  else if (sideCount === 6) geometry = new THREE.BoxGeometry(1.35, 1.35, 1.35);
-  else if (sideCount === 8) geometry = new THREE.OctahedronGeometry(1);
-  else if (sideCount === 12) geometry = new THREE.DodecahedronGeometry(1);
-  else if (sideCount === 20) geometry = new THREE.IcosahedronGeometry(1);
-  else geometry = new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sideCount, 64));
+  const geometry = createDieGeometry(sideCount);
 
-  const material = sideCount === 6
-    ? createD6Materials()
-    : new THREE.MeshStandardMaterial({
-      color: 0xe2e8f0,
-      metalness: 0.18,
-      roughness: 0.4,
-      map: makeDieTexture(`d${sideCount}`),
-    });
+  ensureFaceGroups(geometry, sideCount);
 
-  return new THREE.Mesh(geometry, material);
+  const materials = createFaceMaterials(sideCount);
+  return new THREE.Mesh(geometry, materials);
 }
 
 function createSceneForCanvas(canvas, sides) {

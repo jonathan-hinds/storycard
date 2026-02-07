@@ -30,6 +30,7 @@ body {
 }
 
 input,
+select,
 button {
   border: 1px solid #3f4b67;
   border-radius: 0.4rem;
