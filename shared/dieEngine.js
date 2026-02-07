@@ -7,7 +7,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   const TWO_PI = Math.PI * 2;
   const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
-  const SUPPORTED_SIDES = new Set([3, 4, 6, 8, 12, 20]);
+  const SUPPORTED_SIDES = new Set([6, 8, 12, 20]);
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -47,7 +47,7 @@
   function normalizeSides(input) {
     const sides = Number.parseInt(input, 10);
     if (!Number.isFinite(sides) || !SUPPORTED_SIDES.has(sides)) {
-      throw new Error('Supported dice are D3, D4, D6, D8, D12, and D20.');
+      throw new Error('Supported dice are D6, D8, D12, and D20.');
     }
     return sides;
   }
