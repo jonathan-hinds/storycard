@@ -33,26 +33,6 @@ function makeFaceTexture(value, shape = 'square') {
     ctx.lineWidth = 14;
     ctx.lineJoin = 'round';
     ctx.stroke();
-  } else if (shape === 'pentagon') {
-    const centerX = 256;
-    const centerY = 256;
-    const radius = 220;
-    ctx.fillStyle = '#f8fafc';
-    ctx.beginPath();
-    for (let i = 0; i < 5; i += 1) {
-      const angle = (-Math.PI / 2) + ((Math.PI * 2 * i) / 5);
-      const x = centerX + (Math.cos(angle) * radius);
-      const y = centerY + (Math.sin(angle) * radius);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 14;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
   } else {
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, 512, 512);
@@ -76,132 +56,15 @@ function makeFaceTexture(value, shape = 'square') {
   return texture;
 }
 
-function getFaceShape(sides) {
-  if (sides === 4 || sides === 8 || sides === 20) return 'triangle';
-  if (sides === 12) return 'pentagon';
-  return 'square';
-}
-
-function createFaceMaterials(sides, faceCount = sides) {
-  const fallbackValues = Array.from({ length: faceCount }, (_, i) => i + 1);
-  const values = DIE_FACE_LAYOUTS[sides] || fallbackValues;
-  const labelValues = values.length === faceCount
-    ? values
-    : Array.from({ length: faceCount }, (_, i) => values[i % values.length] || (i + 1));
-  const faceShape = getFaceShape(sides);
-  return labelValues.map((value) => new THREE.MeshStandardMaterial({
+function createFaceMaterials(sides) {
+  const values = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
+  const faceShape = 'square';
+  return values.map((value) => new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
     metalness: 0.16,
     roughness: 0.45,
     map: makeFaceTexture(value, faceShape),
   }));
-}
-
-function buildFaceLocalGeometry(baseGeometry, expectedFaceCount) {
-  const source = baseGeometry.toNonIndexed();
-  const posAttr = source.getAttribute('position');
-  const triCount = posAttr.count / 3;
-  const facesByKey = new Map();
-  const precision = 100000;
-
-  const quantize = (value) => Math.round(value * precision) / precision;
-
-  for (let tri = 0; tri < triCount; tri += 1) {
-    const a = new THREE.Vector3().fromBufferAttribute(posAttr, tri * 3);
-    const b = new THREE.Vector3().fromBufferAttribute(posAttr, (tri * 3) + 1);
-    const c = new THREE.Vector3().fromBufferAttribute(posAttr, (tri * 3) + 2);
-    const normal = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).normalize();
-    const centroid = new THREE.Vector3().add(a).add(b).add(c).multiplyScalar(1 / 3);
-    const plane = normal.dot(centroid);
-    const key = [quantize(normal.x), quantize(normal.y), quantize(normal.z), quantize(plane)].join('|');
-
-    if (!facesByKey.has(key)) {
-      facesByKey.set(key, { normal, triangles: [] });
-    }
-    facesByKey.get(key).triangles.push([a, b, c]);
-  }
-
-  const faces = Array.from(facesByKey.values());
-  if (faces.length !== expectedFaceCount) {
-    console.warn(`Detected ${faces.length} physical faces for d${expectedFaceCount}.`);
-  }
-
-  faces.sort((left, right) => {
-    if (Math.abs(left.normal.y - right.normal.y) > 0.001) return right.normal.y - left.normal.y;
-    return Math.atan2(left.normal.z, left.normal.x) - Math.atan2(right.normal.z, right.normal.x);
-  });
-
-  const positions = [];
-  const normals = [];
-  const uvs = [];
-  const geometry = new THREE.BufferGeometry();
-
-  const worldUp = new THREE.Vector3(0, 1, 0);
-  const fallbackUp = new THREE.Vector3(0, 0, 1);
-  const fallbackUp2 = new THREE.Vector3(1, 0, 0);
-  const padding = 0.15;
-
-  geometry.clearGroups();
-
-  let vertexCursor = 0;
-  faces.forEach((face, faceIndex) => {
-    const allVertices = face.triangles.flat();
-    const faceCenter = new THREE.Vector3();
-    allVertices.forEach((vertex) => faceCenter.add(vertex));
-    faceCenter.multiplyScalar(1 / allVertices.length);
-
-    const up = worldUp.clone().sub(face.normal.clone().multiplyScalar(worldUp.dot(face.normal)));
-    if (up.lengthSq() < 1e-6) {
-      up.copy(fallbackUp).sub(face.normal.clone().multiplyScalar(fallbackUp.dot(face.normal)));
-    }
-    if (up.lengthSq() < 1e-6) {
-      up.copy(fallbackUp2).sub(face.normal.clone().multiplyScalar(fallbackUp2.dot(face.normal)));
-    }
-    up.normalize();
-
-    const right = new THREE.Vector3().crossVectors(up, face.normal).normalize();
-
-    let minU = Number.POSITIVE_INFINITY;
-    let maxU = Number.NEGATIVE_INFINITY;
-    let minV = Number.POSITIVE_INFINITY;
-    let maxV = Number.NEGATIVE_INFINITY;
-
-    const coords = allVertices.map((vertex) => {
-      const rel = new THREE.Vector3().subVectors(vertex, faceCenter);
-      const u = rel.dot(right);
-      const v = rel.dot(up);
-      minU = Math.min(minU, u);
-      maxU = Math.max(maxU, u);
-      minV = Math.min(minV, v);
-      maxV = Math.max(maxV, v);
-      return { vertex, u, v };
-    });
-
-    const centerU = (minU + maxU) / 2;
-    const centerV = (minV + maxV) / 2;
-    const isoScale = Math.max(maxU - minU, maxV - minV) || 1;
-
-    coords.forEach(({ vertex, u, v }) => {
-      const localU = ((u - centerU) / isoScale) + 0.5;
-      const localV = ((v - centerV) / isoScale) + 0.5;
-      const paddedU = padding + (localU * (1 - (padding * 2)));
-      const paddedV = padding + (localV * (1 - (padding * 2)));
-
-      positions.push(vertex.x, vertex.y, vertex.z);
-      normals.push(face.normal.x, face.normal.y, face.normal.z);
-      uvs.push(paddedU, paddedV);
-    });
-
-    const vertexCount = face.triangles.length * 3;
-    geometry.addGroup(vertexCursor, vertexCount, faceIndex);
-    vertexCursor += vertexCount;
-  });
-
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-
-  return geometry;
 }
 
 function createD3Geometry() {
@@ -261,11 +124,11 @@ function createD3Geometry() {
 
 function createDieGeometry(sideCount) {
   if (sideCount === 3) return createD3Geometry();
-  if (sideCount === 4) return buildFaceLocalGeometry(new THREE.TetrahedronGeometry(1), 4);
+  if (sideCount === 4) return new THREE.TetrahedronGeometry(1);
   if (sideCount === 6) return new THREE.BoxGeometry(1.35, 1.35, 1.35);
-  if (sideCount === 8) return buildFaceLocalGeometry(new THREE.OctahedronGeometry(1), 8);
-  if (sideCount === 12) return buildFaceLocalGeometry(new THREE.DodecahedronGeometry(1), 12);
-  if (sideCount === 20) return buildFaceLocalGeometry(new THREE.IcosahedronGeometry(1), 20);
+  if (sideCount === 8) return new THREE.OctahedronGeometry(1);
+  if (sideCount === 12) return new THREE.DodecahedronGeometry(1);
+  if (sideCount === 20) return new THREE.IcosahedronGeometry(1);
   return new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sideCount, 64));
 }
 
@@ -294,8 +157,7 @@ function createDieMesh(sides) {
 
   ensureFaceGroups(geometry, sideCount);
 
-  const materialCount = geometry.groups.length || sideCount;
-  const materials = createFaceMaterials(sideCount, materialCount);
+  const materials = createFaceMaterials(sideCount);
   return new THREE.Mesh(geometry, materials);
 }
 
