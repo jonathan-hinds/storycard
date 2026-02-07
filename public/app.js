@@ -94,8 +94,7 @@ function createSceneForCanvas(canvas, sides) {
   scene.background = new THREE.Color(0x11131a);
 
   const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 100);
-  camera.position.set(0, 5.8, 0.001);
-  camera.lookAt(0, 0.2, 0);
+  const cameraOffset = new THREE.Vector3(0, 5.8, 0.001);
 
   const ambient = new THREE.AmbientLight(0xffffff, 1.0);
   scene.add(ambient);
@@ -141,7 +140,16 @@ function createSceneForCanvas(canvas, sides) {
   group.add(mesh);
   scene.add(group);
 
-  return { renderer, scene, camera, mesh, animation: null };
+  const lookOffset = new THREE.Vector3(0, 0.2, 0);
+  camera.position.copy(mesh.position).add(cameraOffset);
+  camera.lookAt(mesh.position.clone().add(lookOffset));
+
+  return { renderer, scene, camera, mesh, cameraOffset, lookOffset, animation: null };
+}
+
+function syncCameraToDie(visual) {
+  visual.camera.position.copy(visual.mesh.position).add(visual.cameraOffset);
+  visual.camera.lookAt(visual.mesh.position.clone().add(visual.lookOffset));
 }
 
 function applyFrameToMesh(mesh, frame) {
@@ -275,6 +283,8 @@ function tick() {
         visual.animation = null;
       }
     }
+
+    syncCameraToDie(visual);
 
     visual.renderer.render(visual.scene, visual.camera);
   }
