@@ -14,18 +14,33 @@ const DIE_FACE_LAYOUTS = {
   20: Array.from({ length: 20 }, (_, i) => i + 1),
 };
 
-function makeFaceTexture(value) {
+function makeFaceTexture(value, shape = 'square') {
   const texCanvas = document.createElement('canvas');
   texCanvas.width = 512;
   texCanvas.height = 512;
   const ctx = texCanvas.getContext('2d');
 
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(0, 0, 512, 512);
+  if (shape === 'triangle') {
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.moveTo(256, 30);
+    ctx.lineTo(482, 470);
+    ctx.lineTo(30, 470);
+    ctx.closePath();
+    ctx.fill();
 
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 14;
-  ctx.strokeRect(30, 30, 452, 452);
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 14;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, 512, 512);
+
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 14;
+    ctx.strokeRect(30, 30, 452, 452);
+  }
 
   const text = String(value);
   const fontSize = text.length > 1 ? 210 : 280;
@@ -33,7 +48,8 @@ function makeFaceTexture(value) {
   ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 256, 276);
+  const yPosition = shape === 'triangle' ? 300 : 276;
+  ctx.fillText(text, 256, yPosition);
 
   const texture = new THREE.CanvasTexture(texCanvas);
   texture.needsUpdate = true;
@@ -42,16 +58,17 @@ function makeFaceTexture(value) {
 
 function createFaceMaterials(sides) {
   const values = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
+  const faceShape = sides === 3 ? 'triangle' : 'square';
   return values.map((value) => new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
     metalness: 0.16,
     roughness: 0.45,
-    map: makeFaceTexture(value),
+    map: makeFaceTexture(value, faceShape),
   }));
 }
 
 function createDieGeometry(sideCount) {
-  if (sideCount === 3) return new THREE.ConeGeometry(0.95, 1.3, 3);
+  if (sideCount === 3) return new THREE.ConeGeometry(0.95, 1.3, 3, 1, true);
   if (sideCount === 4) return new THREE.TetrahedronGeometry(1);
   if (sideCount === 6) return new THREE.BoxGeometry(1.35, 1.35, 1.35);
   if (sideCount === 8) return new THREE.OctahedronGeometry(1);
