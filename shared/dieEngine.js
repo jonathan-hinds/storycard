@@ -192,9 +192,9 @@
         invMass: 1,
         invInertia: config.invInertia,
         friction: 0.65,
-        restitution: 0.06,
-        linearDamping: 0.75,
-        angularDamping: 0.85,
+        restitution: 0.03,
+        linearDamping: 1.5,
+        angularDamping: 2.6,
         ccdSweepRadius: 0.02,
       };
       this.bodies.push(body);
@@ -209,10 +209,10 @@
 
     createStaticBoundary(size = 8) {
       const half = size / 2 - 0.35;
-      this.staticColliders.push({ id: 'north', n: { x: 0, y: 0, z: -1 }, offset: -half });
-      this.staticColliders.push({ id: 'south', n: { x: 0, y: 0, z: 1 }, offset: -half });
-      this.staticColliders.push({ id: 'east', n: { x: -1, y: 0, z: 0 }, offset: -half });
-      this.staticColliders.push({ id: 'west', n: { x: 1, y: 0, z: 0 }, offset: -half });
+      this.staticColliders.push({ id: 'north', n: { x: 0, y: 0, z: -1 }, offset: half });
+      this.staticColliders.push({ id: 'south', n: { x: 0, y: 0, z: 1 }, offset: half });
+      this.staticColliders.push({ id: 'east', n: { x: -1, y: 0, z: 0 }, offset: half });
+      this.staticColliders.push({ id: 'west', n: { x: 1, y: 0, z: 0 }, offset: half });
     }
 
     step(dt) {
@@ -277,72 +277,79 @@
       };
 
       for (const collider of this.staticColliders) {
+        let deepestVertex = null;
+        let deepestDistance = 0;
         for (const vertex of worldVertices) {
           const signedDistance = collider.n.x * vertex.x + collider.n.y * vertex.y + collider.n.z * vertex.z + collider.offset;
-          if (signedDistance >= 0) continue;
-          this.lastContactCount += 1;
-
-          const r = {
-            x: vertex.x - body.position.x,
-            y: vertex.y - body.position.y,
-            z: vertex.z - body.position.z,
-          };
-          const wxr = {
-            x: body.angularVelocity.y * r.z - body.angularVelocity.z * r.y,
-            y: body.angularVelocity.z * r.x - body.angularVelocity.x * r.z,
-            z: body.angularVelocity.x * r.y - body.angularVelocity.y * r.x,
-          };
-          const rv = {
-            x: body.velocity.x + wxr.x,
-            y: body.velocity.y + wxr.y,
-            z: body.velocity.z + wxr.z,
-          };
-
-          const normalSpeed = rv.x * collider.n.x + rv.y * collider.n.y + rv.z * collider.n.z;
-          if (normalSpeed < 0 || signedDistance < -0.0002) {
-            const rn = {
-              x: r.y * collider.n.z - r.z * collider.n.y,
-              y: r.z * collider.n.x - r.x * collider.n.z,
-              z: r.x * collider.n.y - r.y * collider.n.x,
-            };
-            const invInertiaRn = {
-              x: rn.x * body.invInertia.x,
-              y: rn.y * body.invInertia.y,
-              z: rn.z * body.invInertia.z,
-            };
-            const rotationalK = collider.n.x * (invInertiaRn.y * r.z - invInertiaRn.z * r.y)
-              + collider.n.y * (invInertiaRn.z * r.x - invInertiaRn.x * r.z)
-              + collider.n.z * (invInertiaRn.x * r.y - invInertiaRn.y * r.x);
-            const k = body.invMass + rotationalK;
-            const baumgarteBias = Math.max(0, -signedDistance - 0.0005) * 18;
-            const impulseN = Math.max(0, (-(1 + body.restitution) * normalSpeed + baumgarteBias) / (k || 1));
-            applyImpulse(collider.n, impulseN, r);
-
-            const tangent = {
-              x: rv.x - normalSpeed * collider.n.x,
-              y: rv.y - normalSpeed * collider.n.y,
-              z: rv.z - normalSpeed * collider.n.z,
-            };
-            const tangentSpeed = Math.hypot(tangent.x, tangent.y, tangent.z);
-            if (tangentSpeed > 1e-6) {
-              const t = {
-                x: tangent.x / tangentSpeed,
-                y: tangent.y / tangentSpeed,
-                z: tangent.z / tangentSpeed,
-              };
-              const vt = rv.x * t.x + rv.y * t.y + rv.z * t.z;
-              const frictionImpulse = Math.max(-body.friction * impulseN, Math.min(body.friction * impulseN, -vt / (body.invMass || 1)));
-              applyImpulse(t, frictionImpulse, r);
-            }
+          if (signedDistance < deepestDistance) {
+            deepestDistance = signedDistance;
+            deepestVertex = vertex;
           }
-
-          const correction = Math.min(0.015, -signedDistance + 1e-4);
-          body.position.x += collider.n.x * correction;
-          body.position.y += collider.n.y * correction;
-          body.position.z += collider.n.z * correction;
-
-          this.contactEvents.push({ collider: collider.id, penetration: -signedDistance, normalSpeed });
         }
+        if (!deepestVertex) continue;
+
+        this.lastContactCount += 1;
+        const signedDistance = deepestDistance;
+        const r = {
+          x: deepestVertex.x - body.position.x,
+          y: deepestVertex.y - body.position.y,
+          z: deepestVertex.z - body.position.z,
+        };
+        const wxr = {
+          x: body.angularVelocity.y * r.z - body.angularVelocity.z * r.y,
+          y: body.angularVelocity.z * r.x - body.angularVelocity.x * r.z,
+          z: body.angularVelocity.x * r.y - body.angularVelocity.y * r.x,
+        };
+        const rv = {
+          x: body.velocity.x + wxr.x,
+          y: body.velocity.y + wxr.y,
+          z: body.velocity.z + wxr.z,
+        };
+
+        const normalSpeed = rv.x * collider.n.x + rv.y * collider.n.y + rv.z * collider.n.z;
+        if (normalSpeed < 0 || signedDistance < -0.0002) {
+          const rn = {
+            x: r.y * collider.n.z - r.z * collider.n.y,
+            y: r.z * collider.n.x - r.x * collider.n.z,
+            z: r.x * collider.n.y - r.y * collider.n.x,
+          };
+          const invInertiaRn = {
+            x: rn.x * body.invInertia.x,
+            y: rn.y * body.invInertia.y,
+            z: rn.z * body.invInertia.z,
+          };
+          const rotationalK = collider.n.x * (invInertiaRn.y * r.z - invInertiaRn.z * r.y)
+            + collider.n.y * (invInertiaRn.z * r.x - invInertiaRn.x * r.z)
+            + collider.n.z * (invInertiaRn.x * r.y - invInertiaRn.y * r.x);
+          const k = body.invMass + rotationalK;
+          const baumgarteBias = Math.max(0, -signedDistance - 0.0005) * 10;
+          const impulseN = Math.max(0, (-(1 + body.restitution) * normalSpeed + baumgarteBias) / (k || 1));
+          applyImpulse(collider.n, impulseN, r);
+
+          const tangent = {
+            x: rv.x - normalSpeed * collider.n.x,
+            y: rv.y - normalSpeed * collider.n.y,
+            z: rv.z - normalSpeed * collider.n.z,
+          };
+          const tangentSpeed = Math.hypot(tangent.x, tangent.y, tangent.z);
+          if (tangentSpeed > 1e-6) {
+            const t = {
+              x: tangent.x / tangentSpeed,
+              y: tangent.y / tangentSpeed,
+              z: tangent.z / tangentSpeed,
+            };
+            const vt = rv.x * t.x + rv.y * t.y + rv.z * t.z;
+            const frictionImpulse = Math.max(-body.friction * impulseN, Math.min(body.friction * impulseN, -vt / (body.invMass || 1)));
+            applyImpulse(t, frictionImpulse, r);
+          }
+        }
+
+        const correction = Math.min(0.008, -signedDistance + 1e-4);
+        body.position.x += collider.n.x * correction;
+        body.position.y += collider.n.y * correction;
+        body.position.z += collider.n.z * correction;
+
+        this.contactEvents.push({ collider: collider.id, penetration: -signedDistance, normalSpeed });
       }
     }
 
@@ -389,7 +396,7 @@
     reset() {
       const spread = this.areaSize * 0.06;
       this.body.position.x = (this.random() * 2 - 1) * spread;
-      this.body.position.y = 2 + this.random() * 0.4;
+      this.body.position.y = 1.2 + this.random() * 0.2;
       this.body.position.z = (this.random() * 2 - 1) * spread;
       this.body.orientation = normalizeQuat({
         x: this.random() * 2 - 1,
@@ -407,9 +414,9 @@
     roll() {
       if (this.rollApplied) return;
       const impulse = {
-        x: (this.random() * 2 - 1) * 2.2,
-        y: 1.8 + this.random() * 1.2,
-        z: (this.random() * 2 - 1) * 2.2,
+        x: (this.random() * 2 - 1) * 1.8,
+        y: 0.55 + this.random() * 0.45,
+        z: (this.random() * 2 - 1) * 1.8,
       };
       const angularImpulse = {
         x: (this.random() * 2 - 1) * 5.2,
