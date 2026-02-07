@@ -663,6 +663,19 @@ function createDieMesh(sides) {
   const sideCount = Number.parseInt(sides, 10);
   const baseGeometry = createDieGeometry(sideCount);
   const net = generateUnwrappedNet(baseGeometry, sideCount);
+  const numberedFaces = selectNumberedFaces(extractPlanarFaces(baseGeometry), sideCount)
+    .sort((a, b) => {
+      if (Math.abs(a.center.y - b.center.y) > 1e-4) return b.center.y - a.center.y;
+      const angleA = Math.atan2(a.center.z, a.center.x);
+      const angleB = Math.atan2(b.center.z, b.center.x);
+      return angleA - angleB;
+    });
+  const values = mapFaceValuesForTemplate(sideCount, numberedFaces.length);
+  const faceValueMap = numberedFaces.map((face, index) => ({
+    normal: face.normal.clone().normalize(),
+    value: values[index] ?? index + 1,
+  }));
+
   const geometry = mapGeometryToNetUvs(baseGeometry, net);
   if (geometry !== baseGeometry) {
     baseGeometry.dispose();
@@ -675,7 +688,23 @@ function createDieMesh(sides) {
     roughness: 0.45,
   });
   const mesh = new THREE.Mesh(geometry, material);
-  return mesh;
+  return { mesh, faceValueMap };
+}
+
+function getCurrentRollValue(mesh, faceValueMap) {
+  if (!mesh || !faceValueMap?.length) return null;
+  let winningValue = null;
+  let bestDot = Number.NEGATIVE_INFINITY;
+
+  faceValueMap.forEach((face) => {
+    const worldNormal = face.normal.clone().applyQuaternion(mesh.quaternion).normalize();
+    if (worldNormal.y > bestDot) {
+      bestDot = worldNormal.y;
+      winningValue = face.value;
+    }
+  });
+
+  return winningValue;
 }
 
 function createSceneForCanvas(canvas, sides) {
@@ -729,7 +758,7 @@ function createSceneForCanvas(canvas, sides) {
   west.position.x = -half;
   group.add(west);
 
-  const mesh = createDieMesh(sides);
+  const { mesh, faceValueMap } = createDieMesh(sides);
   group.add(mesh);
   scene.add(group);
 
@@ -737,7 +766,17 @@ function createSceneForCanvas(canvas, sides) {
   camera.position.copy(mesh.position).add(cameraOffset);
   camera.lookAt(mesh.position.clone().add(lookOffset));
 
-  return { renderer, scene, camera, mesh, cameraOffset, lookOffset, animation: null };
+  return {
+    renderer,
+    scene,
+    camera,
+    mesh,
+    faceValueMap,
+    cameraOffset,
+    lookOffset,
+    animation: null,
+    currentValue: getCurrentRollValue(mesh, faceValueMap),
+  };
 }
 
 function syncCameraToDie(visual) {
@@ -755,7 +794,7 @@ function applyFrameToMesh(mesh, frame) {
   }
 }
 
-function buildDieCard(die, canvas) {
+function buildDieCard(die, canvas, currentValue) {
   const item = document.createElement('article');
   item.className = 'die-item';
 
@@ -765,7 +804,7 @@ function buildDieCard(die, canvas) {
 
   const result = document.createElement('div');
   result.className = 'die-result';
-  result.textContent = `Last outcome: ${die.lastOutcome ?? '-'} | Rolls: ${die.rolls}`;
+  result.textContent = `Current roll value: ${currentValue ?? '-'} | Rolls: ${die.rolls}`;
 
   const dieCanvas = canvas || document.createElement('canvas');
   dieCanvas.className = 'die-canvas';
@@ -787,7 +826,7 @@ function buildDieCard(die, canvas) {
   });
 
   item.append(title, result, dieCanvas, rollBtn, templateBtn);
-  return { item, canvas: dieCanvas };
+  return { item, canvas: dieCanvas, result };
 }
 
 function renderDieList(dice) {
@@ -803,15 +842,18 @@ function renderDieList(dice) {
 
   dice.forEach((die) => {
     const existing = dieVisuals.get(die.id);
-    const { item, canvas } = buildDieCard(die, existing?.canvas);
+    const currentValue = existing?.currentValue ?? die.lastOutcome;
+    const { item, canvas, result } = buildDieCard(die, existing?.canvas, currentValue);
 
     if (existing) {
       existing.die = die;
       existing.canvas = canvas;
+      existing.resultElement = result;
     } else {
       dieVisuals.set(die.id, {
         die,
         canvas,
+        resultElement: result,
         ...createSceneForCanvas(canvas, die.sides),
       });
     }
@@ -882,6 +924,11 @@ function tick() {
       } else {
         visual.animation = null;
       }
+    }
+
+    visual.currentValue = getCurrentRollValue(visual.mesh, visual.faceValueMap);
+    if (visual.resultElement) {
+      visual.resultElement.textContent = `Current roll value: ${visual.currentValue ?? '-'} | Rolls: ${visual.die.rolls}`;
     }
 
     syncCameraToDie(visual);
