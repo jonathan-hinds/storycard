@@ -6,9 +6,20 @@
   root.DiceEngine = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   const TWO_PI = Math.PI * 2;
+  const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
+  const SUPPORTED_SIDES = new Set([3, 4, 6, 8, 12, 20]);
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  function normalizeVector(v) {
+    const length = Math.hypot(v.x, v.y, v.z) || 1;
+    return {
+      x: v.x / length,
+      y: v.y / length,
+      z: v.z / length,
+    };
   }
 
   function normalizeQuat(q) {
@@ -35,8 +46,8 @@
 
   function normalizeSides(input) {
     const sides = Number.parseInt(input, 10);
-    if (!Number.isFinite(sides) || sides < 3) {
-      throw new Error('A die must have at least 3 sides.');
+    if (!Number.isFinite(sides) || !SUPPORTED_SIDES.has(sides)) {
+      throw new Error('Supported dice are D3, D4, D6, D8, D12, and D20.');
     }
     return sides;
   }
@@ -104,16 +115,86 @@
     };
   }
 
-  function topD6FaceInfo(orientation) {
+  function getFaceNormals(sides) {
+    const phi = GOLDEN_RATIO;
+    const invPhi = 1 / phi;
+
+    if (sides === 3) {
+      return [
+        { value: 1, normal: normalizeVector({ x: 1, y: 0.35, z: 0 }) },
+        { value: 2, normal: normalizeVector({ x: -0.5, y: 0.35, z: Math.sqrt(3) / 2 }) },
+        { value: 3, normal: normalizeVector({ x: -0.5, y: 0.35, z: -Math.sqrt(3) / 2 }) },
+      ];
+    }
+
+    if (sides === 4) {
+      return [
+        { value: 1, normal: normalizeVector({ x: 1, y: 1, z: 1 }) },
+        { value: 2, normal: normalizeVector({ x: -1, y: -1, z: 1 }) },
+        { value: 3, normal: normalizeVector({ x: -1, y: 1, z: -1 }) },
+        { value: 4, normal: normalizeVector({ x: 1, y: -1, z: -1 }) },
+      ];
+    }
+
+    if (sides === 6) {
+      return [
+        { value: 3, normal: { x: 1, y: 0, z: 0 } },
+        { value: 4, normal: { x: -1, y: 0, z: 0 } },
+        { value: 1, normal: { x: 0, y: 1, z: 0 } },
+        { value: 6, normal: { x: 0, y: -1, z: 0 } },
+        { value: 2, normal: { x: 0, y: 0, z: 1 } },
+        { value: 5, normal: { x: 0, y: 0, z: -1 } },
+      ];
+    }
+
+    if (sides === 8) {
+      const normals = [];
+      let value = 1;
+      for (const x of [-1, 1]) {
+        for (const y of [-1, 1]) {
+          for (const z of [-1, 1]) {
+            normals.push({ value, normal: normalizeVector({ x, y, z }) });
+            value += 1;
+          }
+        }
+      }
+      return normals;
+    }
+
+    if (sides === 12) {
+      return [
+        { value: 1, normal: normalizeVector({ x: 0, y: 1, z: phi }) },
+        { value: 2, normal: normalizeVector({ x: 0, y: 1, z: -phi }) },
+        { value: 3, normal: normalizeVector({ x: 0, y: -1, z: phi }) },
+        { value: 4, normal: normalizeVector({ x: 0, y: -1, z: -phi }) },
+        { value: 5, normal: normalizeVector({ x: 1, y: phi, z: 0 }) },
+        { value: 6, normal: normalizeVector({ x: 1, y: -phi, z: 0 }) },
+        { value: 7, normal: normalizeVector({ x: -1, y: phi, z: 0 }) },
+        { value: 8, normal: normalizeVector({ x: -1, y: -phi, z: 0 }) },
+        { value: 9, normal: normalizeVector({ x: phi, y: 0, z: 1 }) },
+        { value: 10, normal: normalizeVector({ x: phi, y: 0, z: -1 }) },
+        { value: 11, normal: normalizeVector({ x: -phi, y: 0, z: 1 }) },
+        { value: 12, normal: normalizeVector({ x: -phi, y: 0, z: -1 }) },
+      ];
+    }
+
+    if (sides === 20) {
+      const points = [
+        { x: 1, y: 1, z: 1 }, { x: 1, y: 1, z: -1 }, { x: 1, y: -1, z: 1 }, { x: 1, y: -1, z: -1 },
+        { x: -1, y: 1, z: 1 }, { x: -1, y: 1, z: -1 }, { x: -1, y: -1, z: 1 }, { x: -1, y: -1, z: -1 },
+        { x: 0, y: invPhi, z: phi }, { x: 0, y: invPhi, z: -phi }, { x: 0, y: -invPhi, z: phi }, { x: 0, y: -invPhi, z: -phi },
+        { x: invPhi, y: phi, z: 0 }, { x: invPhi, y: -phi, z: 0 }, { x: -invPhi, y: phi, z: 0 }, { x: -invPhi, y: -phi, z: 0 },
+        { x: phi, y: 0, z: invPhi }, { x: phi, y: 0, z: -invPhi }, { x: -phi, y: 0, z: invPhi }, { x: -phi, y: 0, z: -invPhi },
+      ];
+      return points.map((point, index) => ({ value: index + 1, normal: normalizeVector(point) }));
+    }
+
+    return [];
+  }
+
+  function topFaceInfo(orientation, sides) {
     const up = { x: 0, y: 1, z: 0 };
-    const faces = [
-      { value: 3, normal: { x: 1, y: 0, z: 0 } },
-      { value: 4, normal: { x: -1, y: 0, z: 0 } },
-      { value: 1, normal: { x: 0, y: 1, z: 0 } },
-      { value: 6, normal: { x: 0, y: -1, z: 0 } },
-      { value: 2, normal: { x: 0, y: 0, z: 1 } },
-      { value: 5, normal: { x: 0, y: 0, z: -1 } },
-    ];
+    const faces = getFaceNormals(sides);
 
     let winningFace = faces[0];
     let bestDot = Number.NEGATIVE_INFINITY;
@@ -135,8 +216,8 @@
     };
   }
 
-  function d6OutcomeFromOrientation(orientation) {
-    return topD6FaceInfo(orientation).value;
+  function outcomeFromOrientation(orientation, sides) {
+    return topFaceInfo(orientation, sides).value;
   }
 
   function simulateRoll(options) {
@@ -144,7 +225,7 @@
     const seed = String(options.seed || Date.now());
     const areaSize = Number.isFinite(options.areaSize) ? options.areaSize : 8;
     const baseSteps = Number.isFinite(options.steps) ? options.steps : 200;
-    const steps = sides === 6 ? Math.max(baseSteps, 720) : baseSteps;
+    const steps = Math.max(baseSteps, 720);
     const dt = Number.isFinite(options.dt) ? options.dt : 1 / 60;
 
     const rng = createSeededRandom(seed);
@@ -254,8 +335,8 @@
         vy = 0;
       }
 
-      if (sides === 6 && py <= floorY + 0.001) {
-        const faceInfo = topD6FaceInfo(orientation);
+      if (py <= floorY + 0.001) {
+        const faceInfo = topFaceInfo(orientation, sides);
         const faceNormal = faceInfo.normal;
         const correctionAxis = {
           x: -faceNormal.z,
@@ -267,7 +348,7 @@
 
         if (correctionMagnitude > 1e-6 && correctionAngle > 0.0005) {
           const invMagnitude = 1 / correctionMagnitude;
-          const alignStrength = correctionAngle < 0.35 ? 64 : 40;
+          const alignStrength = correctionAngle < 0.35 ? 62 : 36;
           const correctionSpeed = correctionAngle * alignStrength;
           const cx = correctionAxis.x * invMagnitude;
           const cy = correctionAxis.y * invMagnitude;
@@ -279,16 +360,16 @@
             cz * correctionSpeed,
             dt
           );
-          wx *= 0.55;
-          wy *= 0.85;
-          wz *= 0.55;
+          wx *= 0.52;
+          wy *= 0.82;
+          wz *= 0.52;
         }
 
         if (faceInfo.alignment > 0.995) {
-          wx *= 0.6;
-          wz *= 0.6;
+          wx *= 0.58;
+          wz *= 0.58;
         }
-        if (faceInfo.alignment > 0.9992 && Math.hypot(vx, vz) < 0.05) {
+        if (faceInfo.alignment > 0.999 && Math.hypot(vx, vz) < 0.05) {
           wx = 0;
           wz = 0;
         }
@@ -330,15 +411,9 @@
         && Math.abs(wz) < 0.12
         && py <= floorY + 0.001;
 
-      if (sides === 6) {
-        const faceInfo = topD6FaceInfo(orientation);
-        const isFlatEnough = faceInfo.alignment > 0.9992;
-        if (isMostlyStill && isFlatEnough) {
-          stableFaceFrames += 1;
-        } else {
-          stableFaceFrames = 0;
-        }
-      } else if (vx === 0 && vy === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0) {
+      const faceInfo = topFaceInfo(orientation, sides);
+      const isFlatEnough = faceInfo.alignment > 0.9988;
+      if (isMostlyStill && isFlatEnough) {
         stableFaceFrames += 1;
       } else {
         stableFaceFrames = 0;
@@ -359,9 +434,7 @@
       }
       : orientation;
 
-    const outcome = sides === 6
-      ? d6OutcomeFromOrientation(renderedOrientation)
-      : angleToOutcome(finalFrame.angle, sides);
+    const outcome = outcomeFromOrientation(renderedOrientation, sides) || angleToOutcome(finalFrame.angle, sides);
 
     return {
       seed,
