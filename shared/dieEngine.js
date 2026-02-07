@@ -300,12 +300,12 @@
     let stableFaceFrames = 0;
 
     const settleProfile = {
-      floorLinearDrag: sides >= 12 ? 0.9 : 0.935,
-      floorSpinDrag: sides >= 12 ? 0.82 : 0.9,
-      baseAlignStrength: sides >= 12 ? 50 : 36,
-      fineAlignStrength: sides >= 12 ? 80 : 62,
-      flatAlignment: sides >= 12 ? 0.99945 : 0.9988,
-      stableFrames: sides >= 12 ? 22 : 15,
+      floorLinearDrag: sides >= 12 ? 0.875 : 0.935,
+      floorSpinDrag: sides >= 12 ? 0.76 : 0.9,
+      baseAlignStrength: sides >= 12 ? 56 : 36,
+      fineAlignStrength: sides >= 12 ? 88 : 62,
+      flatAlignment: sides >= 12 ? 0.9996 : 0.9988,
+      stableFrames: sides >= 12 ? 28 : 15,
     };
 
     const frames = [];
