@@ -772,7 +772,7 @@ function createSceneForCanvas(canvas, sides) {
   scene.background = new THREE.Color(0x11131a);
 
   const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 100);
-  const cameraOffset = new THREE.Vector3(0, 5.8, 0);
+  const cameraLocalOffset = new THREE.Vector3(0, 2.8, 3.2);
 
   const ambient = new THREE.AmbientLight(0xffffff, 1.0);
   scene.add(ambient);
@@ -821,9 +821,9 @@ function createSceneForCanvas(canvas, sides) {
   const debugHelpers = createPhysicsDebugHelpers(areaSize, mesh);
   group.add(debugHelpers.helperGroup);
 
-  const lookOffset = new THREE.Vector3(0, 0, 0);
-  camera.position.copy(mesh.position).add(cameraOffset);
-  camera.lookAt(mesh.position.clone().add(lookOffset));
+  const lookLocalOffset = new THREE.Vector3(0, 0.15, 0);
+  camera.position.copy(mesh.position).add(cameraLocalOffset);
+  camera.lookAt(mesh.position.clone().add(lookLocalOffset));
 
   return {
     renderer,
@@ -831,8 +831,8 @@ function createSceneForCanvas(canvas, sides) {
     camera,
     mesh,
     faceValueMap,
-    cameraOffset,
-    lookOffset,
+    cameraLocalOffset,
+    lookLocalOffset,
     animation: null,
     currentValue: getCurrentRollValue(mesh, faceValueMap),
     debugHelpers,
@@ -842,8 +842,10 @@ function createSceneForCanvas(canvas, sides) {
 }
 
 function syncCameraToDie(visual) {
-  visual.camera.position.copy(visual.mesh.position).add(visual.cameraOffset);
-  visual.camera.lookAt(visual.mesh.position.clone().add(visual.lookOffset));
+  const worldCameraOffset = visual.cameraLocalOffset.clone().applyQuaternion(visual.mesh.quaternion);
+  const worldLookOffset = visual.lookLocalOffset.clone().applyQuaternion(visual.mesh.quaternion);
+  visual.camera.position.copy(visual.mesh.position).add(worldCameraOffset);
+  visual.camera.lookAt(visual.mesh.position.clone().add(worldLookOffset));
 }
 
 function applyFrameToMesh(mesh, frame) {

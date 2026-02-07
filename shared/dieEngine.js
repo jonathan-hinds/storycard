@@ -10,12 +10,12 @@
   const SUPPORTED_SIDES = new Set([6, 8, 12, 20]);
   const WORLD_UP = { x: 0, y: 1, z: 0 };
   const DEFAULT_ROLL_CONFIG = {
-    startLinSpeedMin: 2.2,
-    startLinSpeedMax: 4.1,
-    startAngSpeedMin: 4.8,
-    startAngSpeedMax: 9.5,
-    maxLinVel: 5.2,
-    maxAngVel: 12.5,
+    startLinSpeedMin: 1.2,
+    startLinSpeedMax: 2.2,
+    startAngSpeedMin: 2.1,
+    startAngSpeedMax: 5.4,
+    maxLinVel: 3.1,
+    maxAngVel: 7.2,
     settledLinearEps: 0.085,
     settledAngularEps: 0.16,
     settledFramesRequired: 28,
@@ -323,7 +323,14 @@
           };
           const rv = { x: entity.velocity.x + wxr.x, y: entity.velocity.y + wxr.y, z: entity.velocity.z + wxr.z };
           const vn = rv.x * plane.n.x + rv.y * plane.n.y + rv.z * plane.n.z;
-          if (vn < 0 || dist < -0.001) {
+          if (dist < 0) {
+            const correction = Math.min(0.03, -dist * 0.35);
+            entity.position.x += plane.n.x * correction;
+            entity.position.y += plane.n.y * correction;
+            entity.position.z += plane.n.z * correction;
+          }
+
+          if (vn < 0) {
             const rn = {
               x: r.y * plane.n.z - r.z * plane.n.y,
               y: r.z * plane.n.x - r.x * plane.n.z,
@@ -337,7 +344,7 @@
             const k = entity.invMass + plane.n.x * (invInertiaRn.y * r.z - invInertiaRn.z * r.y)
               + plane.n.y * (invInertiaRn.z * r.x - invInertiaRn.x * r.z)
               + plane.n.z * (invInertiaRn.x * r.y - invInertiaRn.y * r.x);
-            const impulseN = Math.max(0, (-(1 + entity.restitution) * vn + (-dist * 25)) / (k || 1));
+            const impulseN = Math.max(0, (-(1 + entity.restitution) * vn) / (k || 1));
             entity.applyImpulse(plane.n, impulseN, r);
 
             const tangent = {
@@ -383,10 +390,10 @@
         y: 12 / (this.mass * (sx * sx + sz * sz)),
         z: 12 / (this.mass * (sx * sx + sy * sy)),
       };
-      this.friction = 0.42;
-      this.restitution = 0.12;
-      this.linearDamping = 0.28;
-      this.angularDamping = 0.42;
+      this.friction = 0.56;
+      this.restitution = 0.06;
+      this.linearDamping = 0.45;
+      this.angularDamping = 0.68;
       this.sleepLinearThreshold = rollConfig.settledLinearEps;
       this.sleepAngularThreshold = rollConfig.settledAngularEps;
       this.sleepFrames = 0;
@@ -464,7 +471,7 @@
     run() {
       const frames = [];
       const dt = this.world.fixedDt;
-      const maxFrames = 1500;
+      const maxFrames = 900;
       let settled = false;
       let finalDiagnostics = null;
       const initialSpeeds = this.die.applyInitialRollImpulse();
@@ -483,10 +490,19 @@
 
         const linearOk = info.linearSpeed < this.die.sleepLinearThreshold;
         const angularOk = info.angularSpeed < this.die.sleepAngularThreshold;
-        const noPenetration = info.minGroundDist > -0.002;
+        const noPenetration = info.minGroundDist > -0.02;
         const hasGroundContact = info.contactPoints > 0 || info.minGroundDist < 0.02;
         if (linearOk && angularOk && noPenetration && hasGroundContact) this.die.sleepFrames += 1;
         else this.die.sleepFrames = 0;
+
+        if (i > 420) {
+          this.die.velocity.x *= 0.985;
+          this.die.velocity.y *= 0.985;
+          this.die.velocity.z *= 0.985;
+          this.die.angularVelocity.x *= 0.98;
+          this.die.angularVelocity.y *= 0.98;
+          this.die.angularVelocity.z *= 0.98;
+        }
 
         frames.push({
           step: i,
