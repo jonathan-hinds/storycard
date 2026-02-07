@@ -25,6 +25,7 @@ const dieVisuals = new Map();
 let selectedDieId = null;
 const cameraOffset = new THREE.Vector3(0, 5.57, 0.001);
 const dieWorldPosition = new THREE.Vector3();
+const dieWorldQuaternion = new THREE.Quaternion();
 
 function resize() {
   const width = canvas.clientWidth;
@@ -311,8 +312,9 @@ function tick() {
     const selected = dieVisuals.get(selectedDieId);
     if (selected) {
       selected.mesh.getWorldPosition(dieWorldPosition);
-      camera.position.copy(dieWorldPosition).add(cameraOffset);
-      camera.lookAt(dieWorldPosition);
+      selected.mesh.getWorldQuaternion(dieWorldQuaternion);
+      camera.position.copy(cameraOffset).applyQuaternion(dieWorldQuaternion).add(dieWorldPosition);
+      camera.quaternion.copy(dieWorldQuaternion);
     }
   }
 

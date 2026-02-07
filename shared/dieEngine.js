@@ -104,6 +104,82 @@
     };
   }
 
+  function setQuaternion(target, source) {
+    target.x = source.x;
+    target.y = source.y;
+    target.z = source.z;
+    target.w = source.w;
+    return target;
+  }
+
+  function quatMultiply(a, b) {
+    return {
+      x: (a.w * b.x) + (a.x * b.w) + (a.y * b.z) - (a.z * b.y),
+      y: (a.w * b.y) - (a.x * b.z) + (a.y * b.w) + (a.z * b.x),
+      z: (a.w * b.z) + (a.x * b.y) - (a.y * b.x) + (a.z * b.w),
+      w: (a.w * b.w) - (a.x * b.x) - (a.y * b.y) - (a.z * b.z),
+    };
+  }
+
+  function quatFromUnitVectors(from, to) {
+    const crossX = (from.y * to.z) - (from.z * to.y);
+    const crossY = (from.z * to.x) - (from.x * to.z);
+    const crossZ = (from.x * to.y) - (from.y * to.x);
+    const dot = (from.x * to.x) + (from.y * to.y) + (from.z * to.z);
+
+    if (dot < -0.999999) {
+      const axis = Math.abs(from.x) > Math.abs(from.z)
+        ? { x: -from.y, y: from.x, z: 0, w: 0 }
+        : { x: 0, y: -from.z, z: from.y, w: 0 };
+      return normalizeQuat(axis);
+    }
+
+    return normalizeQuat({
+      x: crossX,
+      y: crossY,
+      z: crossZ,
+      w: 1 + dot,
+    });
+  }
+
+  function getFloorYForSides(sides) {
+    if (sides === 3) return 0.65;
+    if (sides === 4) return 1;
+    if (sides === 6) return 0.675;
+    if (sides === 8) return 1;
+    if (sides === 12) return 1;
+    if (sides === 20) return 1;
+    return 0.55;
+  }
+
+  function snapD6OrientationFlat(orientation) {
+    const up = { x: 0, y: 1, z: 0 };
+    const faces = [
+      { normal: { x: 1, y: 0, z: 0 } },
+      { normal: { x: -1, y: 0, z: 0 } },
+      { normal: { x: 0, y: 1, z: 0 } },
+      { normal: { x: 0, y: -1, z: 0 } },
+      { normal: { x: 0, y: 0, z: 1 } },
+      { normal: { x: 0, y: 0, z: -1 } },
+    ];
+
+    let bestFace = faces[2];
+    let bestDot = Number.NEGATIVE_INFINITY;
+
+    for (const face of faces) {
+      const worldNormal = rotateVectorByQuat(face.normal, orientation);
+      const dot = worldNormal.y;
+      if (dot > bestDot) {
+        bestDot = dot;
+        bestFace = face;
+      }
+    }
+
+    const worldTopNormal = rotateVectorByQuat(bestFace.normal, orientation);
+    const delta = quatFromUnitVectors(worldTopNormal, up);
+    return normalizeQuat(quatMultiply(delta, orientation));
+  }
+
   function d6OutcomeFromOrientation(orientation) {
     const up = { x: 0, y: 1, z: 0 };
     const faces = [
@@ -138,6 +214,7 @@
 
     const rng = createSeededRandom(seed);
     const halfArea = areaSize / 2;
+    const floorY = getFloorYForSides(sides);
     const min = -halfArea + 0.5;
     const max = halfArea - 0.5;
 
@@ -169,7 +246,6 @@
       integrateQuaternion(orientation, wx, wy, wz, dt);
 
       let bounced = false;
-      const floorY = 0.23;
       if (py < floorY) {
         py = floorY;
         if (Math.abs(vy) > 0.3) {
@@ -248,6 +324,20 @@
       if (Math.abs(wx) < 0.02) wx = 0;
       if (Math.abs(wy) < 0.02) wy = 0;
       if (Math.abs(wz) < 0.02) wz = 0;
+
+      const speed = Math.hypot(vx, vy, vz);
+      const spin = Math.hypot(wx, wy, wz);
+      if (sides === 6 && py <= floorY + 0.001 && speed < 0.2 && spin < 0.35) {
+        py = floorY;
+        vx = 0;
+        vy = 0;
+        vz = 0;
+        wx = 0;
+        wy = 0;
+        wz = 0;
+        const flattened = snapD6OrientationFlat(orientation);
+        setQuaternion(orientation, flattened);
+      }
 
       frames.push({
         step: i,
