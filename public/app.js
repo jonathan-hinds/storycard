@@ -62,6 +62,36 @@ function getFaceFrame(normal) {
   return { right, up };
 }
 
+function getPolygonCentroid(points) {
+  let signedArea = 0;
+  let centroidX = 0;
+  let centroidY = 0;
+
+  for (let i = 0; i < points.length; i += 1) {
+    const current = points[i];
+    const next = points[(i + 1) % points.length];
+    const cross = current.x * next.y - next.x * current.y;
+    signedArea += cross;
+    centroidX += (current.x + next.x) * cross;
+    centroidY += (current.y + next.y) * cross;
+  }
+
+  const areaFactor = signedArea * 0.5;
+  if (Math.abs(areaFactor) < 1e-6) {
+    const fallback = points.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+    return {
+      x: fallback.x / points.length,
+      y: fallback.y / points.length,
+    };
+  }
+
+  const factor = 1 / (6 * areaFactor);
+  return {
+    x: centroidX * factor,
+    y: centroidY * factor,
+  };
+}
+
 function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
   const size = 512;
   const canvas = document.createElement('canvas');
@@ -104,8 +134,7 @@ function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
   const insetYs = insetCanvas.map((p) => p.y);
   const safeWidth = Math.max(...insetXs) - Math.min(...insetXs);
   const safeHeight = Math.max(...insetYs) - Math.min(...insetYs);
-  const centerX = (Math.min(...insetXs) + Math.max(...insetXs)) * 0.5;
-  const centerY = (Math.min(...insetYs) + Math.max(...insetYs)) * 0.5;
+  const faceCenter = getPolygonCentroid(insetCanvas);
 
   const text = String(value);
   let low = 16;
@@ -126,9 +155,18 @@ function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
 
   ctx.fillStyle = '#0b1021';
   ctx.font = `600 ${best}px Inter, Arial, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, centerX, centerY);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  const finalMetrics = ctx.measureText(text);
+  const textLeft = finalMetrics.actualBoundingBoxLeft ?? 0;
+  const textRight = finalMetrics.actualBoundingBoxRight ?? finalMetrics.width;
+  const textAscent = finalMetrics.actualBoundingBoxAscent ?? best * 0.8;
+  const textDescent = finalMetrics.actualBoundingBoxDescent ?? best * 0.2;
+  const textCenterX = (textRight - textLeft) * 0.5 + textLeft;
+  const textCenterY = (textAscent + textDescent) * 0.5 - textDescent;
+  const drawX = faceCenter.x - textCenterX;
+  const drawY = faceCenter.y + textCenterY;
+  ctx.fillText(text, drawX, drawY);
   ctx.restore();
 
   const texture = new THREE.CanvasTexture(canvas);
