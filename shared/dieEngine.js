@@ -247,6 +247,15 @@
     const orientation = normalizeQuat({ x: 0, y: 0, z: 0, w: 1 });
     let stableFaceFrames = 0;
 
+    const settleProfile = {
+      floorLinearDrag: sides >= 12 ? 0.9 : 0.935,
+      floorSpinDrag: sides >= 12 ? 0.82 : 0.9,
+      baseAlignStrength: sides >= 12 ? 50 : 36,
+      fineAlignStrength: sides >= 12 ? 80 : 62,
+      flatAlignment: sides >= 12 ? 0.99945 : 0.9988,
+      stableFrames: sides >= 12 ? 22 : 15,
+    };
+
     const frames = [];
 
     for (let i = 0; i < steps; i += 1) {
@@ -323,11 +332,11 @@
         bounced = true;
       }
 
-      const drag = py <= floorY + 0.001 ? 0.935 : 0.985;
+      const drag = py <= floorY + 0.001 ? settleProfile.floorLinearDrag : 0.985;
       vx *= drag;
       vy *= bounced ? 0.94 : 0.995;
       vz *= drag;
-      const spinDrag = py <= floorY + 0.001 ? 0.9 : 0.975;
+      const spinDrag = py <= floorY + 0.001 ? settleProfile.floorSpinDrag : 0.975;
       wx *= spinDrag;
       wy *= spinDrag;
       wz *= spinDrag;
@@ -348,7 +357,9 @@
 
         if (correctionMagnitude > 1e-6 && correctionAngle > 0.0005) {
           const invMagnitude = 1 / correctionMagnitude;
-          const alignStrength = correctionAngle < 0.35 ? 62 : 36;
+          const alignStrength = correctionAngle < 0.35
+            ? settleProfile.fineAlignStrength
+            : settleProfile.baseAlignStrength;
           const correctionSpeed = correctionAngle * alignStrength;
           const cx = correctionAxis.x * invMagnitude;
           const cy = correctionAxis.y * invMagnitude;
@@ -412,14 +423,14 @@
         && py <= floorY + 0.001;
 
       const faceInfo = topFaceInfo(orientation, sides);
-      const isFlatEnough = faceInfo.alignment > 0.9988;
+      const isFlatEnough = faceInfo.alignment > settleProfile.flatAlignment;
       if (isMostlyStill && isFlatEnough) {
         stableFaceFrames += 1;
       } else {
         stableFaceFrames = 0;
       }
 
-      if (stableFaceFrames >= 15 && i > 35) {
+      if (stableFaceFrames >= settleProfile.stableFrames && i > 35) {
         break;
       }
     }
