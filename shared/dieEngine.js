@@ -104,7 +104,7 @@
     };
   }
 
-  function topD6FaceInfo(orientation) {
+  function d6OutcomeFromOrientation(orientation) {
     const up = { x: 0, y: 1, z: 0 };
     const faces = [
       { value: 3, normal: { x: 1, y: 0, z: 0 } },
@@ -115,36 +115,25 @@
       { value: 5, normal: { x: 0, y: 0, z: -1 } },
     ];
 
-    let winningFace = faces[0];
+    let winningValue = 1;
     let bestDot = Number.NEGATIVE_INFINITY;
-    let winningNormal = { x: 0, y: 1, z: 0 };
     for (const face of faces) {
       const worldNormal = rotateVectorByQuat(face.normal, orientation);
       const dot = worldNormal.x * up.x + worldNormal.y * up.y + worldNormal.z * up.z;
       if (dot > bestDot) {
         bestDot = dot;
-        winningFace = face;
-        winningNormal = worldNormal;
+        winningValue = face.value;
       }
     }
 
-    return {
-      value: winningFace.value,
-      alignment: bestDot,
-      normal: winningNormal,
-    };
-  }
-
-  function d6OutcomeFromOrientation(orientation) {
-    return topD6FaceInfo(orientation).value;
+    return winningValue;
   }
 
   function simulateRoll(options) {
     const sides = normalizeSides(options.sides);
     const seed = String(options.seed || Date.now());
     const areaSize = Number.isFinite(options.areaSize) ? options.areaSize : 8;
-    const baseSteps = Number.isFinite(options.steps) ? options.steps : 200;
-    const steps = sides === 6 ? Math.max(baseSteps, 720) : baseSteps;
+    const steps = Number.isFinite(options.steps) ? options.steps : 200;
     const dt = Number.isFinite(options.dt) ? options.dt : 1 / 60;
 
     const rng = createSeededRandom(seed);
@@ -164,7 +153,6 @@
     let wy = (rng() * 2 - 1) * 20;
     let wz = (rng() * 2 - 1) * 20;
     const orientation = normalizeQuat({ x: 0, y: 0, z: 0, w: 1 });
-    let stableFaceFrames = 0;
 
     const frames = [];
 
@@ -246,53 +234,10 @@
       vx *= drag;
       vy *= bounced ? 0.94 : 0.995;
       vz *= drag;
-      const spinDrag = py <= floorY + 0.001 ? 0.9 : 0.975;
+      const spinDrag = py <= floorY + 0.001 ? 0.955 : 0.975;
       wx *= spinDrag;
       wy *= spinDrag;
       wz *= spinDrag;
-      if (py <= floorY + 0.001 && Math.abs(vy) < 0.25) {
-        vy = 0;
-      }
-
-      if (sides === 6 && py <= floorY + 0.001) {
-        const faceInfo = topD6FaceInfo(orientation);
-        const faceNormal = faceInfo.normal;
-        const correctionAxis = {
-          x: -faceNormal.z,
-          y: 0,
-          z: faceNormal.x,
-        };
-        const correctionMagnitude = Math.hypot(correctionAxis.x, correctionAxis.y, correctionAxis.z);
-        const correctionAngle = Math.acos(clamp(faceInfo.alignment, -1, 1));
-
-        if (correctionMagnitude > 1e-6 && correctionAngle > 0.0005) {
-          const invMagnitude = 1 / correctionMagnitude;
-          const alignStrength = correctionAngle < 0.35 ? 64 : 40;
-          const correctionSpeed = correctionAngle * alignStrength;
-          const cx = correctionAxis.x * invMagnitude;
-          const cy = correctionAxis.y * invMagnitude;
-          const cz = correctionAxis.z * invMagnitude;
-          integrateQuaternion(
-            orientation,
-            cx * correctionSpeed,
-            cy * correctionSpeed,
-            cz * correctionSpeed,
-            dt
-          );
-          wx *= 0.55;
-          wy *= 0.85;
-          wz *= 0.55;
-        }
-
-        if (faceInfo.alignment > 0.995) {
-          wx *= 0.6;
-          wz *= 0.6;
-        }
-        if (faceInfo.alignment > 0.9992 && Math.hypot(vx, vz) < 0.05) {
-          wx = 0;
-          wz = 0;
-        }
-      }
 
       const travel = Math.hypot(vx, vz);
       angle = normalizeAngle(angle + (wy * dt) + travel * 0.015);
@@ -322,29 +267,7 @@
         qw: Number(orientation.w.toFixed(6)),
       });
 
-      const isMostlyStill = Math.abs(vx) < 0.04
-        && Math.abs(vy) < 0.04
-        && Math.abs(vz) < 0.04
-        && Math.abs(wx) < 0.12
-        && Math.abs(wy) < 0.12
-        && Math.abs(wz) < 0.12
-        && py <= floorY + 0.001;
-
-      if (sides === 6) {
-        const faceInfo = topD6FaceInfo(orientation);
-        const isFlatEnough = faceInfo.alignment > 0.9992;
-        if (isMostlyStill && isFlatEnough) {
-          stableFaceFrames += 1;
-        } else {
-          stableFaceFrames = 0;
-        }
-      } else if (vx === 0 && vy === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0) {
-        stableFaceFrames += 1;
-      } else {
-        stableFaceFrames = 0;
-      }
-
-      if (stableFaceFrames >= 15 && i > 35) {
+      if (vx === 0 && vy === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0 && i > 35) {
         break;
       }
     }
