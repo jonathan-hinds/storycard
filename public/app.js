@@ -805,9 +805,10 @@ function createSceneForCanvas(canvas, sides) {
   const debugHelpers = createPhysicsDebugHelpers(areaSize, mesh);
   group.add(debugHelpers.helperGroup);
 
-  const lookOffset = new THREE.Vector3(0, 0, 0);
+  const fixedCameraQuaternion = new THREE.Quaternion();
   camera.position.copy(mesh.position).add(cameraOffset);
-  camera.lookAt(mesh.position.clone().add(lookOffset));
+  camera.lookAt(mesh.position);
+  fixedCameraQuaternion.copy(camera.quaternion);
 
   return {
     renderer,
@@ -816,7 +817,7 @@ function createSceneForCanvas(canvas, sides) {
     mesh,
     faceValueMap,
     cameraOffset,
-    lookOffset,
+    fixedCameraQuaternion,
     animation: null,
     currentValue: getCurrentRollValue(mesh, faceValueMap),
     debugHelpers,
@@ -826,7 +827,7 @@ function createSceneForCanvas(canvas, sides) {
 
 function syncCameraToDie(visual) {
   visual.camera.position.copy(visual.mesh.position).add(visual.cameraOffset);
-  visual.camera.lookAt(visual.mesh.position.clone().add(visual.lookOffset));
+  visual.camera.quaternion.copy(visual.fixedCameraQuaternion);
 }
 
 function applyFrameToMesh(mesh, frame) {

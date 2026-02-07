@@ -5,11 +5,9 @@
   }
   root.DiceEngine = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, () => {
-  const TWO_PI = Math.PI * 2;
   const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
   const SUPPORTED_SIDES = new Set([6, 8, 12, 20]);
 
-  function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
   function normalizeSides(input) {
     const sides = Number.parseInt(input, 10);
     if (!Number.isFinite(sides) || !SUPPORTED_SIDES.has(sides)) {
@@ -18,14 +16,43 @@
     return sides;
   }
 
+  function xmur3(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i += 1) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return function hash() {
+      h = Math.imul(h ^ (h >>> 16), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      return (h ^= h >>> 16) >>> 0;
+    };
+  }
+
+  function mulberry32(a) {
+    return function random() {
+      let t = (a += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function createSeededRandom(seedText) {
+    return mulberry32(xmur3(String(seedText))());
+  }
+
   function normalizeVector(v) {
-    const length = Math.hypot(v.x, v.y, v.z) || 1;
-    return { x: v.x / length, y: v.y / length, z: v.z / length };
+    const len = Math.hypot(v.x, v.y, v.z) || 1;
+    return { x: v.x / len, y: v.y / len, z: v.z / len };
   }
 
   function normalizeQuat(q) {
-    const length = Math.hypot(q.x, q.y, q.z, q.w) || 1;
-    q.x /= length; q.y /= length; q.z /= length; q.w /= length;
+    const len = Math.hypot(q.x, q.y, q.z, q.w) || 1;
+    q.x /= len;
+    q.y /= len;
+    q.z /= len;
+    q.w /= len;
     return q;
   }
 
@@ -36,17 +63,6 @@
       z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
       w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
     };
-  }
-
-  function integrateQuaternion(q, wx, wy, wz, dt) {
-    const halfDt = dt * 0.5;
-    const dq = { x: wx * halfDt, y: wy * halfDt, z: wz * halfDt, w: 0 };
-    const next = mulQuat(dq, q);
-    q.x += next.x;
-    q.y += next.y;
-    q.z += next.z;
-    q.w += next.w;
-    return normalizeQuat(q);
   }
 
   function rotateVectorByQuat(v, q) {
@@ -63,86 +79,15 @@
     };
   }
 
-  function xmur3(str) {
-    let h = 1779033703 ^ str.length;
-    for (let i = 0; i < str.length; i += 1) {
-      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-      h = (h << 13) | (h >>> 19);
-    }
-    return function hash() {
-      h = Math.imul(h ^ (h >>> 16), 2246822507);
-      h = Math.imul(h ^ (h >>> 13), 3266489909);
-      return (h ^= h >>> 16) >>> 0;
-    };
-  }
-  function mulberry32(a) {
-    return function random() {
-      let t = (a += 0x6d2b79f5);
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-  function createSeededRandom(seedText) { return mulberry32(xmur3(String(seedText))()); }
-
-  function getFaceNormals(sides) {
-    const phi = GOLDEN_RATIO;
-    const invPhi = 1 / phi;
-    if (sides === 6) return [
-      { value: 3, normal: { x: 1, y: 0, z: 0 } },
-      { value: 4, normal: { x: -1, y: 0, z: 0 } },
-      { value: 1, normal: { x: 0, y: 1, z: 0 } },
-      { value: 6, normal: { x: 0, y: -1, z: 0 } },
-      { value: 2, normal: { x: 0, y: 0, z: 1 } },
-      { value: 5, normal: { x: 0, y: 0, z: -1 } },
-    ];
-    if (sides === 8) {
-      const normals = []; let value = 1;
-      for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
-        normals.push({ value, normal: normalizeVector({ x, y, z }) }); value += 1;
-      }
-      return normals;
-    }
-    if (sides === 12) return [
-      { value: 1, normal: normalizeVector({ x: 0, y: 1, z: phi }) },
-      { value: 2, normal: normalizeVector({ x: 0, y: 1, z: -phi }) },
-      { value: 3, normal: normalizeVector({ x: 0, y: -1, z: phi }) },
-      { value: 4, normal: normalizeVector({ x: 0, y: -1, z: -phi }) },
-      { value: 5, normal: normalizeVector({ x: 1, y: phi, z: 0 }) },
-      { value: 6, normal: normalizeVector({ x: 1, y: -phi, z: 0 }) },
-      { value: 7, normal: normalizeVector({ x: -1, y: phi, z: 0 }) },
-      { value: 8, normal: normalizeVector({ x: -1, y: -phi, z: 0 }) },
-      { value: 9, normal: normalizeVector({ x: phi, y: 0, z: 1 }) },
-      { value: 10, normal: normalizeVector({ x: phi, y: 0, z: -1 }) },
-      { value: 11, normal: normalizeVector({ x: -phi, y: 0, z: 1 }) },
-      { value: 12, normal: normalizeVector({ x: -phi, y: 0, z: -1 }) },
-    ];
-    if (sides === 20) {
-      const pts = [
-        { x: 1, y: 1, z: 1 }, { x: 1, y: 1, z: -1 }, { x: 1, y: -1, z: 1 }, { x: 1, y: -1, z: -1 },
-        { x: -1, y: 1, z: 1 }, { x: -1, y: 1, z: -1 }, { x: -1, y: -1, z: 1 }, { x: -1, y: -1, z: -1 },
-        { x: 0, y: invPhi, z: phi }, { x: 0, y: invPhi, z: -phi }, { x: 0, y: -invPhi, z: phi }, { x: 0, y: -invPhi, z: -phi },
-        { x: invPhi, y: phi, z: 0 }, { x: invPhi, y: -phi, z: 0 }, { x: -invPhi, y: phi, z: 0 }, { x: -invPhi, y: -phi, z: 0 },
-        { x: phi, y: 0, z: invPhi }, { x: phi, y: 0, z: -invPhi }, { x: -phi, y: 0, z: invPhi }, { x: -phi, y: 0, z: -invPhi },
-      ];
-      return pts.map((p, i) => ({ value: i + 1, normal: normalizeVector(p) }));
-    }
-    return [];
-  }
-
-  function topFaceInfo(orientation, sides) {
-    const up = { x: 0, y: 1, z: 0 };
-    let winner = null;
-    let bestDot = Number.NEGATIVE_INFINITY;
-    for (const face of getFaceNormals(sides)) {
-      const worldNormal = rotateVectorByQuat(face.normal, orientation);
-      const dot = worldNormal.x * up.x + worldNormal.y * up.y + worldNormal.z * up.z;
-      if (dot > bestDot) {
-        bestDot = dot;
-        winner = { value: face.value, normal: worldNormal, alignment: dot };
-      }
-    }
-    return winner;
+  function integrateQuaternion(q, wx, wy, wz, dt) {
+    const halfDt = dt * 0.5;
+    const dq = { x: wx * halfDt, y: wy * halfDt, z: wz * halfDt, w: 0 };
+    const next = mulQuat(dq, q);
+    q.x += next.x;
+    q.y += next.y;
+    q.z += next.z;
+    q.w += next.w;
+    return normalizeQuat(q);
   }
 
   function dieVertices(sides) {
@@ -177,284 +122,427 @@
     return [];
   }
 
+  function getFaceNormals(sides) {
+    const phi = GOLDEN_RATIO;
+    const invPhi = 1 / phi;
+    if (sides === 6) return [
+      { value: 3, normal: { x: 1, y: 0, z: 0 } },
+      { value: 4, normal: { x: -1, y: 0, z: 0 } },
+      { value: 1, normal: { x: 0, y: 1, z: 0 } },
+      { value: 6, normal: { x: 0, y: -1, z: 0 } },
+      { value: 2, normal: { x: 0, y: 0, z: 1 } },
+      { value: 5, normal: { x: 0, y: 0, z: -1 } },
+    ];
+    if (sides === 8) {
+      const normals = []; let value = 1;
+      for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
+        normals.push({ value, normal: normalizeVector({ x, y, z }) });
+        value += 1;
+      }
+      return normals;
+    }
+    if (sides === 12) return [
+      { value: 1, normal: normalizeVector({ x: 0, y: 1, z: phi }) },
+      { value: 2, normal: normalizeVector({ x: 0, y: 1, z: -phi }) },
+      { value: 3, normal: normalizeVector({ x: 0, y: -1, z: phi }) },
+      { value: 4, normal: normalizeVector({ x: 0, y: -1, z: -phi }) },
+      { value: 5, normal: normalizeVector({ x: 1, y: phi, z: 0 }) },
+      { value: 6, normal: normalizeVector({ x: 1, y: -phi, z: 0 }) },
+      { value: 7, normal: normalizeVector({ x: -1, y: phi, z: 0 }) },
+      { value: 8, normal: normalizeVector({ x: -1, y: -phi, z: 0 }) },
+      { value: 9, normal: normalizeVector({ x: phi, y: 0, z: 1 }) },
+      { value: 10, normal: normalizeVector({ x: phi, y: 0, z: -1 }) },
+      { value: 11, normal: normalizeVector({ x: -phi, y: 0, z: 1 }) },
+      { value: 12, normal: normalizeVector({ x: -phi, y: 0, z: -1 }) },
+    ];
+    if (sides === 20) {
+      const normals = [
+        { x: 1, y: 1, z: 1 }, { x: 1, y: 1, z: -1 }, { x: 1, y: -1, z: 1 }, { x: 1, y: -1, z: -1 },
+        { x: -1, y: 1, z: 1 }, { x: -1, y: 1, z: -1 }, { x: -1, y: -1, z: 1 }, { x: -1, y: -1, z: -1 },
+        { x: 0, y: invPhi, z: phi }, { x: 0, y: invPhi, z: -phi }, { x: 0, y: -invPhi, z: phi }, { x: 0, y: -invPhi, z: -phi },
+        { x: invPhi, y: phi, z: 0 }, { x: invPhi, y: -phi, z: 0 }, { x: -invPhi, y: phi, z: 0 }, { x: -invPhi, y: -phi, z: 0 },
+        { x: phi, y: 0, z: invPhi }, { x: phi, y: 0, z: -invPhi }, { x: -phi, y: 0, z: invPhi }, { x: -phi, y: 0, z: -invPhi },
+      ];
+      return normals.map((normal, i) => ({ value: i + 1, normal: normalizeVector(normal) }));
+    }
+    return [];
+  }
+
   class PhysicsWorld {
-    constructor({ areaSize = 8, gravity = -18, fixedDt = 1 / 60, maxSubSteps = 5, debug = false } = {}) {
-      this.areaSize = areaSize;
+    constructor({ gravity = -14, fixedDt = 1 / 120, maxSubSteps = 2, debug = false } = {}) {
       this.gravity = gravity;
       this.fixedDt = fixedDt;
       this.maxSubSteps = maxSubSteps;
       this.debug = debug;
-      const half = areaSize / 2 - 0.4;
-      this.planes = [
-        { id: 'ground', n: { x: 0, y: 1, z: 0 }, offset: 0 },
-        { id: 'north', n: { x: 0, y: 0, z: -1 }, offset: -half },
-        { id: 'south', n: { x: 0, y: 0, z: 1 }, offset: -half },
-        { id: 'east', n: { x: -1, y: 0, z: 0 }, offset: -half },
-        { id: 'west', n: { x: 1, y: 0, z: 0 }, offset: -half },
-      ];
+      this.accumulator = 0;
+      this.bodies = [];
+      this.staticColliders = [];
+      this.lastContactCount = 0;
+      this.contactEvents = [];
     }
 
-    step(entity, dt) {
-      const steps = Math.min(this.maxSubSteps, Math.max(1, Math.ceil(dt / this.fixedDt)));
-      const subDt = dt / steps;
-      let totalContacts = 0;
-      for (let s = 0; s < steps; s += 1) {
-        entity.velocity.y += this.gravity * subDt;
-        entity.velocity.x *= 1 - entity.linearDamping * subDt;
-        entity.velocity.y *= 1 - entity.linearDamping * subDt;
-        entity.velocity.z *= 1 - entity.linearDamping * subDt;
-        entity.angularVelocity.x *= 1 - entity.angularDamping * subDt;
-        entity.angularVelocity.y *= 1 - entity.angularDamping * subDt;
-        entity.angularVelocity.z *= 1 - entity.angularDamping * subDt;
+    createDynamicBody(config) {
+      const body = {
+        position: { ...config.position },
+        orientation: normalizeQuat({ ...config.orientation }),
+        velocity: { x: 0, y: 0, z: 0 },
+        angularVelocity: { x: 0, y: 0, z: 0 },
+        vertices: config.vertices,
+        mass: 1,
+        invMass: 1,
+        invInertia: config.invInertia,
+        friction: 0.65,
+        restitution: 0.06,
+        linearDamping: 0.75,
+        angularDamping: 0.85,
+        ccdSweepRadius: 0.02,
+      };
+      this.bodies.push(body);
+      return body;
+    }
 
-        entity.position.x += entity.velocity.x * subDt;
-        entity.position.y += entity.velocity.y * subDt;
-        entity.position.z += entity.velocity.z * subDt;
-        integrateQuaternion(entity.orientation, entity.angularVelocity.x, entity.angularVelocity.y, entity.angularVelocity.z, subDt);
+    createStaticGround(y = 0) {
+      const ground = { id: 'ground', n: { x: 0, y: 1, z: 0 }, offset: -y };
+      this.staticColliders.push(ground);
+      return ground;
+    }
 
-        totalContacts += this.solveContacts(entity, subDt);
+    createStaticBoundary(size = 8) {
+      const half = size / 2 - 0.35;
+      this.staticColliders.push({ id: 'north', n: { x: 0, y: 0, z: -1 }, offset: -half });
+      this.staticColliders.push({ id: 'south', n: { x: 0, y: 0, z: 1 }, offset: -half });
+      this.staticColliders.push({ id: 'east', n: { x: -1, y: 0, z: 0 }, offset: -half });
+      this.staticColliders.push({ id: 'west', n: { x: 1, y: 0, z: 0 }, offset: -half });
+    }
+
+    step(dt) {
+      this.accumulator += dt;
+      this.lastContactCount = 0;
+      this.contactEvents = [];
+
+      const maxFrameTime = this.fixedDt * this.maxSubSteps;
+      if (this.accumulator > maxFrameTime) this.accumulator = maxFrameTime;
+
+      while (this.accumulator >= this.fixedDt) {
+        for (const body of this.bodies) {
+          this.#stepBody(body, this.fixedDt);
+        }
+        this.accumulator -= this.fixedDt;
       }
-      return totalContacts;
-    }
 
-    solveContacts(entity) {
-      const worldVerts = entity.worldVertices();
-      let contacts = 0;
-      for (const plane of this.planes) {
-        for (const vw of worldVerts) {
-          const dist = plane.n.x * vw.x + plane.n.y * vw.y + plane.n.z * vw.z + plane.offset;
-          if (dist >= 0) continue;
-          contacts += 1;
-          const r = { x: vw.x - entity.position.x, y: vw.y - entity.position.y, z: vw.z - entity.position.z };
-          const wxr = {
-            x: entity.angularVelocity.y * r.z - entity.angularVelocity.z * r.y,
-            y: entity.angularVelocity.z * r.x - entity.angularVelocity.x * r.z,
-            z: entity.angularVelocity.x * r.y - entity.angularVelocity.y * r.x,
-          };
-          const rv = { x: entity.velocity.x + wxr.x, y: entity.velocity.y + wxr.y, z: entity.velocity.z + wxr.z };
-          const vn = rv.x * plane.n.x + rv.y * plane.n.y + rv.z * plane.n.z;
-          if (vn < 0 || dist < -0.001) {
-            const rn = {
-              x: r.y * plane.n.z - r.z * plane.n.y,
-              y: r.z * plane.n.x - r.x * plane.n.z,
-              z: r.x * plane.n.y - r.y * plane.n.x,
-            };
-            const invInertiaRn = {
-              x: rn.x * entity.invInertia.x,
-              y: rn.y * entity.invInertia.y,
-              z: rn.z * entity.invInertia.z,
-            };
-            const k = entity.invMass + plane.n.x * (invInertiaRn.y * r.z - invInertiaRn.z * r.y)
-              + plane.n.y * (invInertiaRn.z * r.x - invInertiaRn.x * r.z)
-              + plane.n.z * (invInertiaRn.x * r.y - invInertiaRn.y * r.x);
-            const impulseN = Math.max(0, (-(1 + entity.restitution) * vn + (-dist * 25)) / (k || 1));
-            entity.applyImpulse(plane.n, impulseN, r);
-
-            const tangent = {
-              x: rv.x - vn * plane.n.x,
-              y: rv.y - vn * plane.n.y,
-              z: rv.z - vn * plane.n.z,
-            };
-            const tLen = Math.hypot(tangent.x, tangent.y, tangent.z);
-            if (tLen > 1e-6) {
-              const tx = tangent.x / tLen; const ty = tangent.y / tLen; const tz = tangent.z / tLen;
-              const vt = rv.x * tx + rv.y * ty + rv.z * tz;
-              const jt = clamp(-vt / (entity.invMass || 1), -entity.friction * impulseN, entity.friction * impulseN);
-              entity.applyImpulse({ x: tx, y: ty, z: tz }, jt, r);
-            }
-          }
+      if (this.debug && this.contactEvents.length) {
+        for (const evt of this.contactEvents) {
+          console.log(`[physics-debug] contact collider=${evt.collider} penetration=${evt.penetration.toFixed(5)} normalSpeed=${evt.normalSpeed.toFixed(4)}`);
         }
       }
-      return contacts;
     }
-  }
 
-  class DieEntity {
-    constructor({ sides, random, areaSize }) {
+    #stepBody(body, dt) {
+      body.velocity.y += this.gravity * dt;
+      const linearDecay = Math.max(0, 1 - body.linearDamping * dt);
+      const angularDecay = Math.max(0, 1 - body.angularDamping * dt);
+      body.velocity.x *= linearDecay;
+      body.velocity.y *= linearDecay;
+      body.velocity.z *= linearDecay;
+      body.angularVelocity.x *= angularDecay;
+      body.angularVelocity.y *= angularDecay;
+      body.angularVelocity.z *= angularDecay;
+
+      body.position.x += body.velocity.x * dt;
+      body.position.y += body.velocity.y * dt;
+      body.position.z += body.velocity.z * dt;
+      integrateQuaternion(body.orientation, body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z, dt);
+
+      const worldVertices = body.vertices.map((vertex) => {
+        const rotated = rotateVectorByQuat(vertex, body.orientation);
+        return {
+          x: body.position.x + rotated.x,
+          y: body.position.y + rotated.y,
+          z: body.position.z + rotated.z,
+        };
+      });
+
+      const applyImpulse = (direction, impulse, r) => {
+        body.velocity.x += direction.x * impulse * body.invMass;
+        body.velocity.y += direction.y * impulse * body.invMass;
+        body.velocity.z += direction.z * impulse * body.invMass;
+        const torque = {
+          x: r.y * direction.z - r.z * direction.y,
+          y: r.z * direction.x - r.x * direction.z,
+          z: r.x * direction.y - r.y * direction.x,
+        };
+        body.angularVelocity.x += torque.x * impulse * body.invInertia.x;
+        body.angularVelocity.y += torque.y * impulse * body.invInertia.y;
+        body.angularVelocity.z += torque.z * impulse * body.invInertia.z;
+      };
+
+      for (const collider of this.staticColliders) {
+        for (const vertex of worldVertices) {
+          const signedDistance = collider.n.x * vertex.x + collider.n.y * vertex.y + collider.n.z * vertex.z + collider.offset;
+          if (signedDistance >= 0) continue;
+          this.lastContactCount += 1;
+
+          const r = {
+            x: vertex.x - body.position.x,
+            y: vertex.y - body.position.y,
+            z: vertex.z - body.position.z,
+          };
+          const wxr = {
+            x: body.angularVelocity.y * r.z - body.angularVelocity.z * r.y,
+            y: body.angularVelocity.z * r.x - body.angularVelocity.x * r.z,
+            z: body.angularVelocity.x * r.y - body.angularVelocity.y * r.x,
+          };
+          const rv = {
+            x: body.velocity.x + wxr.x,
+            y: body.velocity.y + wxr.y,
+            z: body.velocity.z + wxr.z,
+          };
+
+          const normalSpeed = rv.x * collider.n.x + rv.y * collider.n.y + rv.z * collider.n.z;
+          if (normalSpeed < 0 || signedDistance < -0.0002) {
+            const rn = {
+              x: r.y * collider.n.z - r.z * collider.n.y,
+              y: r.z * collider.n.x - r.x * collider.n.z,
+              z: r.x * collider.n.y - r.y * collider.n.x,
+            };
+            const invInertiaRn = {
+              x: rn.x * body.invInertia.x,
+              y: rn.y * body.invInertia.y,
+              z: rn.z * body.invInertia.z,
+            };
+            const rotationalK = collider.n.x * (invInertiaRn.y * r.z - invInertiaRn.z * r.y)
+              + collider.n.y * (invInertiaRn.z * r.x - invInertiaRn.x * r.z)
+              + collider.n.z * (invInertiaRn.x * r.y - invInertiaRn.y * r.x);
+            const k = body.invMass + rotationalK;
+            const baumgarteBias = Math.max(0, -signedDistance - 0.0005) * 18;
+            const impulseN = Math.max(0, (-(1 + body.restitution) * normalSpeed + baumgarteBias) / (k || 1));
+            applyImpulse(collider.n, impulseN, r);
+
+            const tangent = {
+              x: rv.x - normalSpeed * collider.n.x,
+              y: rv.y - normalSpeed * collider.n.y,
+              z: rv.z - normalSpeed * collider.n.z,
+            };
+            const tangentSpeed = Math.hypot(tangent.x, tangent.y, tangent.z);
+            if (tangentSpeed > 1e-6) {
+              const t = {
+                x: tangent.x / tangentSpeed,
+                y: tangent.y / tangentSpeed,
+                z: tangent.z / tangentSpeed,
+              };
+              const vt = rv.x * t.x + rv.y * t.y + rv.z * t.z;
+              const frictionImpulse = Math.max(-body.friction * impulseN, Math.min(body.friction * impulseN, -vt / (body.invMass || 1)));
+              applyImpulse(t, frictionImpulse, r);
+            }
+          }
+
+          const correction = Math.min(0.015, -signedDistance + 1e-4);
+          body.position.x += collider.n.x * correction;
+          body.position.y += collider.n.y * correction;
+          body.position.z += collider.n.z * correction;
+
+          this.contactEvents.push({ collider: collider.id, penetration: -signedDistance, normalSpeed });
+        }
+      }
+    }
+
+  }
+  class Die {
+    constructor({ sides, random, world, areaSize }) {
       this.sides = sides;
+      this.random = random;
+      this.meshToBodyTransform = {
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0, w: 1 },
+      };
       this.vertices = dieVertices(sides);
-      const half = areaSize / 2;
-      this.position = { x: (random() * 2 - 1) * areaSize * 0.08, y: 2 + random() * 0.6, z: (random() * 2 - 1) * areaSize * 0.08 };
-      this.orientation = normalizeQuat({ x: random() * 0.4, y: random() * 0.4, z: random() * 0.4, w: 1 });
-      this.velocity = { x: (random() * 2 - 1) * 3.8, y: 0, z: (random() * 2 - 1) * 3.8 };
-      this.angularVelocity = { x: (random() * 2 - 1) * 10.5, y: (random() * 2 - 1) * 10.5, z: (random() * 2 - 1) * 10.5 };
-      this.mass = 1;
-      this.invMass = 1 / this.mass;
-      const bounds = this.vertices.reduce((acc, v) => ({
+      this.faceNormals = getFaceNormals(sides);
+      const invInertia = this.#computeInertia(this.vertices);
+      this.body = world.createDynamicBody({
+        vertices: this.vertices,
+        invInertia,
+        position: { x: 0, y: 1.8, z: 0 },
+        orientation: { x: 0, y: 0, z: 0, w: 1 },
+      });
+      this.areaSize = areaSize;
+      this.rollApplied = false;
+      this.maxLinearSpeed = 0;
+      this.maxAngularSpeed = 0;
+    }
+
+    #computeInertia(vertices) {
+      const bounds = vertices.reduce((acc, v) => ({
         minX: Math.min(acc.minX, v.x), maxX: Math.max(acc.maxX, v.x),
         minY: Math.min(acc.minY, v.y), maxY: Math.max(acc.maxY, v.y),
         minZ: Math.min(acc.minZ, v.z), maxZ: Math.max(acc.maxZ, v.z),
       }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity });
-      const sx = bounds.maxX - bounds.minX; const sy = bounds.maxY - bounds.minY; const sz = bounds.maxZ - bounds.minZ;
-      this.invInertia = {
-        x: 12 / (this.mass * (sy * sy + sz * sz)),
-        y: 12 / (this.mass * (sx * sx + sz * sz)),
-        z: 12 / (this.mass * (sx * sx + sy * sy)),
-      };
-      this.friction = 0.5;
-      this.restitution = 0.08;
-      this.linearDamping = 0.45;
-      this.angularDamping = 0.68;
-      this.sleepLinearThreshold = 0.08;
-      this.sleepAngularThreshold = 0.14;
-      this.sleepFrames = 0;
-      this.maxX = half - 0.2;
-      this.maxZ = half - 0.2;
-    }
-
-    worldVertices() {
-      return this.vertices.map((v) => {
-        const r = rotateVectorByQuat(v, this.orientation);
-        return { x: this.position.x + r.x, y: this.position.y + r.y, z: this.position.z + r.z };
-      });
-    }
-
-    applyImpulse(direction, impulse, r) {
-      this.velocity.x += direction.x * impulse * this.invMass;
-      this.velocity.y += direction.y * impulse * this.invMass;
-      this.velocity.z += direction.z * impulse * this.invMass;
-      const torque = {
-        x: r.y * direction.z - r.z * direction.y,
-        y: r.z * direction.x - r.x * direction.z,
-        z: r.x * direction.y - r.y * direction.x,
-      };
-      this.angularVelocity.x += torque.x * impulse * this.invInertia.x;
-      this.angularVelocity.y += torque.y * impulse * this.invInertia.y;
-      this.angularVelocity.z += torque.z * impulse * this.invInertia.z;
-    }
-
-    settleInfo(contactPoints) {
-      const linearSpeed = Math.hypot(this.velocity.x, this.velocity.y, this.velocity.z);
-      const angularSpeed = Math.hypot(this.angularVelocity.x, this.angularVelocity.y, this.angularVelocity.z);
-      const minGroundDist = Math.min(...this.worldVertices().map((v) => v.y));
-      const top = topFaceInfo(this.orientation, this.sides);
+      const sx = bounds.maxX - bounds.minX;
+      const sy = bounds.maxY - bounds.minY;
+      const sz = bounds.maxZ - bounds.minZ;
       return {
-        linearSpeed,
-        angularSpeed,
-        minGroundDist,
-        topDot: top.alignment,
-        topValue: top.value,
-        contactPoints,
+        x: 12 / ((sy * sy + sz * sz) || 1),
+        y: 12 / ((sx * sx + sz * sz) || 1),
+        z: 12 / ((sx * sx + sy * sy) || 1),
+      };
+    }
+
+    reset() {
+      const spread = this.areaSize * 0.06;
+      this.body.position.x = (this.random() * 2 - 1) * spread;
+      this.body.position.y = 2 + this.random() * 0.4;
+      this.body.position.z = (this.random() * 2 - 1) * spread;
+      this.body.orientation = normalizeQuat({
+        x: this.random() * 2 - 1,
+        y: this.random() * 2 - 1,
+        z: this.random() * 2 - 1,
+        w: this.random() * 2 - 1,
+      });
+      this.body.velocity = { x: 0, y: 0, z: 0 };
+      this.body.angularVelocity = { x: 0, y: 0, z: 0 };
+      this.rollApplied = false;
+      this.maxLinearSpeed = 0;
+      this.maxAngularSpeed = 0;
+    }
+
+    roll() {
+      if (this.rollApplied) return;
+      const impulse = {
+        x: (this.random() * 2 - 1) * 2.2,
+        y: 1.8 + this.random() * 1.2,
+        z: (this.random() * 2 - 1) * 2.2,
+      };
+      const angularImpulse = {
+        x: (this.random() * 2 - 1) * 5.2,
+        y: (this.random() * 2 - 1) * 5.2,
+        z: (this.random() * 2 - 1) * 5.2,
+      };
+
+      this.body.velocity.x += impulse.x;
+      this.body.velocity.y += impulse.y;
+      this.body.velocity.z += impulse.z;
+      this.body.angularVelocity.x += angularImpulse.x;
+      this.body.angularVelocity.y += angularImpulse.y;
+      this.body.angularVelocity.z += angularImpulse.z;
+
+      this.#clampVelocity(5.5, 12.0);
+      this.rollApplied = true;
+
+      return {
+        initialLinearSpeed: Math.hypot(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z),
+        initialAngularSpeed: Math.hypot(this.body.angularVelocity.x, this.body.angularVelocity.y, this.body.angularVelocity.z),
+      };
+    }
+
+    #clampVelocity(maxLinear, maxAngular) {
+      const linear = Math.hypot(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);
+      if (linear > maxLinear) {
+        const s = maxLinear / linear;
+        this.body.velocity.x *= s;
+        this.body.velocity.y *= s;
+        this.body.velocity.z *= s;
+      }
+      const angular = Math.hypot(this.body.angularVelocity.x, this.body.angularVelocity.y, this.body.angularVelocity.z);
+      if (angular > maxAngular) {
+        const s = maxAngular / angular;
+        this.body.angularVelocity.x *= s;
+        this.body.angularVelocity.y *= s;
+        this.body.angularVelocity.z *= s;
+      }
+    }
+
+    getTopFace() {
+      const up = { x: 0, y: 1, z: 0 };
+      let winner = null;
+      let bestDot = Number.NEGATIVE_INFINITY;
+      for (const face of this.faceNormals) {
+        const worldNormal = rotateVectorByQuat(face.normal, this.body.orientation);
+        const dot = worldNormal.x * up.x + worldNormal.y * up.y + worldNormal.z * up.z;
+        if (dot > bestDot) {
+          bestDot = dot;
+          winner = { value: face.value, alignment: dot };
+        }
+      }
+      return winner;
+    }
+
+    getFrameSnapshot(step) {
+      const linear = Math.hypot(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z);
+      const angular = Math.hypot(this.body.angularVelocity.x, this.body.angularVelocity.y, this.body.angularVelocity.z);
+      this.maxLinearSpeed = Math.max(this.maxLinearSpeed, linear);
+      this.maxAngularSpeed = Math.max(this.maxAngularSpeed, angular);
+      return {
+        step,
+        x: Number(this.body.position.x.toFixed(4)),
+        y: Number(this.body.position.y.toFixed(4)),
+        z: Number(this.body.position.z.toFixed(4)),
+        vx: Number(this.body.velocity.x.toFixed(4)),
+        vy: Number(this.body.velocity.y.toFixed(4)),
+        vz: Number(this.body.velocity.z.toFixed(4)),
+        wx: Number(this.body.angularVelocity.x.toFixed(4)),
+        wy: Number(this.body.angularVelocity.y.toFixed(4)),
+        wz: Number(this.body.angularVelocity.z.toFixed(4)),
+        qx: Number(this.body.orientation.x.toFixed(6)),
+        qy: Number(this.body.orientation.y.toFixed(6)),
+        qz: Number(this.body.orientation.z.toFixed(6)),
+        qw: Number(this.body.orientation.w.toFixed(6)),
       };
     }
   }
 
-  class DebugRenderer {
-    constructor(enabled) { this.enabled = enabled; this.logs = []; }
-    log(msg) { if (this.enabled) this.logs.push(msg); }
-  }
-
-  class DieRoller {
-    constructor({ sides, seed, areaSize, debug }) {
+  class DiceRoller {
+    constructor({ sides, seed, areaSize = 8, debug = false }) {
       this.random = createSeededRandom(seed);
-      this.world = new PhysicsWorld({ areaSize, debug });
-      this.die = new DieEntity({ sides, random: this.random, areaSize });
-      this.debug = new DebugRenderer(debug);
+      this.physics = new PhysicsWorld({ debug });
+      this.physics.createStaticGround(0);
+      this.physics.createStaticBoundary(areaSize);
+      this.die = new Die({ sides, random: this.random, world: this.physics, areaSize });
+      this.debug = debug;
+      this.logs = [];
     }
 
     run() {
+      this.die.reset();
+      const initial = this.die.roll();
+      this.logs.push(`roll initial linear=${initial.initialLinearSpeed.toFixed(4)} angular=${initial.initialAngularSpeed.toFixed(4)}`);
+
       const frames = [];
-      const dt = this.world.fixedDt;
-      const maxFrames = 1500;
+      const outputDt = 1 / 60;
+      const maxFrames = 900;
+      let belowThresholdFrames = 0;
       let settled = false;
-      let finalDiagnostics = null;
 
       for (let i = 0; i < maxFrames; i += 1) {
-        const contacts = this.world.step(this.die, dt);
-        const info = this.die.settleInfo(contacts);
+        this.physics.step(outputDt);
+        frames.push(this.die.getFrameSnapshot(i));
 
-        const linearOk = info.linearSpeed < this.die.sleepLinearThreshold;
-        const angularOk = info.angularSpeed < this.die.sleepAngularThreshold;
-        const noPenetration = info.minGroundDist > -0.002;
-        const hasGroundContact = info.contactPoints > 0 || info.minGroundDist < 0.02;
-        const topAligned = info.topDot > 0.97;
-        if (linearOk && angularOk && noPenetration && hasGroundContact && topAligned) this.die.sleepFrames += 1;
-        else this.die.sleepFrames = 0;
-
-        frames.push({
-          step: i,
-          x: Number(this.die.position.x.toFixed(4)),
-          y: Number(this.die.position.y.toFixed(4)),
-          z: Number(this.die.position.z.toFixed(4)),
-          vx: Number(this.die.velocity.x.toFixed(4)),
-          vy: Number(this.die.velocity.y.toFixed(4)),
-          vz: Number(this.die.velocity.z.toFixed(4)),
-          wx: Number(this.die.angularVelocity.x.toFixed(4)),
-          wy: Number(this.die.angularVelocity.y.toFixed(4)),
-          wz: Number(this.die.angularVelocity.z.toFixed(4)),
-          qx: Number(this.die.orientation.x.toFixed(6)),
-          qy: Number(this.die.orientation.y.toFixed(6)),
-          qz: Number(this.die.orientation.z.toFixed(6)),
-          qw: Number(this.die.orientation.w.toFixed(6)),
-        });
-
-        if (this.die.sleepFrames >= 24 && i > 40) {
-          finalDiagnostics = info;
-          this.debug.log(`settled frame=${i} pos=(${this.die.position.x.toFixed(3)},${this.die.position.y.toFixed(3)},${this.die.position.z.toFixed(3)}) lin=${info.linearSpeed.toFixed(4)} ang=${info.angularSpeed.toFixed(4)} dotUp=${info.topDot.toFixed(4)} contacts=${info.contactPoints}`);
+        const linearSpeed = Math.hypot(this.die.body.velocity.x, this.die.body.velocity.y, this.die.body.velocity.z);
+        const angularSpeed = Math.hypot(this.die.body.angularVelocity.x, this.die.body.angularVelocity.y, this.die.body.angularVelocity.z);
+        const atRest = linearSpeed < 0.12 && angularSpeed < 0.2;
+        belowThresholdFrames = atRest ? belowThresholdFrames + 1 : 0;
+        if (belowThresholdFrames >= 24 && i > 50) {
           settled = true;
           break;
         }
       }
 
-      if (!finalDiagnostics) {
-        finalDiagnostics = this.die.settleInfo(0);
-        const fallbackSettled = finalDiagnostics.linearSpeed < this.die.sleepLinearThreshold
-          && finalDiagnostics.angularSpeed < this.die.sleepAngularThreshold
-          && finalDiagnostics.minGroundDist > -0.002
-          && finalDiagnostics.topDot > 0.92;
-        if (fallbackSettled) {
-          settled = true;
-          this.debug.log(`settled-fallback pos=(${this.die.position.x.toFixed(3)},${this.die.position.y.toFixed(3)},${this.die.position.z.toFixed(3)}) lin=${finalDiagnostics.linearSpeed.toFixed(4)} ang=${finalDiagnostics.angularSpeed.toFixed(4)} dotUp=${finalDiagnostics.topDot.toFixed(4)} contacts=${finalDiagnostics.contactPoints}`);
-        }
-      }
-      if (finalDiagnostics.topDot < 0.999999) {
-        const before = topFaceInfo(this.die.orientation, this.die.sides);
-        const up = { x: 0, y: 1, z: 0 };
-        let axis = {
-          x: before.normal.y * up.z - before.normal.z * up.y,
-          y: before.normal.z * up.x - before.normal.x * up.z,
-          z: before.normal.x * up.y - before.normal.y * up.x,
-        };
-        let axisLen = Math.hypot(axis.x, axis.y, axis.z);
-        if (axisLen <= 1e-6) {
-          axis = { x: 1, y: 0, z: 0 };
-          axisLen = 1;
-        }
-        const angle = Math.acos(clamp(before.alignment, -1, 1));
-        const s = Math.sin(angle / 2) / axisLen;
-        const correction = normalizeQuat({ x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(angle / 2) });
-        this.die.orientation = normalizeQuat(mulQuat(correction, this.die.orientation));
-        this.die.velocity = { x: 0, y: 0, z: 0 };
-        this.die.angularVelocity = { x: 0, y: 0, z: 0 };
-      }
-
-      const top = topFaceInfo(this.die.orientation, this.die.sides);
-      const topDotUp = settled ? 1 : top.alignment;
-      const last = frames[frames.length - 1];
-      if (last) {
-        last.qx = Number(this.die.orientation.x.toFixed(6));
-        last.qy = Number(this.die.orientation.y.toFixed(6));
-        last.qz = Number(this.die.orientation.z.toFixed(6));
-        last.qw = Number(this.die.orientation.w.toFixed(6));
-      }
+      const topFace = this.die.getTopFace();
+      const penetrationIssues = this.physics.contactEvents.filter((evt) => evt.penetration > 0.02).length;
+      this.logs.push(`roll max linear=${this.die.maxLinearSpeed.toFixed(4)} angular=${this.die.maxAngularSpeed.toFixed(4)}`);
+      this.logs.push(`roll contacts=${this.physics.lastContactCount} penetrationIssues=${penetrationIssues}`);
 
       return {
         frames,
-        outcome: top.value,
+        outcome: topFace.value,
         settled,
         diagnostics: {
-          finalPosition: { ...this.die.position },
-          finalVelocity: { ...this.die.velocity },
-          finalAngularVelocity: { ...this.die.angularVelocity },
-          topDotUp,
-          topFaceValue: top.value,
-          contactPoints: finalDiagnostics.contactPoints,
-          logs: this.debug.logs,
+          topDotUp: topFace.alignment,
+          contactPoints: this.physics.lastContactCount,
+          logs: this.logs,
           world: {
-            gravity: this.world.gravity,
-            fixedDt: this.world.fixedDt,
-            maxSubSteps: this.world.maxSubSteps,
-            colliders: this.world.planes.map((p) => ({ id: p.id, normal: p.n, offset: p.offset })),
+            gravity: this.physics.gravity,
+            fixedDt: this.physics.fixedDt,
+            maxSubSteps: this.physics.maxSubSteps,
+            colliders: this.physics.staticColliders,
           },
           collider: {
             type: 'convex',
@@ -471,13 +559,13 @@
     const seed = String(options.seed || Date.now());
     const areaSize = Number.isFinite(options.areaSize) ? options.areaSize : 8;
     const debug = Boolean(options.debug);
-    const roller = new DieRoller({ sides, seed, areaSize, debug });
+    const roller = new DiceRoller({ sides, seed, areaSize, debug });
     const result = roller.run();
     return {
       seed,
       sides,
       areaSize,
-      dt: roller.world.fixedDt,
+      dt: roller.physics.fixedDt,
       frames: result.frames,
       outcome: result.outcome,
       metadata: {
@@ -488,5 +576,12 @@
     };
   }
 
-  return { normalizeSides, createSeededRandom, simulateRoll };
+  return {
+    normalizeSides,
+    createSeededRandom,
+    simulateRoll,
+    PhysicsWorld,
+    Die,
+    DiceRoller,
+  };
 });
