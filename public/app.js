@@ -227,129 +227,6 @@ function extractPlanarFaces(geometry) {
   });
 }
 
-function buildUvUnwrappedGeometry(geometry, sides) {
-  const nonIndexed = geometry.index ? geometry.toNonIndexed() : geometry.clone();
-  const positions = nonIndexed.attributes.position;
-  const groups = new Map();
-
-  for (let tri = 0; tri < positions.count; tri += 3) {
-    const a = new THREE.Vector3().fromBufferAttribute(positions, tri);
-    const b = new THREE.Vector3().fromBufferAttribute(positions, tri + 1);
-    const c = new THREE.Vector3().fromBufferAttribute(positions, tri + 2);
-    const normal = new THREE.Vector3().crossVectors(
-      new THREE.Vector3().subVectors(b, a),
-      new THREE.Vector3().subVectors(c, a)
-    ).normalize();
-
-    if (normal.dot(a) < 0) normal.multiplyScalar(-1);
-    const planeDistance = normal.dot(a);
-    const key = `${roundKey(normal.x)}:${roundKey(normal.y)}:${roundKey(normal.z)}:${roundKey(planeDistance)}`;
-
-    if (!groups.has(key)) {
-      groups.set(key, { normal: normal.clone(), triangles: [], vertices: new Set(), points2DByVertex: new Map() });
-    }
-
-    const face = groups.get(key);
-    face.triangles.push([tri, tri + 1, tri + 2]);
-    face.vertices.add(tri);
-    face.vertices.add(tri + 1);
-    face.vertices.add(tri + 2);
-  }
-
-  const faces = [...groups.values()].map((face) => {
-    const center = [...face.vertices]
-      .reduce((acc, index) => acc.add(new THREE.Vector3().fromBufferAttribute(positions, index)), new THREE.Vector3())
-      .multiplyScalar(1 / face.vertices.size);
-
-    const { right, up } = getFaceFrame(face.normal);
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    for (const index of face.vertices) {
-      const vertex = new THREE.Vector3().fromBufferAttribute(positions, index);
-      const local = vertex.sub(center);
-      const point = new THREE.Vector2(local.dot(right), local.dot(up));
-      minX = Math.min(minX, point.x);
-      minY = Math.min(minY, point.y);
-      maxX = Math.max(maxX, point.x);
-      maxY = Math.max(maxY, point.y);
-      face.points2DByVertex.set(index, point);
-    }
-
-    return {
-      ...face,
-      center,
-      width: Math.max(1e-5, maxX - minX),
-      height: Math.max(1e-5, maxY - minY),
-      minX,
-      minY,
-      maxX,
-      maxY,
-      uvPoints: [],
-      label: null,
-    };
-  });
-
-  const padding = 0.03;
-  const cellGap = 0.02;
-  const columns = Math.ceil(Math.sqrt(faces.length));
-  const rows = Math.ceil(faces.length / columns);
-  const cellW = (1 - cellGap * (columns + 1)) / columns;
-  const cellH = (1 - cellGap * (rows + 1)) / rows;
-
-  const uvArray = new Float32Array((positions.count * 2));
-
-  faces.forEach((face, index) => {
-    const col = index % columns;
-    const row = Math.floor(index / columns);
-    const boxX = cellGap + col * (cellW + cellGap);
-    const boxY = 1 - (cellGap + (row + 1) * cellH + row * cellGap);
-    const drawableW = cellW * (1 - padding * 2);
-    const drawableH = cellH * (1 - padding * 2);
-    const scale = Math.min(drawableW / face.width, drawableH / face.height);
-    const offsetX = boxX + (cellW - face.width * scale) * 0.5;
-    const offsetY = boxY + (cellH - face.height * scale) * 0.5;
-
-    for (const vertexIndex of face.vertices) {
-      const local = face.points2DByVertex.get(vertexIndex);
-      const u = offsetX + (local.x - face.minX) * scale;
-      const v = offsetY + (local.y - face.minY) * scale;
-      uvArray[vertexIndex * 2] = u;
-      uvArray[vertexIndex * 2 + 1] = v;
-    }
-
-    const unorderedUvPoints = [...face.vertices].map((vertexIndex) => (
-      new THREE.Vector2(uvArray[vertexIndex * 2], uvArray[vertexIndex * 2 + 1])
-    ));
-    const centerUv = getPolygonCentroid(unorderedUvPoints);
-    face.uvPoints = unorderedUvPoints
-      .sort((a, b) => Math.atan2(a.y - centerUv.y, a.x - centerUv.x) - Math.atan2(b.y - centerUv.y, b.x - centerUv.x));
-  });
-
-  const values = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
-  selectNumberedFaces(faces, sides)
-    .sort((a, b) => {
-      if (Math.abs(a.center.y - b.center.y) > 1e-4) return b.center.y - a.center.y;
-      const angleA = Math.atan2(a.center.z, a.center.x);
-      const angleB = Math.atan2(b.center.z, b.center.x);
-      return angleA - angleB;
-    })
-    .slice(0, values.length)
-    .forEach((face, index) => {
-      face.label = values[index];
-    });
-
-  nonIndexed.setAttribute('uv', new THREE.Float32BufferAttribute(uvArray, 2));
-  nonIndexed.userData.uvTemplateFaces = faces.map((face) => ({
-    label: face.label,
-    uvPoints: face.uvPoints.map((point) => ({ x: point.x, y: point.y })),
-  }));
-
-  return nonIndexed;
-}
-
 function createFaceLabelMesh(value, face) {
   const xs = face.points2D.map((p) => p.x);
   const ys = face.points2D.map((p) => p.y);
@@ -457,64 +334,13 @@ function createD3Geometry() {
 }
 
 function createDieGeometry(sideCount) {
-  if (sideCount === 3) return buildUvUnwrappedGeometry(createD3Geometry(), sideCount);
-  if (sideCount === 4) return buildUvUnwrappedGeometry(new THREE.TetrahedronGeometry(1), sideCount);
-  if (sideCount === 6) return buildUvUnwrappedGeometry(new THREE.BoxGeometry(1.35, 1.35, 1.35), sideCount);
-  if (sideCount === 8) return buildUvUnwrappedGeometry(new THREE.OctahedronGeometry(1), sideCount);
-  if (sideCount === 12) return buildUvUnwrappedGeometry(new THREE.DodecahedronGeometry(1), sideCount);
-  if (sideCount === 20) return buildUvUnwrappedGeometry(new THREE.IcosahedronGeometry(1), sideCount);
-  return buildUvUnwrappedGeometry(new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sideCount, 64)), sideCount);
-}
-
-function downloadUvTemplate(dieId) {
-  const visual = dieVisuals.get(dieId);
-  if (!visual) return;
-
-  const geometry = visual.mesh.geometry;
-  const uvs = geometry.attributes.uv;
-  if (!uvs) return;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = 2048;
-  canvas.height = 2048;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#0f1525';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = '#e2e8f0';
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 4;
-
-  for (let i = 0; i < uvs.count; i += 3) {
-    const p1 = { x: uvs.getX(i) * canvas.width, y: (1 - uvs.getY(i)) * canvas.height };
-    const p2 = { x: uvs.getX(i + 1) * canvas.width, y: (1 - uvs.getY(i + 1)) * canvas.height };
-    const p3 = { x: uvs.getX(i + 2) * canvas.width, y: (1 - uvs.getY(i + 2)) * canvas.height };
-
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.lineTo(p3.x, p3.y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  const templateFaces = geometry.userData.uvTemplateFaces || [];
-  ctx.fillStyle = '#0b1021';
-  ctx.font = 'bold 72px Inter, Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  templateFaces.forEach((face) => {
-    if (!face.label || !face.uvPoints?.length) return;
-    const centroid = getPolygonCentroid(face.uvPoints);
-    ctx.fillText(String(face.label), centroid.x * canvas.width, (1 - centroid.y) * canvas.height);
-  });
-
-  const link = document.createElement('a');
-  link.href = canvas.toDataURL('image/png');
-  link.download = `die-d${visual.die.sides}-uv-template.png`;
-  link.click();
+  if (sideCount === 3) return createD3Geometry();
+  if (sideCount === 4) return new THREE.TetrahedronGeometry(1);
+  if (sideCount === 6) return new THREE.BoxGeometry(1.35, 1.35, 1.35);
+  if (sideCount === 8) return new THREE.OctahedronGeometry(1);
+  if (sideCount === 12) return new THREE.DodecahedronGeometry(1);
+  if (sideCount === 20) return new THREE.IcosahedronGeometry(1);
+  return new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sideCount, 64));
 }
 
 function createDieMesh(sides) {
@@ -631,13 +457,7 @@ function buildDieCard(die, canvas) {
     await refreshDice();
   });
 
-  const templateBtn = document.createElement('button');
-  templateBtn.textContent = 'Download UV Template';
-  templateBtn.addEventListener('click', () => {
-    downloadUvTemplate(die.id);
-  });
-
-  item.append(title, result, dieCanvas, rollBtn, templateBtn);
+  item.append(title, result, dieCanvas, rollBtn);
   return { item, canvas: dieCanvas };
 }
 
