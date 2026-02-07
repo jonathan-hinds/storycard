@@ -17,6 +17,7 @@ const DIE_FACE_LAYOUTS = {
 const BASE_DIE_COLOR = new THREE.Color(0xe2e8f0);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
+const UV_PRECISION = 100000;
 
 function roundKey(value) {
   return Math.round(value * 10000) / 10000;
@@ -225,6 +226,242 @@ function extractPlanarFaces(geometry) {
       points2D: ordered.map((entry) => entry.point),
     };
   });
+}
+
+function roundUv(value) {
+  return Math.round(value * UV_PRECISION) / UV_PRECISION;
+}
+
+function vertexKey(vertex) {
+  return `${roundUv(vertex.x)}:${roundUv(vertex.y)}:${roundUv(vertex.z)}`;
+}
+
+function edgeKey(a, b) {
+  const keyA = vertexKey(a);
+  const keyB = vertexKey(b);
+  return keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
+}
+
+function extractFacePolygons3D(geometry, sides) {
+  const nonIndexed = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+  const positions = nonIndexed.attributes.position;
+  const groups = new Map();
+
+  for (let i = 0; i < positions.count; i += 3) {
+    const a = new THREE.Vector3().fromBufferAttribute(positions, i);
+    const b = new THREE.Vector3().fromBufferAttribute(positions, i + 1);
+    const c = new THREE.Vector3().fromBufferAttribute(positions, i + 2);
+    const normal = new THREE.Vector3().crossVectors(
+      new THREE.Vector3().subVectors(b, a),
+      new THREE.Vector3().subVectors(c, a)
+    ).normalize();
+    if (normal.dot(a) < 0) {
+      normal.multiplyScalar(-1);
+    }
+    const planeDistance = normal.dot(a);
+    const key = `${roundKey(normal.x)}:${roundKey(normal.y)}:${roundKey(normal.z)}:${roundKey(planeDistance)}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, { normal: normal.clone(), vertices: new Map() });
+    }
+
+    const group = groups.get(key);
+    [a, b, c].forEach((vertex) => {
+      group.vertices.set(vertexKey(vertex), vertex.clone());
+    });
+  }
+
+  const faces = [...groups.values()].map((face, index) => {
+    const vertices = [...face.vertices.values()];
+    const center = vertices.reduce((acc, vertex) => acc.add(vertex), new THREE.Vector3()).multiplyScalar(1 / vertices.length);
+    const { right, up } = getFaceFrame(face.normal);
+    const ordered = vertices
+      .map((vertex) => {
+        const local = vertex.clone().sub(center);
+        return {
+          vertex,
+          point2D: new THREE.Vector2(local.dot(right), local.dot(up)),
+        };
+      })
+      .sort((first, second) => Math.atan2(first.point2D.y, first.point2D.x) - Math.atan2(second.point2D.y, second.point2D.x));
+
+    return {
+      id: index,
+      center,
+      normal: face.normal,
+      points3D: ordered.map((entry) => entry.vertex),
+      points2D: ordered.map((entry) => entry.point2D),
+    };
+  });
+
+  return selectNumberedFaces(faces, sides)
+    .sort((a, b) => {
+      if (Math.abs(a.center.y - b.center.y) > 1e-4) return b.center.y - a.center.y;
+      const angleA = Math.atan2(a.center.z, a.center.x);
+      const angleB = Math.atan2(b.center.z, b.center.x);
+      return angleA - angleB;
+    })
+    .map((face, index) => ({ ...face, id: index }));
+}
+
+function mapFaceValuesForTemplate(sideCount, faceCount) {
+  const values = DIE_FACE_LAYOUTS[sideCount];
+  if (values && values.length === faceCount) return values;
+  return Array.from({ length: faceCount }, (_, i) => i + 1);
+}
+
+function signedDistanceToLine(point, a, b) {
+  const edge = new THREE.Vector2().subVectors(b, a);
+  const rel = new THREE.Vector2().subVectors(point, a);
+  return edge.x * rel.y - edge.y * rel.x;
+}
+
+function projectNeighborFace(points, sourceA, sourceB, targetA, targetB, reverse) {
+  const srcA = reverse ? sourceB : sourceA;
+  const srcB = reverse ? sourceA : sourceB;
+  const sourceEdge = new THREE.Vector2().subVectors(srcB, srcA);
+  const targetEdge = new THREE.Vector2().subVectors(targetB, targetA);
+  const angle = Math.atan2(targetEdge.y, targetEdge.x) - Math.atan2(sourceEdge.y, sourceEdge.x);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+
+  return points.map((point) => {
+    const local = point.clone().sub(srcA);
+    const rotated = new THREE.Vector2(
+      local.x * cos - local.y * sin,
+      local.x * sin + local.y * cos
+    );
+    return rotated.add(targetA);
+  });
+}
+
+function generateUnwrappedNet(geometry, sideCount) {
+  const faces = extractFacePolygons3D(geometry, sideCount);
+  const edgeToFaces = new Map();
+  const neighborMap = new Map();
+
+  faces.forEach((face) => {
+    for (let i = 0; i < face.points3D.length; i += 1) {
+      const a = face.points3D[i];
+      const b = face.points3D[(i + 1) % face.points3D.length];
+      const key = edgeKey(a, b);
+      if (!edgeToFaces.has(key)) edgeToFaces.set(key, []);
+      edgeToFaces.get(key).push({ faceId: face.id, edgeIndex: i });
+    }
+  });
+
+  edgeToFaces.forEach((entries, key) => {
+    if (entries.length !== 2) return;
+    const [first, second] = entries;
+    if (!neighborMap.has(first.faceId)) neighborMap.set(first.faceId, []);
+    if (!neighborMap.has(second.faceId)) neighborMap.set(second.faceId, []);
+    neighborMap.get(first.faceId).push({ faceId: second.faceId, viaEdge: first.edgeIndex, edgeKey: key });
+    neighborMap.get(second.faceId).push({ faceId: first.faceId, viaEdge: second.edgeIndex, edgeKey: key });
+  });
+
+  const placements = new Map();
+  const queue = [];
+  const root = faces[0];
+  placements.set(root.id, root.points2D.map((point) => point.clone()));
+  queue.push(root.id);
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    const currentPlacement = placements.get(currentId);
+    const neighbors = neighborMap.get(currentId) || [];
+
+    neighbors.forEach((neighborInfo) => {
+      if (placements.has(neighborInfo.faceId)) return;
+      const neighborFace = faces.find((face) => face.id === neighborInfo.faceId);
+      const sharedEntries = edgeToFaces.get(neighborInfo.edgeKey);
+      if (!sharedEntries || sharedEntries.length !== 2) return;
+
+      const currentEntry = sharedEntries.find((entry) => entry.faceId === currentId);
+      const neighborEntry = sharedEntries.find((entry) => entry.faceId === neighborInfo.faceId);
+      if (!currentEntry || !neighborEntry) return;
+
+      const curA = currentPlacement[currentEntry.edgeIndex];
+      const curB = currentPlacement[(currentEntry.edgeIndex + 1) % currentPlacement.length];
+
+      const neighA = neighborFace.points2D[neighborEntry.edgeIndex];
+      const neighB = neighborFace.points2D[(neighborEntry.edgeIndex + 1) % neighborFace.points2D.length];
+
+      const candidateA = projectNeighborFace(neighborFace.points2D, neighA, neighB, curA, curB, false);
+      const candidateB = projectNeighborFace(neighborFace.points2D, neighA, neighB, curA, curB, true);
+
+      const currentCentroid = getPolygonCentroid(currentPlacement);
+      const signCurrent = signedDistanceToLine(new THREE.Vector2(currentCentroid.x, currentCentroid.y), curA, curB);
+
+      const centroidA = getPolygonCentroid(candidateA);
+      const signA = signedDistanceToLine(new THREE.Vector2(centroidA.x, centroidA.y), curA, curB);
+
+      const chosen = signA * signCurrent < 0 ? candidateA : candidateB;
+      placements.set(neighborInfo.faceId, chosen);
+      queue.push(neighborInfo.faceId);
+    });
+  }
+
+  const values = mapFaceValuesForTemplate(sideCount, faces.length);
+  return faces.map((face, index) => ({
+    id: face.id,
+    value: values[index] ?? index + 1,
+    points: placements.get(face.id) || face.points2D,
+  }));
+}
+
+function downloadUvTemplate(sides) {
+  const sideCount = Number.parseInt(sides, 10);
+  const geometry = createDieGeometry(sideCount);
+  const net = generateUnwrappedNet(geometry, sideCount);
+  geometry.dispose();
+
+  const padding = 32;
+  const minX = Math.min(...net.flatMap((face) => face.points.map((point) => point.x)));
+  const maxX = Math.max(...net.flatMap((face) => face.points.map((point) => point.x)));
+  const minY = Math.min(...net.flatMap((face) => face.points.map((point) => point.y)));
+  const maxY = Math.max(...net.flatMap((face) => face.points.map((point) => point.y)));
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const size = 2048;
+  const scale = Math.min((size - padding * 2) / width, (size - padding * 2) / height);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(width * scale + padding * 2);
+  canvas.height = Math.ceil(height * scale + padding * 2);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 3;
+
+  const toCanvas = (point) => new THREE.Vector2(
+    padding + (point.x - minX) * scale,
+    canvas.height - (padding + (point.y - minY) * scale)
+  );
+
+  net.forEach((face) => {
+    const mapped = face.points.map(toCanvas);
+    ctx.beginPath();
+    mapped.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+
+    const centroid = getPolygonCentroid(mapped);
+    const fontSize = Math.max(14, Math.sqrt(scale) * 2.5);
+    ctx.font = `500 ${fontSize}px Inter, Arial, sans-serif`;
+    ctx.fillStyle = '#475569';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(face.value), centroid.x, centroid.y);
+  });
+
+  const link = document.createElement('a');
+  link.download = `d${sideCount}-uv-template.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
 }
 
 function createFaceLabelMesh(value, face) {
@@ -457,7 +694,14 @@ function buildDieCard(die, canvas) {
     await refreshDice();
   });
 
-  item.append(title, result, dieCanvas, rollBtn);
+  const templateBtn = document.createElement('button');
+  templateBtn.textContent = 'Download UV template';
+  templateBtn.className = 'secondary-action';
+  templateBtn.addEventListener('click', () => {
+    downloadUvTemplate(die.sides);
+  });
+
+  item.append(title, result, dieCanvas, rollBtn, templateBtn);
   return { item, canvas: dieCanvas };
 }
 
