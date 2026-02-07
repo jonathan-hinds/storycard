@@ -278,6 +278,7 @@
     const areaSize = Number.isFinite(options.areaSize) ? options.areaSize : 8;
     const baseSteps = Number.isFinite(options.steps) ? options.steps : 200;
     const steps = Math.max(baseSteps, 720);
+    const maxSteps = Math.max(steps, sides >= 12 ? 2400 : 1400);
     const dt = Number.isFinite(options.dt) ? options.dt : 1 / 60;
 
     const rng = createSeededRandom(seed);
@@ -310,7 +311,8 @@
 
     const frames = [];
 
-    for (let i = 0; i < steps; i += 1) {
+    let settled = false;
+    for (let i = 0; i < maxSteps; i += 1) {
       const gravity = 24;
       const centerForce = 2.1;
       vx += -px * centerForce * dt;
@@ -436,6 +438,17 @@
           wx = 0;
           wz = 0;
         }
+
+        const nearlyStopped = Math.hypot(vx, vz, wx, wy, wz) < 0.045;
+        const isOnEdge = faceInfo.alignment < settleProfile.flatAlignment - 0.00045;
+        if (nearlyStopped && isOnEdge) {
+          const nudge = sides >= 12 ? 0.22 : 0.12;
+          vx += (rng() * 2 - 1) * nudge;
+          vz += (rng() * 2 - 1) * nudge;
+          wx += (rng() * 2 - 1) * (nudge * 3.4);
+          wy += (rng() * 2 - 1) * (nudge * 2.2);
+          wz += (rng() * 2 - 1) * (nudge * 3.4);
+        }
       }
 
       const travel = Math.hypot(vx, vz);
@@ -483,6 +496,7 @@
       }
 
       if (stableFaceFrames >= settleProfile.stableFrames && i > 35) {
+        settled = true;
         break;
       }
     }
@@ -510,6 +524,7 @@
     }
 
     const outcome = outcomeFromOrientation(renderedOrientation, sides) || angleToOutcome(finalFrame.angle, sides);
+    const finalFaceInfo = topFaceInfo(renderedOrientation, sides);
 
     return {
       seed,
@@ -520,6 +535,8 @@
       outcome,
       metadata: {
         totalFrames: frames.length,
+        settled,
+        finalAlignment: Number(finalFaceInfo.alignment.toFixed(6)),
       },
     };
   }
