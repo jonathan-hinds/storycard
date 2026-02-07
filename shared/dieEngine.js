@@ -191,10 +191,10 @@
         mass: 1,
         invMass: 1,
         invInertia: config.invInertia,
-        friction: 0.65,
+        friction: 1.25,
         restitution: 0.03,
-        linearDamping: 1.5,
-        angularDamping: 2.6,
+        linearDamping: 1.9,
+        angularDamping: 3.4,
         ccdSweepRadius: 0.02,
       };
       this.bodies.push(body);
@@ -414,9 +414,9 @@
     roll() {
       if (this.rollApplied) return;
       const impulse = {
-        x: (this.random() * 2 - 1) * 1.8,
-        y: 0.55 + this.random() * 0.45,
-        z: (this.random() * 2 - 1) * 1.8,
+        x: (this.random() * 2 - 1) * 3.6,
+        y: 1.1 + this.random() * 0.9,
+        z: (this.random() * 2 - 1) * 3.6,
       };
       const angularImpulse = {
         x: (this.random() * 2 - 1) * 5.2,
@@ -431,7 +431,7 @@
       this.body.angularVelocity.y += angularImpulse.y;
       this.body.angularVelocity.z += angularImpulse.z;
 
-      this.#clampVelocity(5.5, 12.0);
+      this.#clampVelocity(11.0, 18.0);
       this.rollApplied = true;
 
       return {
