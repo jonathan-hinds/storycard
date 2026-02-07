@@ -1,41 +1,9 @@
 import * as THREE from 'https://unpkg.com/three@0.164.1/build/three.module.js';
 
-const canvas = document.getElementById('die-canvas');
 const dieList = document.getElementById('die-list');
 const createDieForm = document.getElementById('create-die-form');
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x11131a);
-
-const camera = new THREE.PerspectiveCamera(24, 1, 0.1, 100);
-camera.position.set(0, 5.8, 0.001);
-camera.lookAt(0, 0, 0);
-
-const ambient = new THREE.AmbientLight(0xffffff, 1.0);
-scene.add(ambient);
-
-const topLight = new THREE.DirectionalLight(0xffffff, 0.75);
-topLight.position.set(0, 8, 0.8);
-scene.add(topLight);
-
 const dieVisuals = new Map();
-let selectedDieId = null;
-const cameraOffset = new THREE.Vector3(0, 5.57, 0.001);
-const dieWorldPosition = new THREE.Vector3();
-
-function resize() {
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  renderer.setSize(width, height, false);
-  camera.aspect = width / Math.max(height, 1);
-  camera.updateProjectionMatrix();
-}
-
-window.addEventListener('resize', resize);
-resize();
 
 function makeDieTexture(label) {
   const texCanvas = document.createElement('canvas');
@@ -85,7 +53,6 @@ function makeFaceTexture(value) {
 }
 
 function createD6Materials() {
-  // BoxGeometry material order: +x, -x, +y, -y, +z, -z
   const faceValues = [3, 4, 1, 6, 2, 5];
   return faceValues.map((value) => new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
@@ -115,32 +82,44 @@ function createDieMesh(sides) {
       map: makeDieTexture(`d${sideCount}`),
     });
 
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
-  return mesh;
+  return new THREE.Mesh(geometry, material);
 }
 
-function createConfinedArea(offsetX, offsetZ, areaSize) {
-  const group = new THREE.Group();
-  group.position.set(offsetX, 0, offsetZ);
+function createSceneForCanvas(canvas, sides) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(300, 300, false);
 
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x11131a);
+
+  const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 100);
+  camera.position.set(0, 5.8, 0.001);
+  camera.lookAt(0, 0.2, 0);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 1.0);
+  scene.add(ambient);
+
+  const topLight = new THREE.DirectionalLight(0xffffff, 0.75);
+  topLight.position.set(0, 8, 0.8);
+  scene.add(topLight);
+
+  const group = new THREE.Group();
+  const areaSize = 7.1;
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(areaSize, areaSize),
     new THREE.MeshStandardMaterial({ color: 0x141821, roughness: 1, metalness: 0.02, transparent: true, opacity: 0.35 })
   );
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0;
   group.add(floor);
 
   const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x1a2030, roughness: 0.95, metalness: 0.04, transparent: true, opacity: 0.18 });
-  const wallLength = areaSize;
   const wallHeight = 0.52;
   const wallThickness = 0.2;
-  const half = wallLength / 2;
+  const half = areaSize / 2;
 
-  const northSouth = new THREE.BoxGeometry(wallLength, wallHeight, wallThickness);
-  const eastWest = new THREE.BoxGeometry(wallThickness, wallHeight, wallLength);
+  const northSouth = new THREE.BoxGeometry(areaSize, wallHeight, wallThickness);
+  const eastWest = new THREE.BoxGeometry(wallThickness, wallHeight, areaSize);
 
   const north = new THREE.Mesh(northSouth, wallMaterial);
   north.position.set(0, wallHeight / 2, half);
@@ -158,22 +137,11 @@ function createConfinedArea(offsetX, offsetZ, areaSize) {
   west.position.x = -half;
   group.add(west);
 
+  const mesh = createDieMesh(sides);
+  group.add(mesh);
   scene.add(group);
-  return group;
-}
 
-function layoutDieAreas() {
-  const visuals = Array.from(dieVisuals.values());
-  const columns = Math.max(1, Math.ceil(Math.sqrt(visuals.length)));
-  const spacing = 11;
-
-  visuals.forEach((visual, index) => {
-    const col = index % columns;
-    const row = Math.floor(index / columns);
-    const x = (col - (columns - 1) / 2) * spacing;
-    const z = (row - Math.floor((visuals.length - 1) / columns) / 2) * spacing;
-    visual.group.position.set(x, 0, z);
-  });
+  return { renderer, scene, camera, mesh, animation: null };
 }
 
 function applyFrameToMesh(mesh, frame) {
@@ -186,43 +154,72 @@ function applyFrameToMesh(mesh, frame) {
   }
 }
 
+function buildDieCard(die, canvas) {
+  const item = document.createElement('article');
+  item.className = 'die-item';
+
+  const title = document.createElement('div');
+  title.className = 'die-title';
+  title.textContent = `Die ${die.sides} sides`;
+
+  const result = document.createElement('div');
+  result.className = 'die-result';
+  result.textContent = `Last outcome: ${die.lastOutcome ?? '-'} | Rolls: ${die.rolls}`;
+
+  const dieCanvas = canvas || document.createElement('canvas');
+  dieCanvas.className = 'die-canvas';
+  dieCanvas.width = 300;
+  dieCanvas.height = 300;
+
+  const rollBtn = document.createElement('button');
+  rollBtn.textContent = 'Roll';
+  rollBtn.addEventListener('click', async () => {
+    await rollDie(die.id);
+    await refreshDice();
+  });
+
+  item.append(title, result, dieCanvas, rollBtn);
+  return { item, canvas: dieCanvas };
+}
+
 function renderDieList(dice) {
   dieList.innerHTML = '';
 
+  const activeIds = new Set(dice.map((die) => die.id));
+  for (const [id, visual] of dieVisuals.entries()) {
+    if (!activeIds.has(id)) {
+      visual.renderer.dispose();
+      dieVisuals.delete(id);
+    }
+  }
+
   dice.forEach((die) => {
-    const item = document.createElement('article');
-    item.className = 'die-item';
-    if (die.id === selectedDieId) {
-      item.style.outline = '2px solid #38bdf8';
+    const existing = dieVisuals.get(die.id);
+    const { item, canvas } = buildDieCard(die, existing?.canvas);
+
+    if (existing) {
+      existing.die = die;
+      existing.canvas = canvas;
+    } else {
+      dieVisuals.set(die.id, {
+        die,
+        canvas,
+        ...createSceneForCanvas(canvas, die.sides),
+      });
     }
 
-    const title = document.createElement('div');
-    title.textContent = `Die ${die.sides} sides`;
-
-    const result = document.createElement('div');
-    result.textContent = `Last outcome: ${die.lastOutcome ?? '-'} | Rolls: ${die.rolls}`;
-
-    const row = document.createElement('div');
-    row.className = 'row';
-
-    const selectBtn = document.createElement('button');
-    selectBtn.textContent = 'Focus';
-    selectBtn.addEventListener('click', () => {
-      selectedDieId = die.id;
-      refreshDice();
-    });
-
-    const rollBtn = document.createElement('button');
-    rollBtn.textContent = 'Roll';
-    rollBtn.addEventListener('click', async () => {
-      await rollDie(die.id);
-      await refreshDice();
-    });
-
-    row.append(selectBtn, rollBtn);
-    item.append(title, result, row);
     dieList.append(item);
   });
+}
+
+function animateRoll(dieId, roll) {
+  const visual = dieVisuals.get(dieId);
+  if (!visual) return;
+
+  visual.animation = {
+    frames: roll.frames,
+    index: 0,
+  };
 }
 
 async function createDie(sides) {
@@ -236,34 +233,6 @@ async function createDie(sides) {
   if (!response.ok) {
     throw new Error(data.error || 'Failed to create die');
   }
-
-  const die = data.die;
-  const group = createConfinedArea(0, 0, die.areaSize + 0.3);
-  const mesh = createDieMesh(die.sides);
-  group.add(mesh);
-
-  dieVisuals.set(die.id, {
-    die,
-    group,
-    mesh,
-    animation: null,
-  });
-
-  if (!selectedDieId) {
-    selectedDieId = die.id;
-  }
-
-  layoutDieAreas();
-}
-
-function animateRoll(dieId, roll) {
-  const visual = dieVisuals.get(dieId);
-  if (!visual) return;
-
-  visual.animation = {
-    frames: roll.frames,
-    index: 0,
-  };
 }
 
 async function rollDie(dieId) {
@@ -297,26 +266,18 @@ function tick() {
   requestAnimationFrame(tick);
 
   for (const visual of dieVisuals.values()) {
-    if (!visual.animation) continue;
-    const frame = visual.animation.frames[visual.animation.index];
-    if (frame) {
-      applyFrameToMesh(visual.mesh, frame);
-      visual.animation.index += 1;
-    } else {
-      visual.animation = null;
+    if (visual.animation) {
+      const frame = visual.animation.frames[visual.animation.index];
+      if (frame) {
+        applyFrameToMesh(visual.mesh, frame);
+        visual.animation.index += 1;
+      } else {
+        visual.animation = null;
+      }
     }
-  }
 
-  if (selectedDieId) {
-    const selected = dieVisuals.get(selectedDieId);
-    if (selected) {
-      selected.mesh.getWorldPosition(dieWorldPosition);
-      camera.position.copy(dieWorldPosition).add(cameraOffset);
-      camera.lookAt(dieWorldPosition);
-    }
+    visual.renderer.render(visual.scene, visual.camera);
   }
-
-  renderer.render(scene, camera);
 }
 
 tick();

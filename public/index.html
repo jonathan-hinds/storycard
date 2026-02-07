@@ -10,20 +10,16 @@
     <main class="layout">
       <section class="controls">
         <h1>3D N-Sided Dice Demo</h1>
-        <p>Create independent dice instances, then roll each one. Rolls are simulated on the server and replayed here.</p>
+        <p>Create independent dice instances. Every die gets its own panel, camera, and roll control.</p>
 
         <form id="create-die-form" class="card">
           <label for="sides">Number of sides</label>
           <input id="sides" name="sides" type="number" min="3" max="100" value="6" required />
           <button type="submit">Create Die</button>
         </form>
-
-        <div id="die-list" class="die-list"></div>
       </section>
 
-      <section class="viewer">
-        <canvas id="die-canvas"></canvas>
-      </section>
+      <section id="die-list" class="die-grid"></section>
     </main>
 
     <script src="/shared/dieEngine.js"></script>
