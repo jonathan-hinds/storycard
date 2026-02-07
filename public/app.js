@@ -716,7 +716,7 @@ function createSceneForCanvas(canvas, sides) {
   scene.background = new THREE.Color(0x11131a);
 
   const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 100);
-  const cameraOffset = new THREE.Vector3(0, 5.8, 0.001);
+  const cameraOffset = new THREE.Vector3(0, 5.8, 0);
 
   const ambient = new THREE.AmbientLight(0xffffff, 1.0);
   scene.add(ambient);
@@ -762,7 +762,7 @@ function createSceneForCanvas(canvas, sides) {
   group.add(mesh);
   scene.add(group);
 
-  const lookOffset = new THREE.Vector3(0, 0.2, 0);
+  const lookOffset = new THREE.Vector3(0, 0, 0);
   camera.position.copy(mesh.position).add(cameraOffset);
   camera.lookAt(mesh.position.clone().add(lookOffset));
 
