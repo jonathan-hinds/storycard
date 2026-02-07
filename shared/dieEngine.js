@@ -276,8 +276,8 @@
       const half = areaSize / 2;
       this.position = { x: (random() * 2 - 1) * areaSize * 0.08, y: 2 + random() * 0.6, z: (random() * 2 - 1) * areaSize * 0.08 };
       this.orientation = normalizeQuat({ x: random() * 0.4, y: random() * 0.4, z: random() * 0.4, w: 1 });
-      this.velocity = { x: (random() * 2 - 1) * 6, y: 0, z: (random() * 2 - 1) * 6 };
-      this.angularVelocity = { x: (random() * 2 - 1) * 18, y: (random() * 2 - 1) * 18, z: (random() * 2 - 1) * 18 };
+      this.velocity = { x: (random() * 2 - 1) * 3.8, y: 0, z: (random() * 2 - 1) * 3.8 };
+      this.angularVelocity = { x: (random() * 2 - 1) * 10.5, y: (random() * 2 - 1) * 10.5, z: (random() * 2 - 1) * 10.5 };
       this.mass = 1;
       this.invMass = 1 / this.mass;
       const bounds = this.vertices.reduce((acc, v) => ({
@@ -291,12 +291,12 @@
         y: 12 / (this.mass * (sx * sx + sz * sz)),
         z: 12 / (this.mass * (sx * sx + sy * sy)),
       };
-      this.friction = 0.42;
-      this.restitution = 0.12;
-      this.linearDamping = 0.28;
-      this.angularDamping = 0.42;
-      this.sleepLinearThreshold = 0.1;
-      this.sleepAngularThreshold = 0.2;
+      this.friction = 0.5;
+      this.restitution = 0.08;
+      this.linearDamping = 0.45;
+      this.angularDamping = 0.68;
+      this.sleepLinearThreshold = 0.08;
+      this.sleepAngularThreshold = 0.14;
       this.sleepFrames = 0;
       this.maxX = half - 0.2;
       this.maxZ = half - 0.2;
@@ -367,7 +367,8 @@
         const angularOk = info.angularSpeed < this.die.sleepAngularThreshold;
         const noPenetration = info.minGroundDist > -0.002;
         const hasGroundContact = info.contactPoints > 0 || info.minGroundDist < 0.02;
-        if (linearOk && angularOk && noPenetration && hasGroundContact) this.die.sleepFrames += 1;
+        const topAligned = info.topDot > 0.97;
+        if (linearOk && angularOk && noPenetration && hasGroundContact && topAligned) this.die.sleepFrames += 1;
         else this.die.sleepFrames = 0;
 
         frames.push({
@@ -406,21 +407,29 @@
           this.debug.log(`settled-fallback pos=(${this.die.position.x.toFixed(3)},${this.die.position.y.toFixed(3)},${this.die.position.z.toFixed(3)}) lin=${finalDiagnostics.linearSpeed.toFixed(4)} ang=${finalDiagnostics.angularSpeed.toFixed(4)} dotUp=${finalDiagnostics.topDot.toFixed(4)} contacts=${finalDiagnostics.contactPoints}`);
         }
       }
-      if (finalDiagnostics.topDot < 0.95) {
+      if (finalDiagnostics.topDot < 0.999999) {
         const before = topFaceInfo(this.die.orientation, this.die.sides);
-        const axis = { x: before.normal.z, y: 0, z: -before.normal.x };
-        const axisLen = Math.hypot(axis.x, axis.y, axis.z);
-        if (axisLen > 1e-6) {
-          const angle = Math.acos(clamp(before.alignment, -1, 1));
-          const s = Math.sin(angle / 2) / axisLen;
-          const correction = normalizeQuat({ x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(angle / 2) });
-          this.die.orientation = normalizeQuat(mulQuat(correction, this.die.orientation));
-          this.die.velocity = { x: 0, y: 0, z: 0 };
-          this.die.angularVelocity = { x: 0, y: 0, z: 0 };
+        const up = { x: 0, y: 1, z: 0 };
+        let axis = {
+          x: before.normal.y * up.z - before.normal.z * up.y,
+          y: before.normal.z * up.x - before.normal.x * up.z,
+          z: before.normal.x * up.y - before.normal.y * up.x,
+        };
+        let axisLen = Math.hypot(axis.x, axis.y, axis.z);
+        if (axisLen <= 1e-6) {
+          axis = { x: 1, y: 0, z: 0 };
+          axisLen = 1;
         }
+        const angle = Math.acos(clamp(before.alignment, -1, 1));
+        const s = Math.sin(angle / 2) / axisLen;
+        const correction = normalizeQuat({ x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(angle / 2) });
+        this.die.orientation = normalizeQuat(mulQuat(correction, this.die.orientation));
+        this.die.velocity = { x: 0, y: 0, z: 0 };
+        this.die.angularVelocity = { x: 0, y: 0, z: 0 };
       }
 
       const top = topFaceInfo(this.die.orientation, this.die.sides);
+      const topDotUp = settled ? 1 : top.alignment;
       const last = frames[frames.length - 1];
       if (last) {
         last.qx = Number(this.die.orientation.x.toFixed(6));
@@ -437,7 +446,7 @@
           finalPosition: { ...this.die.position },
           finalVelocity: { ...this.die.velocity },
           finalAngularVelocity: { ...this.die.angularVelocity },
-          topDotUp: top.alignment,
+          topDotUp,
           topFaceValue: top.value,
           contactPoints: finalDiagnostics.contactPoints,
           logs: this.debug.logs,
