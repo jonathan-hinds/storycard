@@ -104,9 +104,9 @@ function getSettledOutcomeQuaternion(sides, outcome) {
     // These orientations intentionally keep the top face text in a readable direction.
     if (safeOutcome === 1) targetRotation.set(0, 0, 0);
     else if (safeOutcome === 2) targetRotation.set(-Math.PI / 2, 0, 0);
-    else if (safeOutcome === 3) targetRotation.set(0, 0, -Math.PI / 2);
-    else if (safeOutcome === 4) targetRotation.set(0, 0, Math.PI / 2);
-    else if (safeOutcome === 5) targetRotation.set(Math.PI / 2, 0, 0);
+    else if (safeOutcome === 3) targetRotation.set(0, Math.PI / 2, -Math.PI / 2);
+    else if (safeOutcome === 4) targetRotation.set(0, -Math.PI / 2, Math.PI / 2);
+    else if (safeOutcome === 5) targetRotation.set(Math.PI / 2, Math.PI, 0);
     else targetRotation.set(Math.PI, 0, 0);
   } else {
     const yaw = ((safeOutcome - 1) / sides) * Math.PI * 2;
