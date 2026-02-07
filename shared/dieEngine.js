@@ -205,11 +205,42 @@
     return winningValue;
   }
 
+  function getD6TopFace(orientation) {
+    const faces = [
+      { value: 3, normal: { x: 1, y: 0, z: 0 } },
+      { value: 4, normal: { x: -1, y: 0, z: 0 } },
+      { value: 1, normal: { x: 0, y: 1, z: 0 } },
+      { value: 6, normal: { x: 0, y: -1, z: 0 } },
+      { value: 2, normal: { x: 0, y: 0, z: 1 } },
+      { value: 5, normal: { x: 0, y: 0, z: -1 } },
+    ];
+
+    let topFace = faces[2];
+    let topNormal = rotateVectorByQuat(topFace.normal, orientation);
+    let bestDot = topNormal.y;
+
+    for (const face of faces) {
+      const worldNormal = rotateVectorByQuat(face.normal, orientation);
+      if (worldNormal.y > bestDot) {
+        bestDot = worldNormal.y;
+        topFace = face;
+        topNormal = worldNormal;
+      }
+    }
+
+    return {
+      value: topFace.value,
+      dot: bestDot,
+      worldNormal: topNormal,
+    };
+  }
+
   function simulateRoll(options) {
     const sides = normalizeSides(options.sides);
     const seed = String(options.seed || Date.now());
     const areaSize = Number.isFinite(options.areaSize) ? options.areaSize : 8;
     const steps = Number.isFinite(options.steps) ? options.steps : 200;
+    const maxSteps = sides === 6 ? Math.max(steps, 520) : steps;
     const dt = Number.isFinite(options.dt) ? options.dt : 1 / 60;
 
     const rng = createSeededRandom(seed);
@@ -230,10 +261,12 @@
     let wy = (rng() * 2 - 1) * 20;
     let wz = (rng() * 2 - 1) * 20;
     const orientation = normalizeQuat({ x: 0, y: 0, z: 0, w: 1 });
+    let d6LowMotionFrames = 0;
+    let d6Settled = false;
 
     const frames = [];
 
-    for (let i = 0; i < steps; i += 1) {
+    for (let i = 0; i < maxSteps; i += 1) {
       const gravity = 24;
       const centerForce = 2.1;
       vx += -px * centerForce * dt;
@@ -327,16 +360,41 @@
 
       const speed = Math.hypot(vx, vy, vz);
       const spin = Math.hypot(wx, wy, wz);
-      if (sides === 6 && py <= floorY + 0.001 && speed < 0.2 && spin < 0.35) {
-        py = floorY;
-        vx = 0;
-        vy = 0;
-        vz = 0;
-        wx = 0;
-        wy = 0;
-        wz = 0;
-        const flattened = snapD6OrientationFlat(orientation);
-        setQuaternion(orientation, flattened);
+      const grounded = py <= floorY + 0.001;
+      if (sides === 6 && grounded) {
+        vx *= 0.92;
+        vz *= 0.92;
+        wx *= 0.88;
+        wy *= 0.88;
+        wz *= 0.88;
+      }
+
+      if (sides === 6 && grounded) {
+        const topFace = getD6TopFace(orientation);
+
+        if (speed < 0.8 && spin < 1.6) {
+          d6LowMotionFrames += 1;
+          if (topFace.dot <= 0.985) {
+            wx += -topFace.worldNormal.z * 3.1 * dt;
+            wz += topFace.worldNormal.x * 3.1 * dt;
+            wy *= 0.78;
+          }
+        } else {
+          d6LowMotionFrames = 0;
+        }
+
+        if (d6LowMotionFrames >= 24) {
+          py = floorY;
+          vx = 0;
+          vy = 0;
+          vz = 0;
+          wx = 0;
+          wy = 0;
+          wz = 0;
+          const flattened = snapD6OrientationFlat(orientation);
+          setQuaternion(orientation, flattened);
+          d6Settled = true;
+        }
       }
 
       frames.push({
@@ -357,8 +415,33 @@
         qw: Number(orientation.w.toFixed(6)),
       });
 
-      if (vx === 0 && vy === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0 && i > 35) {
+      if (vx === 0 && vy === 0 && vz === 0 && wx === 0 && wy === 0 && wz === 0 && i > 35 && (sides !== 6 || d6Settled)) {
         break;
+      }
+    }
+
+    if (sides === 6 && !d6Settled && frames.length > 0) {
+      const flattened = snapD6OrientationFlat(orientation);
+      setQuaternion(orientation, flattened);
+      const settleStart = frames[frames.length - 1];
+      for (let hold = 0; hold < 24; hold += 1) {
+        frames.push({
+          step: settleStart.step + hold + 1,
+          x: settleStart.x,
+          y: Number(floorY.toFixed(4)),
+          z: settleStart.z,
+          angle: settleStart.angle,
+          vx: 0,
+          vy: 0,
+          vz: 0,
+          wx: 0,
+          wy: 0,
+          wz: 0,
+          qx: Number(orientation.x.toFixed(6)),
+          qy: Number(orientation.y.toFixed(6)),
+          qz: Number(orientation.z.toFixed(6)),
+          qw: Number(orientation.w.toFixed(6)),
+        });
       }
     }
 
