@@ -407,29 +407,8 @@
           this.debug.log(`settled-fallback pos=(${this.die.position.x.toFixed(3)},${this.die.position.y.toFixed(3)},${this.die.position.z.toFixed(3)}) lin=${finalDiagnostics.linearSpeed.toFixed(4)} ang=${finalDiagnostics.angularSpeed.toFixed(4)} dotUp=${finalDiagnostics.topDot.toFixed(4)} contacts=${finalDiagnostics.contactPoints}`);
         }
       }
-      if (finalDiagnostics.topDot < 0.999999) {
-        const before = topFaceInfo(this.die.orientation, this.die.sides);
-        const up = { x: 0, y: 1, z: 0 };
-        let axis = {
-          x: before.normal.y * up.z - before.normal.z * up.y,
-          y: before.normal.z * up.x - before.normal.x * up.z,
-          z: before.normal.x * up.y - before.normal.y * up.x,
-        };
-        let axisLen = Math.hypot(axis.x, axis.y, axis.z);
-        if (axisLen <= 1e-6) {
-          axis = { x: 1, y: 0, z: 0 };
-          axisLen = 1;
-        }
-        const angle = Math.acos(clamp(before.alignment, -1, 1));
-        const s = Math.sin(angle / 2) / axisLen;
-        const correction = normalizeQuat({ x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(angle / 2) });
-        this.die.orientation = normalizeQuat(mulQuat(correction, this.die.orientation));
-        this.die.velocity = { x: 0, y: 0, z: 0 };
-        this.die.angularVelocity = { x: 0, y: 0, z: 0 };
-      }
-
       const top = topFaceInfo(this.die.orientation, this.die.sides);
-      const topDotUp = settled ? 1 : top.alignment;
+      const topDotUp = top.alignment;
       const last = frames[frames.length - 1];
       if (last) {
         last.qx = Number(this.die.orientation.x.toFixed(6));
