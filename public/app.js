@@ -14,57 +14,224 @@ const DIE_FACE_LAYOUTS = {
   20: Array.from({ length: 20 }, (_, i) => i + 1),
 };
 
-function makeFaceTexture(value, shape = 'square') {
-  const texCanvas = document.createElement('canvas');
-  texCanvas.width = 512;
-  texCanvas.height = 512;
-  const ctx = texCanvas.getContext('2d');
+const BASE_DIE_COLOR = new THREE.Color(0xe2e8f0);
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
 
-  if (shape === 'triangle') {
-    ctx.fillStyle = '#f8fafc';
-    ctx.beginPath();
-    ctx.moveTo(256, 30);
-    ctx.lineTo(482, 470);
-    ctx.lineTo(30, 470);
-    ctx.closePath();
-    ctx.fill();
+function roundKey(value) {
+  return Math.round(value * 10000) / 10000;
+}
 
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 14;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-  } else {
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillRect(0, 0, 512, 512);
+function computeInsetPolygon(points, margin) {
+  const area = points.reduce((acc, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return acc + (point.x * next.y - point.y * next.x);
+  }, 0) * 0.5;
+  const isCCW = area >= 0;
+  const insetLines = [];
 
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 14;
-    ctx.strokeRect(30, 30, 452, 452);
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const edge = new THREE.Vector2().subVectors(b, a).normalize();
+    const inward = isCCW ? new THREE.Vector2(-edge.y, edge.x) : new THREE.Vector2(edge.y, -edge.x);
+    insetLines.push({ point: a.clone().addScaledVector(inward, margin), dir: edge });
   }
 
+  const intersections = [];
+  for (let i = 0; i < insetLines.length; i += 1) {
+    const first = insetLines[i];
+    const second = insetLines[(i + 1) % insetLines.length];
+    const det = first.dir.x * second.dir.y - first.dir.y * second.dir.x;
+    if (Math.abs(det) < 1e-5) return null;
+    const delta = new THREE.Vector2().subVectors(second.point, first.point);
+    const t = (delta.x * second.dir.y - delta.y * second.dir.x) / det;
+    intersections.push(first.point.clone().addScaledVector(first.dir, t));
+  }
+
+  return intersections;
+}
+
+function getFaceFrame(normal) {
+  const up = WORLD_UP.clone().projectOnPlane(normal);
+  if (up.lengthSq() < 1e-6) {
+    up.copy(WORLD_RIGHT).projectOnPlane(normal);
+  }
+  up.normalize();
+  const right = new THREE.Vector3().crossVectors(up, normal).normalize();
+  return { right, up };
+}
+
+function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+
+  const xs = facePoints2D.map((p) => p.x);
+  const ys = facePoints2D.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const width = Math.max(1e-5, maxX - minX);
+  const height = Math.max(1e-5, maxY - minY);
+
+  const toCanvas = (point) => ({
+    x: ((point.x - minX) / width) * size,
+    y: ((maxY - point.y) / height) * size,
+  });
+
+  const insetCanvas = insetPoints2D.map(toCanvas);
+  ctx.save();
+  ctx.beginPath();
+  insetCanvas.forEach((point, index) => {
+    if (index === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  });
+  ctx.closePath();
+  ctx.clip();
+
+  const insetXs = insetCanvas.map((p) => p.x);
+  const insetYs = insetCanvas.map((p) => p.y);
+  const safeWidth = Math.max(...insetXs) - Math.min(...insetXs);
+  const safeHeight = Math.max(...insetYs) - Math.min(...insetYs);
+  const centerX = (Math.min(...insetXs) + Math.max(...insetXs)) * 0.5;
+  const centerY = (Math.min(...insetYs) + Math.max(...insetYs)) * 0.5;
+
   const text = String(value);
-  const fontSize = text.length > 1 ? 210 : 280;
-  ctx.fillStyle = '#0f172a';
-  ctx.font = `bold ${fontSize}px sans-serif`;
+  let low = 24;
+  let high = 420;
+  let best = 120;
+  for (let i = 0; i < 16; i += 1) {
+    const mid = (low + high) / 2;
+    ctx.font = `700 ${mid}px Inter, Arial, sans-serif`;
+    const metrics = ctx.measureText(text);
+    const textHeight = (metrics.actualBoundingBoxAscent || mid * 0.8) + (metrics.actualBoundingBoxDescent || mid * 0.2);
+    if (metrics.width <= safeWidth * 0.8 && textHeight <= safeHeight * 0.8) {
+      best = mid;
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  ctx.fillStyle = '#0b1021';
+  ctx.font = `700 ${best}px Inter, Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const yPosition = shape === 'triangle' ? 300 : 276;
-  ctx.fillText(text, 256, yPosition);
+  ctx.fillText(text, centerX, centerY);
+  ctx.restore();
 
-  const texture = new THREE.CanvasTexture(texCanvas);
+  const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
+  texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
-function createFaceMaterials(sides) {
+function extractPlanarFaces(geometry) {
+  const nonIndexed = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+  const positions = nonIndexed.attributes.position;
+  const groups = new Map();
+
+  for (let i = 0; i < positions.count; i += 3) {
+    const a = new THREE.Vector3().fromBufferAttribute(positions, i);
+    const b = new THREE.Vector3().fromBufferAttribute(positions, i + 1);
+    const c = new THREE.Vector3().fromBufferAttribute(positions, i + 2);
+    const normal = new THREE.Vector3().crossVectors(
+      new THREE.Vector3().subVectors(b, a),
+      new THREE.Vector3().subVectors(c, a)
+    ).normalize();
+    if (normal.dot(a) < 0) {
+      normal.multiplyScalar(-1);
+    }
+    const planeDistance = normal.dot(a);
+    const key = `${roundKey(normal.x)}:${roundKey(normal.y)}:${roundKey(normal.z)}:${roundKey(planeDistance)}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, { normal: normal.clone(), vertices: [] });
+    }
+
+    const group = groups.get(key);
+    [a, b, c].forEach((vertex) => {
+      if (!group.vertices.some((existing) => existing.distanceToSquared(vertex) < 1e-8)) {
+        group.vertices.push(vertex);
+      }
+    });
+  }
+
+  return [...groups.values()].map((face) => {
+    const center = face.vertices.reduce((acc, vertex) => acc.add(vertex), new THREE.Vector3()).multiplyScalar(1 / face.vertices.length);
+    const { right, up } = getFaceFrame(face.normal);
+    const points2D = face.vertices.map((vertex) => {
+      const local = vertex.clone().sub(center);
+      return new THREE.Vector2(local.dot(right), local.dot(up));
+    });
+    const ordered = points2D
+      .map((point, index) => ({ point, vertex: face.vertices[index] }))
+      .sort((first, second) => Math.atan2(first.point.y, first.point.x) - Math.atan2(second.point.y, second.point.x));
+
+    return {
+      center,
+      normal: face.normal,
+      right,
+      up,
+      points2D: ordered.map((entry) => entry.point),
+    };
+  });
+}
+
+function createFaceLabelMesh(value, face) {
+  const xs = face.points2D.map((p) => p.x);
+  const ys = face.points2D.map((p) => p.y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  const marginScale = face.points2D.length === 3 ? 0.24 : face.points2D.length === 5 ? 0.18 : 0.15;
+  const insetMargin = Math.min(width, height) * marginScale;
+  const inset = computeInsetPolygon(face.points2D, insetMargin)
+    || face.points2D.map((point) => point.clone().multiplyScalar(0.76));
+
+  const texture = drawFaceLabelTexture(value, face.points2D, inset);
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false })
+  );
+  plane.position.copy(face.center).addScaledVector(face.normal, 0.01);
+  const basis = new THREE.Matrix4().makeBasis(face.right, face.up, face.normal);
+  plane.quaternion.setFromRotationMatrix(basis);
+  plane.renderOrder = 2;
+  return plane;
+}
+
+function selectNumberedFaces(faces, sides) {
+  if (sides === 3) {
+    return faces.filter((face) => face.points2D.length === 4);
+  }
+  if (sides === 8 || sides === 20) {
+    return faces.filter((face) => face.points2D.length === 3);
+  }
+  if (sides === 12) {
+    return faces.filter((face) => face.points2D.length === 5);
+  }
+  return faces;
+}
+
+function addFaceLabels(mesh, sides) {
   const values = DIE_FACE_LAYOUTS[sides] || Array.from({ length: sides }, (_, i) => i + 1);
-  const faceShape = 'square';
-  return values.map((value) => new THREE.MeshStandardMaterial({
-    color: 0xe2e8f0,
-    metalness: 0.16,
-    roughness: 0.45,
-    map: makeFaceTexture(value, faceShape),
-  }));
+  const faces = selectNumberedFaces(extractPlanarFaces(mesh.geometry), sides)
+    .sort((a, b) => {
+      if (Math.abs(a.center.y - b.center.y) > 1e-4) return b.center.y - a.center.y;
+      const angleA = Math.atan2(a.center.z, a.center.x);
+      const angleB = Math.atan2(b.center.z, b.center.x);
+      return angleA - angleB;
+    })
+    .slice(0, values.length);
+
+  faces.forEach((face, index) => {
+    mesh.add(createFaceLabelMesh(values[index], face));
+  });
 }
 
 function createD3Geometry() {
@@ -132,33 +299,17 @@ function createDieGeometry(sideCount) {
   return new THREE.CylinderGeometry(0.9, 0.9, 1.1, Math.min(sideCount, 64));
 }
 
-function ensureFaceGroups(geometry, sideCount) {
-  if (geometry.groups.length) {
-    return;
-  }
-  const indexCount = geometry.index ? geometry.index.count : geometry.attributes.position.count;
-  const faces = Math.max(1, Math.floor(indexCount / 3));
-  const groupsToUse = Math.min(sideCount, faces);
-  const triPerGroup = Math.max(1, Math.floor(faces / groupsToUse));
-
-  let cursor = 0;
-  for (let groupIndex = 0; groupIndex < groupsToUse; groupIndex += 1) {
-    const isLast = groupIndex === groupsToUse - 1;
-    const faceCount = isLast ? (faces - (triPerGroup * groupIndex)) : triPerGroup;
-    const count = faceCount * 3;
-    geometry.addGroup(cursor, count, groupIndex);
-    cursor += count;
-  }
-}
-
 function createDieMesh(sides) {
   const sideCount = Number.parseInt(sides, 10);
   const geometry = createDieGeometry(sideCount);
-
-  ensureFaceGroups(geometry, sideCount);
-
-  const materials = createFaceMaterials(sideCount);
-  return new THREE.Mesh(geometry, materials);
+  const material = new THREE.MeshStandardMaterial({
+    color: BASE_DIE_COLOR,
+    metalness: 0.16,
+    roughness: 0.45,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  addFaceLabels(mesh, sideCount);
+  return mesh;
 }
 
 function createSceneForCanvas(canvas, sides) {
