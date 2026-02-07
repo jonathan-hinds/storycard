@@ -162,9 +162,9 @@ function drawFaceLabelTexture(value, facePoints2D, insetPoints2D) {
   const textRight = finalMetrics.actualBoundingBoxRight ?? finalMetrics.width;
   const textAscent = finalMetrics.actualBoundingBoxAscent ?? best * 0.8;
   const textDescent = finalMetrics.actualBoundingBoxDescent ?? best * 0.2;
-  const textCenterX = (textRight - textLeft) * 0.5 + textLeft;
+  const textCenterXOffset = (textRight - textLeft) * 0.5;
   const textCenterY = (textAscent + textDescent) * 0.5 - textDescent;
-  const drawX = faceCenter.x - textCenterX;
+  const drawX = faceCenter.x - textCenterXOffset;
   const drawY = faceCenter.y + textCenterY;
   ctx.fillText(text, drawX, drawY);
   ctx.restore();
