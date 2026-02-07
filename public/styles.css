@@ -43,6 +43,12 @@ button {
   cursor: pointer;
 }
 
+.secondary-action {
+  border-color: #5a6a90;
+  color: #d9e2f6;
+}
+
+
 .die-grid {
   padding: 1rem;
   display: grid;
