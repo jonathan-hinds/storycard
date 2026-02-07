@@ -216,6 +216,58 @@
     };
   }
 
+  function alignOrientationToTopFace(orientation, sides) {
+    const faceInfo = topFaceInfo(orientation, sides);
+    const axis = {
+      x: faceInfo.normal.z,
+      y: 0,
+      z: -faceInfo.normal.x,
+    };
+    const axisLength = Math.hypot(axis.x, axis.y, axis.z);
+    const alignment = clamp(faceInfo.alignment, -1, 1);
+    const angle = Math.acos(alignment);
+
+    if (axisLength <= 1e-8 || angle <= 1e-8) {
+      return {
+        orientation: normalizeQuat({
+          x: orientation.x,
+          y: orientation.y,
+          z: orientation.z,
+          w: orientation.w,
+        }),
+        alignment,
+      };
+    }
+
+    const halfAngle = angle * 0.5;
+    const sinHalf = Math.sin(halfAngle);
+    const invLength = 1 / axisLength;
+    const correction = {
+      x: axis.x * invLength * sinHalf,
+      y: axis.y * invLength * sinHalf,
+      z: axis.z * invLength * sinHalf,
+      w: Math.cos(halfAngle),
+    };
+
+    const q = orientation;
+    const cx = correction.x;
+    const cy = correction.y;
+    const cz = correction.z;
+    const cw = correction.w;
+
+    const snapped = normalizeQuat({
+      x: cw * q.x + cx * q.w + cy * q.z - cz * q.y,
+      y: cw * q.y - cx * q.z + cy * q.w + cz * q.x,
+      z: cw * q.z + cx * q.y - cy * q.x + cz * q.w,
+      w: cw * q.w - cx * q.x - cy * q.y - cz * q.z,
+    });
+
+    return {
+      orientation: snapped,
+      alignment,
+    };
+  }
+
   function outcomeFromOrientation(orientation, sides) {
     return topFaceInfo(orientation, sides).value;
   }
@@ -436,7 +488,7 @@
     }
 
     const finalFrame = frames[frames.length - 1];
-    const renderedOrientation = finalFrame && typeof finalFrame.qx === 'number'
+    const rawRenderedOrientation = finalFrame && typeof finalFrame.qx === 'number'
       ? {
         x: finalFrame.qx,
         y: finalFrame.qy,
@@ -444,6 +496,18 @@
         w: finalFrame.qw,
       }
       : orientation;
+
+    const snapped = alignOrientationToTopFace(rawRenderedOrientation, sides);
+    const renderedOrientation = snapped.orientation;
+    if (finalFrame) {
+      finalFrame.qx = Number(renderedOrientation.x.toFixed(6));
+      finalFrame.qy = Number(renderedOrientation.y.toFixed(6));
+      finalFrame.qz = Number(renderedOrientation.z.toFixed(6));
+      finalFrame.qw = Number(renderedOrientation.w.toFixed(6));
+      finalFrame.wx = 0;
+      finalFrame.wy = 0;
+      finalFrame.wz = 0;
+    }
 
     const outcome = outcomeFromOrientation(renderedOrientation, sides) || angleToOutcome(finalFrame.angle, sides);
 
