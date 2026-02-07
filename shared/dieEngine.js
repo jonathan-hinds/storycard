@@ -8,6 +8,21 @@
   const TWO_PI = Math.PI * 2;
   const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
   const SUPPORTED_SIDES = new Set([6, 8, 12, 20]);
+  const WORLD_UP = { x: 0, y: 1, z: 0 };
+  const DEFAULT_ROLL_CONFIG = {
+    startLinSpeedMin: 2.2,
+    startLinSpeedMax: 4.1,
+    startAngSpeedMin: 4.8,
+    startAngSpeedMax: 9.5,
+    maxLinVel: 5.2,
+    maxAngVel: 12.5,
+    settledLinearEps: 0.085,
+    settledAngularEps: 0.16,
+    settledFramesRequired: 28,
+    alignDurationMsMin: 100,
+    alignDurationMsMax: 250,
+    alignEpsilon: 1e-4,
+  };
 
   function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
   function normalizeSides(input) {
@@ -29,6 +44,15 @@
     return q;
   }
 
+  function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+  function cross(a, b) {
+    return {
+      x: a.y * b.z - a.z * b.y,
+      y: a.z * b.x - a.x * b.z,
+      z: a.x * b.y - a.y * b.x,
+    };
+  }
+
   function mulQuat(a, b) {
     return {
       x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
@@ -36,6 +60,63 @@
       z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
       w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
     };
+  }
+
+  function quatFromAxisAngle(axis, angle) {
+    const half = angle * 0.5;
+    const s = Math.sin(half);
+    return normalizeQuat({ x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(half) });
+  }
+
+  function quatFromTo(from, to) {
+    const f = normalizeVector(from);
+    const t = normalizeVector(to);
+    const d = clamp(dot(f, t), -1, 1);
+    if (d > 1 - 1e-8) return { x: 0, y: 0, z: 0, w: 1 };
+    if (d < -1 + 1e-8) {
+      const ortho = Math.abs(f.x) < 0.9 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 0, z: 1 };
+      const axis = normalizeVector(cross(f, ortho));
+      return quatFromAxisAngle(axis, Math.PI);
+    }
+    const axis = cross(f, t);
+    return normalizeQuat({ x: axis.x, y: axis.y, z: axis.z, w: 1 + d });
+  }
+
+  function slerpQuat(a, b, t) {
+    let cosHalfTheta = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    let bb = b;
+    if (cosHalfTheta < 0) {
+      cosHalfTheta = -cosHalfTheta;
+      bb = { x: -b.x, y: -b.y, z: -b.z, w: -b.w };
+    }
+    if (cosHalfTheta > 0.9995) {
+      return normalizeQuat({
+        x: a.x + t * (bb.x - a.x),
+        y: a.y + t * (bb.y - a.y),
+        z: a.z + t * (bb.z - a.z),
+        w: a.w + t * (bb.w - a.w),
+      });
+    }
+    const halfTheta = Math.acos(clamp(cosHalfTheta, -1, 1));
+    const sinHalfTheta = Math.sqrt(1 - cosHalfTheta * cosHalfTheta);
+    const ratioA = Math.sin((1 - t) * halfTheta) / sinHalfTheta;
+    const ratioB = Math.sin(t * halfTheta) / sinHalfTheta;
+    return {
+      x: a.x * ratioA + bb.x * ratioB,
+      y: a.y * ratioA + bb.y * ratioB,
+      z: a.z * ratioA + bb.z * ratioB,
+      w: a.w * ratioA + bb.w * ratioB,
+    };
+  }
+
+  function limitVectorMagnitude(v, maxMagnitude) {
+    const magnitude = Math.hypot(v.x, v.y, v.z);
+    if (magnitude <= maxMagnitude || magnitude < 1e-9) return magnitude;
+    const scale = maxMagnitude / magnitude;
+    v.x *= scale;
+    v.y *= scale;
+    v.z *= scale;
+    return maxMagnitude;
   }
 
   function integrateQuaternion(q, wx, wy, wz, dt) {
@@ -131,18 +212,27 @@
   }
 
   function topFaceInfo(orientation, sides) {
-    const up = { x: 0, y: 1, z: 0 };
     let winner = null;
     let bestDot = Number.NEGATIVE_INFINITY;
     for (const face of getFaceNormals(sides)) {
       const worldNormal = rotateVectorByQuat(face.normal, orientation);
-      const dot = worldNormal.x * up.x + worldNormal.y * up.y + worldNormal.z * up.z;
-      if (dot > bestDot) {
-        bestDot = dot;
-        winner = { value: face.value, normal: worldNormal, alignment: dot };
+      const alignment = dot(worldNormal, WORLD_UP);
+      if (alignment > bestDot) {
+        bestDot = alignment;
+        winner = { value: face.value, normal: worldNormal, alignment, localNormal: face.normal };
       }
     }
     return winner;
+  }
+
+  function alignmentTargetForTopFace(orientation, sides) {
+    const winner = topFaceInfo(orientation, sides);
+    const currentTopWorld = rotateVectorByQuat(winner.localNormal, orientation);
+    const correction = quatFromTo(currentTopWorld, WORLD_UP);
+    return {
+      winner,
+      targetOrientation: normalizeQuat(mulQuat(correction, orientation)),
+    };
   }
 
   function dieVertices(sides) {
@@ -270,14 +360,16 @@
   }
 
   class DieEntity {
-    constructor({ sides, random, areaSize }) {
+    constructor({ sides, random, areaSize, rollConfig }) {
       this.sides = sides;
+      this.random = random;
+      this.rollConfig = rollConfig;
       this.vertices = dieVertices(sides);
       const half = areaSize / 2;
       this.position = { x: (random() * 2 - 1) * areaSize * 0.08, y: 2 + random() * 0.6, z: (random() * 2 - 1) * areaSize * 0.08 };
       this.orientation = normalizeQuat({ x: random() * 0.4, y: random() * 0.4, z: random() * 0.4, w: 1 });
-      this.velocity = { x: (random() * 2 - 1) * 6, y: 0, z: (random() * 2 - 1) * 6 };
-      this.angularVelocity = { x: (random() * 2 - 1) * 18, y: (random() * 2 - 1) * 18, z: (random() * 2 - 1) * 18 };
+      this.velocity = { x: 0, y: 0, z: 0 };
+      this.angularVelocity = { x: 0, y: 0, z: 0 };
       this.mass = 1;
       this.invMass = 1 / this.mass;
       const bounds = this.vertices.reduce((acc, v) => ({
@@ -295,11 +387,27 @@
       this.restitution = 0.12;
       this.linearDamping = 0.28;
       this.angularDamping = 0.42;
-      this.sleepLinearThreshold = 0.1;
-      this.sleepAngularThreshold = 0.2;
+      this.sleepLinearThreshold = rollConfig.settledLinearEps;
+      this.sleepAngularThreshold = rollConfig.settledAngularEps;
       this.sleepFrames = 0;
       this.maxX = half - 0.2;
       this.maxZ = half - 0.2;
+    }
+
+    applyInitialRollImpulse() {
+      const linSpeed = this.rollConfig.startLinSpeedMin + (this.rollConfig.startLinSpeedMax - this.rollConfig.startLinSpeedMin) * this.random();
+      const linAngle = this.random() * TWO_PI;
+      this.velocity = {
+        x: Math.cos(linAngle) * linSpeed,
+        y: 0,
+        z: Math.sin(linAngle) * linSpeed,
+      };
+      const axis = normalizeVector({ x: this.random() * 2 - 1, y: this.random() * 2 - 1, z: this.random() * 2 - 1 });
+      const angSpeed = this.rollConfig.startAngSpeedMin + (this.rollConfig.startAngSpeedMax - this.rollConfig.startAngSpeedMin) * this.random();
+      this.angularVelocity = { x: axis.x * angSpeed, y: axis.y * angSpeed, z: axis.z * angSpeed };
+      const initLin = limitVectorMagnitude(this.velocity, this.rollConfig.maxLinVel);
+      const initAng = limitVectorMagnitude(this.angularVelocity, this.rollConfig.maxAngVel);
+      return { initLin, initAng };
     }
 
     worldVertices() {
@@ -347,8 +455,9 @@
   class DieRoller {
     constructor({ sides, seed, areaSize, debug }) {
       this.random = createSeededRandom(seed);
+      this.rollConfig = { ...DEFAULT_ROLL_CONFIG };
       this.world = new PhysicsWorld({ areaSize, debug });
-      this.die = new DieEntity({ sides, random: this.random, areaSize });
+      this.die = new DieEntity({ sides, random: this.random, areaSize, rollConfig: this.rollConfig });
       this.debug = new DebugRenderer(debug);
     }
 
@@ -358,10 +467,19 @@
       const maxFrames = 1500;
       let settled = false;
       let finalDiagnostics = null;
+      const initialSpeeds = this.die.applyInitialRollImpulse();
+      this.debug.log(`roll-start lin=${initialSpeeds.initLin.toFixed(4)} ang=${initialSpeeds.initAng.toFixed(4)} cfg=${JSON.stringify(this.rollConfig)}`);
+      let maxObservedLin = initialSpeeds.initLin;
+      let maxObservedAng = initialSpeeds.initAng;
+      let settledFrame = -1;
 
       for (let i = 0; i < maxFrames; i += 1) {
         const contacts = this.world.step(this.die, dt);
+        limitVectorMagnitude(this.die.velocity, this.rollConfig.maxLinVel);
+        limitVectorMagnitude(this.die.angularVelocity, this.rollConfig.maxAngVel);
         const info = this.die.settleInfo(contacts);
+        maxObservedLin = Math.max(maxObservedLin, info.linearSpeed);
+        maxObservedAng = Math.max(maxObservedAng, info.angularSpeed);
 
         const linearOk = info.linearSpeed < this.die.sleepLinearThreshold;
         const angularOk = info.angularSpeed < this.die.sleepAngularThreshold;
@@ -387,10 +505,11 @@
           qw: Number(this.die.orientation.w.toFixed(6)),
         });
 
-        if (this.die.sleepFrames >= 24 && i > 40) {
+        if (this.die.sleepFrames >= this.rollConfig.settledFramesRequired && i > 40) {
           finalDiagnostics = info;
           this.debug.log(`settled frame=${i} pos=(${this.die.position.x.toFixed(3)},${this.die.position.y.toFixed(3)},${this.die.position.z.toFixed(3)}) lin=${info.linearSpeed.toFixed(4)} ang=${info.angularSpeed.toFixed(4)} dotUp=${info.topDot.toFixed(4)} contacts=${info.contactPoints}`);
           settled = true;
+          settledFrame = i;
           break;
         }
       }
@@ -406,21 +525,43 @@
           this.debug.log(`settled-fallback pos=(${this.die.position.x.toFixed(3)},${this.die.position.y.toFixed(3)},${this.die.position.z.toFixed(3)}) lin=${finalDiagnostics.linearSpeed.toFixed(4)} ang=${finalDiagnostics.angularSpeed.toFixed(4)} dotUp=${finalDiagnostics.topDot.toFixed(4)} contacts=${finalDiagnostics.contactPoints}`);
         }
       }
-      if (finalDiagnostics.topDot < 0.95) {
-        const before = topFaceInfo(this.die.orientation, this.die.sides);
-        const axis = { x: before.normal.z, y: 0, z: -before.normal.x };
-        const axisLen = Math.hypot(axis.x, axis.y, axis.z);
-        if (axisLen > 1e-6) {
-          const angle = Math.acos(clamp(before.alignment, -1, 1));
-          const s = Math.sin(angle / 2) / axisLen;
-          const correction = normalizeQuat({ x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(angle / 2) });
-          this.die.orientation = normalizeQuat(mulQuat(correction, this.die.orientation));
-          this.die.velocity = { x: 0, y: 0, z: 0 };
-          this.die.angularVelocity = { x: 0, y: 0, z: 0 };
-        }
+      const beforeAlignment = topFaceInfo(this.die.orientation, this.die.sides);
+      const { targetOrientation, winner } = alignmentTargetForTopFace(this.die.orientation, this.die.sides);
+      const speedBeforeAlign = this.die.settleInfo(finalDiagnostics?.contactPoints || 0);
+      this.debug.log(`settle-confirmed type=d${this.die.sides} value=${winner.value} topDotBefore=${beforeAlignment.alignment.toFixed(6)} lin=${speedBeforeAlign.linearSpeed.toFixed(6)} ang=${speedBeforeAlign.angularSpeed.toFixed(6)}`);
+
+      this.die.velocity = { x: 0, y: 0, z: 0 };
+      this.die.angularVelocity = { x: 0, y: 0, z: 0 };
+
+      const startOrientation = { ...this.die.orientation };
+      const alignDurationMs = this.rollConfig.alignDurationMsMin
+        + (this.rollConfig.alignDurationMsMax - this.rollConfig.alignDurationMsMin) * this.random();
+      const alignFrames = Math.max(2, Math.round((alignDurationMs / 1000) / dt));
+      for (let a = 1; a <= alignFrames; a += 1) {
+        const t = a / alignFrames;
+        this.die.orientation = slerpQuat(startOrientation, targetOrientation, t);
+        frames.push({
+          step: frames.length,
+          x: Number(this.die.position.x.toFixed(4)),
+          y: Number(this.die.position.y.toFixed(4)),
+          z: Number(this.die.position.z.toFixed(4)),
+          vx: 0,
+          vy: 0,
+          vz: 0,
+          wx: 0,
+          wy: 0,
+          wz: 0,
+          qx: Number(this.die.orientation.x.toFixed(6)),
+          qy: Number(this.die.orientation.y.toFixed(6)),
+          qz: Number(this.die.orientation.z.toFixed(6)),
+          qw: Number(this.die.orientation.w.toFixed(6)),
+        });
       }
 
       const top = topFaceInfo(this.die.orientation, this.die.sides);
+      this.debug.log(`alignment-complete type=d${this.die.sides} value=${top.value} topDotAfter=${top.alignment.toFixed(6)} epsilon=${this.rollConfig.alignEpsilon}`);
+      this.debug.log(`roll-stats durationFrames=${settledFrame >= 0 ? settledFrame + 1 : frames.length} durationMs=${((settledFrame >= 0 ? settledFrame + 1 : frames.length) * dt * 1000).toFixed(1)} maxLin=${maxObservedLin.toFixed(4)} maxAng=${maxObservedAng.toFixed(4)}`);
+
       const last = frames[frames.length - 1];
       if (last) {
         last.qx = Number(this.die.orientation.x.toFixed(6));
@@ -439,6 +580,9 @@
           finalAngularVelocity: { ...this.die.angularVelocity },
           topDotUp: top.alignment,
           topFaceValue: top.value,
+          topFaceNormal: top.normal,
+          alignmentEpsilon: this.rollConfig.alignEpsilon,
+          rollConfig: this.rollConfig,
           contactPoints: finalDiagnostics.contactPoints,
           logs: this.debug.logs,
           world: {

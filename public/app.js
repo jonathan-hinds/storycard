@@ -18,6 +18,13 @@ const DIE_FACE_LAYOUTS = {
 const BASE_DIE_COLOR = new THREE.Color(0xe2e8f0);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
+const DEFAULT_BODY_TO_MESH_QUAT = new THREE.Quaternion();
+const DIE_BODY_TO_MESH_QUAT = {
+  6: DEFAULT_BODY_TO_MESH_QUAT.clone(),
+  8: DEFAULT_BODY_TO_MESH_QUAT.clone(),
+  12: DEFAULT_BODY_TO_MESH_QUAT.clone(),
+  20: DEFAULT_BODY_TO_MESH_QUAT.clone(),
+};
 const UV_PRECISION = 100000;
 const TEMPLATE_PADDING = 32;
 const TEMPLATE_MAX_SIZE = 2048;
@@ -662,6 +669,8 @@ function createDieGeometry(sideCount) {
 
 function createDieMesh(sides) {
   const sideCount = Number.parseInt(sides, 10);
+  const bodyToMeshQuat = DIE_BODY_TO_MESH_QUAT[sideCount]?.clone() || DEFAULT_BODY_TO_MESH_QUAT.clone();
+  const meshToBodyQuat = bodyToMeshQuat.clone().invert();
   const baseGeometry = createDieGeometry(sideCount);
   const net = generateUnwrappedNet(baseGeometry, sideCount);
   const numberedFaces = selectNumberedFaces(extractPlanarFaces(baseGeometry), sideCount)
@@ -673,7 +682,7 @@ function createDieMesh(sides) {
     });
   const values = mapFaceValuesForTemplate(sideCount, numberedFaces.length);
   const faceValueMap = numberedFaces.map((face, index) => ({
-    normal: face.normal.clone().normalize(),
+    normal: face.normal.clone().applyQuaternion(meshToBodyQuat).normalize(),
     value: values[index] ?? index + 1,
   }));
 
@@ -689,7 +698,8 @@ function createDieMesh(sides) {
     roughness: 0.45,
   });
   const mesh = new THREE.Mesh(geometry, material);
-  return { mesh, faceValueMap };
+  mesh.quaternion.copy(bodyToMeshQuat);
+  return { mesh, faceValueMap, bodyToMeshQuat, meshToBodyQuat };
 }
 
 function getCurrentRollValue(mesh, faceValueMap) {
@@ -743,8 +753,14 @@ function createPhysicsDebugHelpers(areaSize, mesh) {
   );
   helperGroup.add(dieCollider);
 
+  const worldUpArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0.02, 0), 1.2, 0x36d399, 0.2, 0.1);
+  helperGroup.add(worldUpArrow);
+
+  const topFaceArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0.02, 0), 1.2, 0xf97316, 0.2, 0.1);
+  helperGroup.add(topFaceArrow);
+
   helperGroup.visible = Boolean(debugPhysicsToggle?.checked);
-  return { helperGroup, dieCollider };
+  return { helperGroup, dieCollider, worldUpArrow, topFaceArrow };
 }
 
 function createSceneForCanvas(canvas, sides) {
@@ -821,6 +837,7 @@ function createSceneForCanvas(canvas, sides) {
     currentValue: getCurrentRollValue(mesh, faceValueMap),
     debugHelpers,
     diagnostics: null,
+    finalValue: null,
   };
 }
 
@@ -916,6 +933,7 @@ function animateRoll(dieId, roll) {
     index: 0,
   };
   visual.diagnostics = roll.metadata?.diagnostics || null;
+  visual.finalValue = visual.diagnostics?.topFaceValue ?? roll.outcome ?? null;
   if (visual.diagnostics && debugPhysicsToggle?.checked) {
     console.log('[physics-debug] world', visual.diagnostics.world);
     console.log('[physics-debug] collider', visual.diagnostics.collider);
@@ -987,13 +1005,35 @@ function tick() {
     if (visual.resultElement) {
       const dot = visual.diagnostics?.topDotUp;
       const extra = Number.isFinite(dot) ? ` | topDotUp=${dot.toFixed(3)}` : '';
-      visual.resultElement.textContent = `Current roll value: ${visual.currentValue ?? '-'} | Rolls: ${visual.die.rolls}${extra}`;
+      const displayValue = visual.animation ? visual.currentValue : (visual.finalValue ?? visual.currentValue);
+      visual.resultElement.textContent = `Current roll value: ${displayValue ?? '-'} | Rolls: ${visual.die.rolls}${extra}`;
     }
 
     if (visual.debugHelpers) {
-      visual.debugHelpers.helperGroup.visible = Boolean(debugPhysicsToggle?.checked);
+      const showPhysics = Boolean(debugPhysicsToggle?.checked);
+      const showFaceArrows = Boolean(document.getElementById('debug-face-arrows')?.checked);
+      visual.debugHelpers.helperGroup.visible = showPhysics || showFaceArrows;
       visual.debugHelpers.dieCollider.position.copy(visual.mesh.position);
       visual.debugHelpers.dieCollider.quaternion.copy(visual.mesh.quaternion);
+      visual.debugHelpers.dieCollider.visible = showPhysics;
+      visual.debugHelpers.worldUpArrow.visible = showFaceArrows;
+      visual.debugHelpers.topFaceArrow.visible = showFaceArrows;
+
+      if (showFaceArrows) {
+        const winner = visual.faceValueMap.reduce((best, face) => {
+          const worldNormal = face.normal.clone().applyQuaternion(visual.mesh.quaternion).normalize();
+          const alignment = worldNormal.dot(WORLD_UP);
+          if (!best || alignment > best.alignment) return { ...face, worldNormal, alignment };
+          return best;
+        }, null);
+        if (winner) {
+          visual.debugHelpers.topFaceArrow.position.copy(visual.mesh.position);
+          visual.debugHelpers.topFaceArrow.setDirection(winner.worldNormal);
+          if (visual.diagnostics && debugPhysicsToggle?.checked) {
+            console.log(`[physics-debug] arrows d${visual.die.sides} chosen=${winner.value} topDot=${winner.alignment.toFixed(6)}`);
+          }
+        }
+      }
     }
 
     syncCameraToDie(visual);
