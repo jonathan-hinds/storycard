@@ -29,9 +29,9 @@
     const dieSlipperiness = Number.isFinite(tuning.dieSlipperiness) ? tuning.dieSlipperiness : 0;
 
     return {
-      throwHeight: clamp(throwHeight, 0.2, 3),
-      throwForward: clamp(throwForward, 0, 3),
-      throwRotation: clamp(throwRotation, 0, 3),
+      throwHeight: clamp(throwHeight, 0.2, 6),
+      throwForward: clamp(throwForward, 0, 6),
+      throwRotation: clamp(throwRotation, 0, 6),
       groundSlipperiness: clamp(groundSlipperiness, 0, 1),
       dieSlipperiness: clamp(dieSlipperiness, 0, 1),
     };
@@ -454,7 +454,9 @@
       this.body.angularVelocity.y += angularImpulse.y;
       this.body.angularVelocity.z += angularImpulse.z;
 
-      this.#clampVelocity(14.5, 24.0);
+      const linearCap = 14.5 + (Math.max(this.tuning.throwHeight, this.tuning.throwForward) - 1) * 4.25;
+      const angularCap = 24.0 + (this.tuning.throwRotation - 1) * 8.5;
+      this.#clampVelocity(Math.max(14.5, linearCap), Math.max(24.0, angularCap));
       this.rollApplied = true;
 
       return {
