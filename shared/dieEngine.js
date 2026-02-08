@@ -191,10 +191,12 @@
         mass: 1,
         invMass: 1,
         invInertia: config.invInertia,
-        friction: 1.25,
+        friction: 1.9,
+        rollingFriction: 0.88,
+        spinFriction: 0.82,
         restitution: 0.03,
         linearDamping: 1.9,
-        angularDamping: 3.4,
+        angularDamping: 3.8,
         ccdSweepRadius: 0.02,
       };
       this.bodies.push(body);
@@ -276,6 +278,7 @@
         body.angularVelocity.z += torque.z * impulse * body.invInertia.z;
       };
 
+      let hasGroundContact = false;
       for (const collider of this.staticColliders) {
         let deepestVertex = null;
         let deepestDistance = 0;
@@ -289,6 +292,7 @@
         if (!deepestVertex) continue;
 
         this.lastContactCount += 1;
+        if (collider.id === 'ground') hasGroundContact = true;
         const signedDistance = deepestDistance;
         const r = {
           x: deepestVertex.x - body.position.x,
@@ -339,7 +343,21 @@
               z: tangent.z / tangentSpeed,
             };
             const vt = rv.x * t.x + rv.y * t.y + rv.z * t.z;
-            const frictionImpulse = Math.max(-body.friction * impulseN, Math.min(body.friction * impulseN, -vt / (body.invMass || 1)));
+            const rt = {
+              x: r.y * t.z - r.z * t.y,
+              y: r.z * t.x - r.x * t.z,
+              z: r.x * t.y - r.y * t.x,
+            };
+            const invInertiaRt = {
+              x: rt.x * body.invInertia.x,
+              y: rt.y * body.invInertia.y,
+              z: rt.z * body.invInertia.z,
+            };
+            const rotationalKt = t.x * (invInertiaRt.y * r.z - invInertiaRt.z * r.y)
+              + t.y * (invInertiaRt.z * r.x - invInertiaRt.x * r.z)
+              + t.z * (invInertiaRt.x * r.y - invInertiaRt.y * r.x);
+            const kt = body.invMass + rotationalKt;
+            const frictionImpulse = Math.max(-body.friction * impulseN, Math.min(body.friction * impulseN, -vt / (kt || 1)));
             applyImpulse(t, frictionImpulse, r);
           }
         }
@@ -350,6 +368,30 @@
         body.position.z += collider.n.z * correction;
 
         this.contactEvents.push({ collider: collider.id, penetration: -signedDistance, normalSpeed });
+      }
+
+      if (hasGroundContact) {
+        const lateralSpeed = Math.hypot(body.velocity.x, body.velocity.z);
+        const angularSpeed = Math.hypot(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z);
+        if (Math.abs(body.velocity.y) < 0.2) body.velocity.y = 0;
+        if (lateralSpeed < 3.2) {
+          body.velocity.x *= body.rollingFriction;
+          body.velocity.z *= body.rollingFriction;
+          if (lateralSpeed < 0.09) {
+            body.velocity.x = 0;
+            body.velocity.z = 0;
+          }
+        }
+        if (angularSpeed < 9.0) {
+          body.angularVelocity.x *= body.spinFriction;
+          body.angularVelocity.y *= body.spinFriction;
+          body.angularVelocity.z *= body.spinFriction;
+          if (angularSpeed < 0.16) {
+            body.angularVelocity.x = 0;
+            body.angularVelocity.y = 0;
+            body.angularVelocity.z = 0;
+          }
+        }
       }
     }
 
@@ -414,14 +456,14 @@
     roll() {
       if (this.rollApplied) return;
       const impulse = {
-        x: (this.random() * 2 - 1) * 3.6,
-        y: 1.1 + this.random() * 0.9,
-        z: (this.random() * 2 - 1) * 3.6,
+        x: (this.random() * 2 - 1) * 7.2,
+        y: 1.8 + this.random() * 1.5,
+        z: (this.random() * 2 - 1) * 7.2,
       };
       const angularImpulse = {
-        x: (this.random() * 2 - 1) * 5.2,
-        y: (this.random() * 2 - 1) * 5.2,
-        z: (this.random() * 2 - 1) * 5.2,
+        x: (this.random() * 2 - 1) * 10.4,
+        y: (this.random() * 2 - 1) * 10.4,
+        z: (this.random() * 2 - 1) * 10.4,
       };
 
       this.body.velocity.x += impulse.x;
@@ -431,7 +473,7 @@
       this.body.angularVelocity.y += angularImpulse.y;
       this.body.angularVelocity.z += angularImpulse.z;
 
-      this.#clampVelocity(11.0, 18.0);
+      this.#clampVelocity(22.0, 30.0);
       this.rollApplied = true;
 
       return {
@@ -523,8 +565,9 @@
         frames.push(this.die.getFrameSnapshot(i));
 
         const linearSpeed = Math.hypot(this.die.body.velocity.x, this.die.body.velocity.y, this.die.body.velocity.z);
+        const lateralSpeed = Math.hypot(this.die.body.velocity.x, this.die.body.velocity.z);
         const angularSpeed = Math.hypot(this.die.body.angularVelocity.x, this.die.body.angularVelocity.y, this.die.body.angularVelocity.z);
-        const atRest = linearSpeed < 0.12 && angularSpeed < 0.2;
+        const atRest = linearSpeed < 0.16 && lateralSpeed < 0.09 && angularSpeed < 0.2;
         belowThresholdFrames = atRest ? belowThresholdFrames + 1 : 0;
         if (belowThresholdFrames >= 24 && i > 50) {
           settled = true;
