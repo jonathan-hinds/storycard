@@ -109,3 +109,18 @@ button {
   font-size: 0.78rem;
   color: #9ab0d8;
 }
+
+
+.debug-controls {
+  margin-top: 0.8rem;
+}
+
+.debug-controls h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.debug-controls label {
+  font-size: 0.85rem;
+  color: #d2dbf2;
+}

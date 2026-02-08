@@ -68,6 +68,7 @@ function rollDie(die, options = {}) {
     seed,
     areaSize: die.areaSize,
     debug: options.debug,
+    tuning: options.tuning,
   });
 
   const roll = {
@@ -129,7 +130,7 @@ async function handleApi(req, res, pathname) {
       body = {};
     }
 
-    const roll = rollDie(die, { debug: body.debugPhysics });
+    const roll = rollDie(die, { debug: body.debugPhysics, tuning: body.tuning });
     if (body.debugPhysics && roll.metadata?.diagnostics) {
       console.log(`[physics-debug] die=${dieId} sides=${die.sides} dotUp=${roll.metadata.diagnostics.topDotUp.toFixed(4)} contacts=${roll.metadata.diagnostics.contactPoints}`);
       for (const line of roll.metadata.diagnostics.logs || []) {
