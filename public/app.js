@@ -50,11 +50,41 @@ const DEBUG_GROUND_TEXTURE = createDebugGroundTexture();
 
 
 const debugSliderConfig = [
-  { key: 'throwHeight', inputId: 'throw-height', outputId: 'throw-height-value', defaultValue: 1 },
-  { key: 'throwForward', inputId: 'throw-forward', outputId: 'throw-forward-value', defaultValue: 1 },
-  { key: 'throwRotation', inputId: 'throw-rotation', outputId: 'throw-rotation-value', defaultValue: 1 },
-  { key: 'groundSlipperiness', inputId: 'ground-slipperiness', outputId: 'ground-slipperiness-value', defaultValue: 0 },
-  { key: 'dieSlipperiness', inputId: 'die-slipperiness', outputId: 'die-slipperiness-value', defaultValue: 0 },
+  {
+    key: 'throwHeight',
+    inputId: 'throw-height',
+    outputId: 'throw-height-value',
+    defaultValue: 1,
+    formatValue: (value) => `${((1.7 + 0.6) * value).toFixed(2)} m/s avg`,
+  },
+  {
+    key: 'throwForward',
+    inputId: 'throw-forward',
+    outputId: 'throw-forward-value',
+    defaultValue: 1,
+    formatValue: (value) => `±${(5.1 * value).toFixed(2)} m/s`,
+  },
+  {
+    key: 'throwRotation',
+    inputId: 'throw-rotation',
+    outputId: 'throw-rotation-value',
+    defaultValue: 1,
+    formatValue: (value) => `±${(7.8 * value).toFixed(2)} rad/s`,
+  },
+  {
+    key: 'groundSlipperiness',
+    inputId: 'ground-slipperiness',
+    outputId: 'ground-slipperiness-value',
+    defaultValue: 0,
+    formatValue: (value) => `μ ${value.toFixed(2)}`,
+  },
+  {
+    key: 'dieSlipperiness',
+    inputId: 'die-slipperiness',
+    outputId: 'die-slipperiness-value',
+    defaultValue: 0,
+    formatValue: (value) => `μ ${value.toFixed(2)}`,
+  },
 ];
 
 const debugTuning = Object.fromEntries(debugSliderConfig.map((cfg) => [cfg.key, cfg.defaultValue]));
@@ -66,7 +96,7 @@ function updateDebugTuningValue(config) {
   const value = Number.parseFloat(input.value);
   const safeValue = Number.isFinite(value) ? value : config.defaultValue;
   debugTuning[config.key] = safeValue;
-  output.textContent = safeValue.toFixed(2);
+  output.textContent = config.formatValue ? config.formatValue(safeValue) : safeValue.toFixed(2);
 }
 
 function initializeDebugSliders() {
