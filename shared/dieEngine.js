@@ -191,11 +191,15 @@
         mass: 1,
         invMass: 1,
         invInertia: config.invInertia,
-        friction: 1.25,
-        restitution: 0.03,
-        linearDamping: 1.9,
-        angularDamping: 3.4,
+        friction: 2.6,
+        restitution: 0.015,
+        linearDamping: 3.0,
+        angularDamping: 5.0,
+        groundLinearFriction: 1.25,
+        groundAngularFriction: 2.8,
         ccdSweepRadius: 0.02,
+        sleepCounter: 0,
+        asleep: false,
       };
       this.bodies.push(body);
       return body;
@@ -238,6 +242,8 @@
     }
 
     #stepBody(body, dt) {
+      if (body.asleep) return;
+
       body.velocity.y += this.gravity * dt;
       const linearDecay = Math.max(0, 1 - body.linearDamping * dt);
       const angularDecay = Math.max(0, 1 - body.angularDamping * dt);
@@ -276,6 +282,7 @@
         body.angularVelocity.z += torque.z * impulse * body.invInertia.z;
       };
 
+      let hasGroundContact = false;
       for (const collider of this.staticColliders) {
         let deepestVertex = null;
         let deepestDistance = 0;
@@ -290,6 +297,7 @@
 
         this.lastContactCount += 1;
         const signedDistance = deepestDistance;
+        if (collider.id === 'ground' && signedDistance < 0.02) hasGroundContact = true;
         const r = {
           x: deepestVertex.x - body.position.x,
           y: deepestVertex.y - body.position.y,
@@ -322,8 +330,8 @@
             + collider.n.y * (invInertiaRn.z * r.x - invInertiaRn.x * r.z)
             + collider.n.z * (invInertiaRn.x * r.y - invInertiaRn.y * r.x);
           const k = body.invMass + rotationalK;
-          const baumgarteBias = Math.max(0, -signedDistance - 0.0005) * 10;
-          const impulseN = Math.max(0, (-(1 + body.restitution) * normalSpeed + baumgarteBias) / (k || 1));
+          const baumgarteBias = Math.max(0, -signedDistance - 0.001) * 4;
+          const impulseN = Math.min(5, Math.max(0, (-(1 + body.restitution) * normalSpeed + baumgarteBias) / (k || 1)));
           applyImpulse(collider.n, impulseN, r);
 
           const tangent = {
@@ -344,12 +352,61 @@
           }
         }
 
-        const correction = Math.min(0.008, -signedDistance + 1e-4);
+        const correction = Math.max(0, Math.min(0.003, -signedDistance - 0.001));
         body.position.x += collider.n.x * correction;
         body.position.y += collider.n.y * correction;
         body.position.z += collider.n.z * correction;
 
         this.contactEvents.push({ collider: collider.id, penetration: -signedDistance, normalSpeed });
+      }
+
+      if (hasGroundContact) {
+        const planarSpeed = Math.hypot(body.velocity.x, body.velocity.z);
+        if (planarSpeed > 1e-6) {
+          const decel = Math.abs(this.gravity) * body.groundLinearFriction * dt;
+          const nextSpeed = Math.max(0, planarSpeed - decel);
+          const scale = nextSpeed / planarSpeed;
+          body.velocity.x *= scale;
+          body.velocity.z *= scale;
+        }
+        if (Math.hypot(body.velocity.x, body.velocity.z) < 0.45 && Math.abs(body.velocity.y) < 0.35) {
+          body.velocity.x = 0;
+          body.velocity.z = 0;
+        }
+
+        const angularSpeed = Math.hypot(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z);
+        if (angularSpeed > 1e-6) {
+          const angularDecel = body.groundAngularFriction * dt;
+          const nextAngular = Math.max(0, angularSpeed - angularDecel);
+          const angularScale = nextAngular / angularSpeed;
+          body.angularVelocity.x *= angularScale;
+          body.angularVelocity.y *= angularScale;
+          body.angularVelocity.z *= angularScale;
+        }
+        if (Math.hypot(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z) < 1.1) {
+          body.angularVelocity.x = 0;
+          body.angularVelocity.y = 0;
+          body.angularVelocity.z = 0;
+        }
+
+        const linearSpeed = Math.hypot(body.velocity.x, body.velocity.y, body.velocity.z);
+        const totalAngular = Math.hypot(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z);
+        if (linearSpeed < 0.12 && totalAngular < 0.2) {
+          body.sleepCounter += 1;
+          if (body.sleepCounter >= 30) {
+            body.velocity.x = 0;
+            body.velocity.y = 0;
+            body.velocity.z = 0;
+            body.angularVelocity.x = 0;
+            body.angularVelocity.y = 0;
+            body.angularVelocity.z = 0;
+            body.asleep = true;
+          }
+        } else {
+          body.sleepCounter = 0;
+        }
+      } else {
+        body.sleepCounter = 0;
       }
     }
 
@@ -406,6 +463,8 @@
       });
       this.body.velocity = { x: 0, y: 0, z: 0 };
       this.body.angularVelocity = { x: 0, y: 0, z: 0 };
+      this.body.asleep = false;
+      this.body.sleepCounter = 0;
       this.rollApplied = false;
       this.maxLinearSpeed = 0;
       this.maxAngularSpeed = 0;
@@ -413,15 +472,17 @@
 
     roll() {
       if (this.rollApplied) return;
+      this.body.asleep = false;
+      this.body.sleepCounter = 0;
       const impulse = {
-        x: (this.random() * 2 - 1) * 3.6,
-        y: 1.1 + this.random() * 0.9,
-        z: (this.random() * 2 - 1) * 3.6,
+        x: (this.random() * 2 - 1) * 7.4,
+        y: 1.8 + this.random() * 1.4,
+        z: (this.random() * 2 - 1) * 7.4,
       };
       const angularImpulse = {
-        x: (this.random() * 2 - 1) * 5.2,
-        y: (this.random() * 2 - 1) * 5.2,
-        z: (this.random() * 2 - 1) * 5.2,
+        x: (this.random() * 2 - 1) * 8.8,
+        y: (this.random() * 2 - 1) * 8.8,
+        z: (this.random() * 2 - 1) * 8.8,
       };
 
       this.body.velocity.x += impulse.x;
@@ -431,7 +492,7 @@
       this.body.angularVelocity.y += angularImpulse.y;
       this.body.angularVelocity.z += angularImpulse.z;
 
-      this.#clampVelocity(11.0, 18.0);
+      this.#clampVelocity(15.0, 24.0);
       this.rollApplied = true;
 
       return {
