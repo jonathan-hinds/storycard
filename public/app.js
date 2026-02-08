@@ -72,6 +72,20 @@ const debugSliderConfig = [
     formatValue: (value) => `±${(7.8 * value).toFixed(2)} rad/s`,
   },
   {
+    key: 'dieWeight',
+    inputId: 'die-weight',
+    outputId: 'die-weight-value',
+    defaultValue: 1,
+    formatValue: (value) => `${value.toFixed(2)}x`,
+  },
+  {
+    key: 'rotationFriction',
+    inputId: 'rotation-friction',
+    outputId: 'rotation-friction-value',
+    defaultValue: 1,
+    formatValue: (value) => `${value.toFixed(2)}x`,
+  },
+  {
     key: 'groundSlipperiness',
     inputId: 'ground-slipperiness',
     outputId: 'ground-slipperiness-value',
