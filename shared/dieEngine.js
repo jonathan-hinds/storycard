@@ -16,6 +16,27 @@
     return sides;
   }
 
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function normalizeTuning(tuning = {}) {
+    const throwHeight = Number.isFinite(tuning.throwHeight) ? tuning.throwHeight : 1;
+    const throwForward = Number.isFinite(tuning.throwForward) ? tuning.throwForward : 1;
+    const throwRotation = Number.isFinite(tuning.throwRotation) ? tuning.throwRotation : 1;
+    const groundSlipperiness = Number.isFinite(tuning.groundSlipperiness) ? tuning.groundSlipperiness : 0;
+    const dieSlipperiness = Number.isFinite(tuning.dieSlipperiness) ? tuning.dieSlipperiness : 0;
+
+    return {
+      throwHeight: clamp(throwHeight, 0.2, 3),
+      throwForward: clamp(throwForward, 0, 3),
+      throwRotation: clamp(throwRotation, 0, 3),
+      groundSlipperiness: clamp(groundSlipperiness, 0, 1),
+      dieSlipperiness: clamp(dieSlipperiness, 0, 1),
+    };
+  }
+
   function xmur3(str) {
     let h = 1779033703 ^ str.length;
     for (let i = 0; i < str.length; i += 1) {
@@ -191,7 +212,7 @@
         mass: 1,
         invMass: 1,
         invInertia: config.invInertia,
-        friction: 1.25,
+        friction: Number.isFinite(config.friction) ? config.friction : 1.25,
         restitution: 0.03,
         linearDamping: 3.4,
         angularDamping: 8.2,
@@ -355,9 +376,10 @@
 
   }
   class Die {
-    constructor({ sides, random, world, areaSize }) {
+    constructor({ sides, random, world, areaSize, tuning }) {
       this.sides = sides;
       this.random = random;
+      this.tuning = normalizeTuning(tuning);
       this.meshToBodyTransform = {
         position: { x: 0, y: 0, z: 0 },
         rotation: { x: 0, y: 0, z: 0, w: 1 },
@@ -370,6 +392,7 @@
         invInertia,
         position: { x: 0, y: 1.8, z: 0 },
         orientation: { x: 0, y: 0, z: 0, w: 1 },
+        friction: 0.3 + (1 - this.tuning.dieSlipperiness) * 1.55,
       });
       this.areaSize = areaSize;
       this.rollApplied = false;
@@ -414,14 +437,14 @@
     roll() {
       if (this.rollApplied) return;
       const impulse = {
-        x: (this.random() * 2 - 1) * 5.1,
-        y: 1.7 + this.random() * 1.2,
-        z: (this.random() * 2 - 1) * 5.1,
+        x: (this.random() * 2 - 1) * 5.1 * this.tuning.throwForward,
+        y: (1.7 + this.random() * 1.2) * this.tuning.throwHeight,
+        z: (this.random() * 2 - 1) * 5.1 * this.tuning.throwForward,
       };
       const angularImpulse = {
-        x: (this.random() * 2 - 1) * 7.8,
-        y: (this.random() * 2 - 1) * 7.8,
-        z: (this.random() * 2 - 1) * 7.8,
+        x: (this.random() * 2 - 1) * 7.8 * this.tuning.throwRotation,
+        y: (this.random() * 2 - 1) * 7.8 * this.tuning.throwRotation,
+        z: (this.random() * 2 - 1) * 7.8 * this.tuning.throwRotation,
       };
 
       this.body.velocity.x += impulse.x;
@@ -497,18 +520,21 @@
   }
 
   class DiceRoller {
-    constructor({ sides, seed, areaSize = 8, debug = false }) {
+    constructor({ sides, seed, areaSize = 8, debug = false, tuning = {} }) {
       this.random = createSeededRandom(seed);
+      this.tuning = normalizeTuning(tuning);
       this.physics = new PhysicsWorld({ debug });
       this.physics.createStaticGround(0);
       this.physics.createStaticBoundary(areaSize);
-      this.die = new Die({ sides, random: this.random, world: this.physics, areaSize });
+      this.die = new Die({ sides, random: this.random, world: this.physics, areaSize, tuning: this.tuning });
       this.debug = debug;
       this.logs = [];
     }
 
     run() {
       this.die.reset();
+      const groundFriction = 0.25 + (1 - this.tuning.groundSlipperiness) * 1.25;
+      this.die.body.friction = Math.max(0.05, (groundFriction + this.die.body.friction) * 0.5);
       const initial = this.die.roll();
       this.logs.push(`roll initial linear=${initial.initialLinearSpeed.toFixed(4)} angular=${initial.initialAngularSpeed.toFixed(4)}`);
 
@@ -558,7 +584,10 @@
             fixedDt: this.physics.fixedDt,
             maxSubSteps: this.physics.maxSubSteps,
             colliders: this.physics.staticColliders,
+            groundFriction: 0.25 + (1 - this.tuning.groundSlipperiness) * 1.25,
+            dieFriction: this.die.body.friction,
           },
+          tuning: this.tuning,
           collider: {
             type: 'convex',
             vertexCount: this.die.vertices.length,
@@ -574,7 +603,8 @@
     const seed = String(options.seed || Date.now());
     const areaSize = Number.isFinite(options.areaSize) ? options.areaSize : 8;
     const debug = Boolean(options.debug);
-    const roller = new DiceRoller({ sides, seed, areaSize, debug });
+    const tuning = normalizeTuning(options.tuning);
+    const roller = new DiceRoller({ sides, seed, areaSize, debug, tuning });
     const result = roller.run();
     return {
       seed,

@@ -48,6 +48,37 @@ function createDebugGroundTexture() {
 
 const DEBUG_GROUND_TEXTURE = createDebugGroundTexture();
 
+
+const debugSliderConfig = [
+  { key: 'throwHeight', inputId: 'throw-height', outputId: 'throw-height-value', defaultValue: 1 },
+  { key: 'throwForward', inputId: 'throw-forward', outputId: 'throw-forward-value', defaultValue: 1 },
+  { key: 'throwRotation', inputId: 'throw-rotation', outputId: 'throw-rotation-value', defaultValue: 1 },
+  { key: 'groundSlipperiness', inputId: 'ground-slipperiness', outputId: 'ground-slipperiness-value', defaultValue: 0 },
+  { key: 'dieSlipperiness', inputId: 'die-slipperiness', outputId: 'die-slipperiness-value', defaultValue: 0 },
+];
+
+const debugTuning = Object.fromEntries(debugSliderConfig.map((cfg) => [cfg.key, cfg.defaultValue]));
+
+function updateDebugTuningValue(config) {
+  const input = document.getElementById(config.inputId);
+  const output = document.getElementById(config.outputId);
+  if (!input || !output) return;
+  const value = Number.parseFloat(input.value);
+  const safeValue = Number.isFinite(value) ? value : config.defaultValue;
+  debugTuning[config.key] = safeValue;
+  output.textContent = safeValue.toFixed(2);
+}
+
+function initializeDebugSliders() {
+  for (const config of debugSliderConfig) {
+    const input = document.getElementById(config.inputId);
+    if (!input) continue;
+    input.addEventListener('input', () => updateDebugTuningValue(config));
+    updateDebugTuningValue(config);
+  }
+}
+
+
 function roundKey(value) {
   return Math.round(value * 10000) / 10000;
 }
@@ -986,7 +1017,10 @@ async function rollDie(dieId) {
   const response = await fetch(`/api/dice/${dieId}/roll`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ debugPhysics: Boolean(debugPhysicsToggle?.checked) }),
+    body: JSON.stringify({
+      debugPhysics: Boolean(debugPhysicsToggle?.checked),
+      tuning: { ...debugTuning },
+    }),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -1048,6 +1082,8 @@ function tick() {
     visual.renderer.render(visual.scene, visual.camera);
   }
 }
+
+initializeDebugSliders();
 
 tick();
 refreshDice();
