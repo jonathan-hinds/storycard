@@ -193,8 +193,8 @@
         invInertia: config.invInertia,
         friction: 1.25,
         restitution: 0.03,
-        linearDamping: 1.9,
-        angularDamping: 3.4,
+        linearDamping: 3.4,
+        angularDamping: 8.2,
         ccdSweepRadius: 0.02,
       };
       this.bodies.push(body);
@@ -414,14 +414,14 @@
     roll() {
       if (this.rollApplied) return;
       const impulse = {
-        x: (this.random() * 2 - 1) * 3.6,
-        y: 1.1 + this.random() * 0.9,
-        z: (this.random() * 2 - 1) * 3.6,
+        x: (this.random() * 2 - 1) * 5.1,
+        y: 1.7 + this.random() * 1.2,
+        z: (this.random() * 2 - 1) * 5.1,
       };
       const angularImpulse = {
-        x: (this.random() * 2 - 1) * 5.2,
-        y: (this.random() * 2 - 1) * 5.2,
-        z: (this.random() * 2 - 1) * 5.2,
+        x: (this.random() * 2 - 1) * 7.8,
+        y: (this.random() * 2 - 1) * 7.8,
+        z: (this.random() * 2 - 1) * 7.8,
       };
 
       this.body.velocity.x += impulse.x;
@@ -431,7 +431,7 @@
       this.body.angularVelocity.y += angularImpulse.y;
       this.body.angularVelocity.z += angularImpulse.z;
 
-      this.#clampVelocity(11.0, 18.0);
+      this.#clampVelocity(14.5, 24.0);
       this.rollApplied = true;
 
       return {
@@ -524,9 +524,17 @@
 
         const linearSpeed = Math.hypot(this.die.body.velocity.x, this.die.body.velocity.y, this.die.body.velocity.z);
         const angularSpeed = Math.hypot(this.die.body.angularVelocity.x, this.die.body.angularVelocity.y, this.die.body.angularVelocity.z);
-        const atRest = linearSpeed < 0.12 && angularSpeed < 0.2;
+        const atRest = linearSpeed < 0.16 && angularSpeed < 0.28;
+        const shouldForceSleep = i > 120 && linearSpeed < 0.25 && angularSpeed < 0.5;
         belowThresholdFrames = atRest ? belowThresholdFrames + 1 : 0;
-        if (belowThresholdFrames >= 24 && i > 50) {
+        if ((belowThresholdFrames >= 18 && i > 45) || shouldForceSleep) {
+          this.die.body.velocity.x = 0;
+          this.die.body.velocity.y = 0;
+          this.die.body.velocity.z = 0;
+          this.die.body.angularVelocity.x = 0;
+          this.die.body.angularVelocity.y = 0;
+          this.die.body.angularVelocity.z = 0;
+          frames.push(this.die.getFrameSnapshot(i + 1));
           settled = true;
           break;
         }
