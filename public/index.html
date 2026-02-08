@@ -3,57 +3,77 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Storycard Dice Module Demo</title>
-    <link rel="stylesheet" href="/public/styles.css" />
+    <title>Storycard Dice Module - API Docs</title>
+    <link rel="stylesheet" href="/public/docs.css" />
   </head>
   <body>
-    <main class="layout">
-      <section class="controls">
-        <h1>3D N-Sided Dice Demo</h1>
-        <p>Create independent dice instances. Every die gets its own panel, camera, and roll control.</p>
+    <header class="topbar">
+      <h1>Storycard Dice Module API Docs</h1>
+      <a href="/public/demo.html">Open dev demo</a>
+    </header>
 
-        <form id="create-die-form" class="card">
-          <label for="sides">Die type</label>
-          <select id="sides" name="sides" required>
-            <option value="6" selected>D6</option>
-            <option value="8">D8</option>
-            <option value="12">D12</option>
-            <option value="20">D20</option>
-          </select>
-          <button type="submit">Create Die</button>
-        </form>
+    <main class="docs-layout">
+      <aside class="swagger-nav">
+        <h2>Tutorial</h2>
+        <a href="#setup">1. Setup</a>
+        <a href="#rolling">2. Rolling</a>
+        <a href="#saving">3. Save roll data</a>
+        <a href="#game">4. Two-player game</a>
+      </aside>
 
-        <label class="toggle"><input type="checkbox" id="debug-physics" /> Enable physics debug (colliders + logs)</label>
+      <section class="docs-content">
+        <article id="setup" class="doc-card">
+          <h2>1) Setup the server + client module</h2>
+          <p>This is the minimal setup to run the same physics-based die cards shown in the demo.</p>
+          <div class="split">
+            <pre><code id="setup-snippet"></code></pre>
+            <div>
+              <button id="create-starter">Create D6 / D8 / D12 / D20</button>
+              <p class="hint">Validation target: you should see one card per die with a Roll button.</p>
+              <section id="die-list" class="die-grid"></section>
+            </div>
+          </div>
+        </article>
 
-        <section class="card debug-controls" id="debug-controls">
-          <h2>Debug Throw Tuning</h2>
-          <label for="throw-height">Throw height (upward launch speed): <span id="throw-height-value">5.75 m/s avg</span></label>
-          <input id="throw-height" type="range" min="0.2" max="6" step="0.05" value="2.5" />
+        <article id="rolling" class="doc-card">
+          <h2>2) Rolling example</h2>
+          <div class="split">
+            <pre><code id="roll-snippet"></code></pre>
+            <div>
+              <label for="roll-die-id">Die id</label>
+              <select id="roll-die-id"></select>
+              <button id="roll-selected">Roll selected die</button>
+              <p id="roll-result" class="hint">Roll output appears here.</p>
+            </div>
+          </div>
+        </article>
 
-          <label for="throw-forward">Throw forward (horizontal speed): <span id="throw-forward-value">±0.00 m/s</span></label>
-          <input id="throw-forward" type="range" min="0" max="6" step="0.05" value="0" />
+        <article id="saving" class="doc-card">
+          <h2>3) Save roll data / do something with it</h2>
+          <div class="split">
+            <pre><code id="save-snippet"></code></pre>
+            <div>
+              <button id="save-latest">Save latest roll to localStorage</button>
+              <p id="save-status" class="hint">No saved roll yet.</p>
+              <pre class="result" id="saved-json">[]</pre>
+            </div>
+          </div>
+        </article>
 
-          <label for="throw-rotation">Throw rotation (spin rate): <span id="throw-rotation-value">±30.42 rad/s</span></label>
-          <input id="throw-rotation" type="range" min="0" max="6" step="0.05" value="3.9" />
-
-          <label for="die-weight">Die weight (settling tendency): <span id="die-weight-value">3.00x</span></label>
-          <input id="die-weight" type="range" min="0.4" max="3" step="0.05" value="3" />
-
-          <label for="rotation-friction">Rotation friction (spin damping): <span id="rotation-friction-value">0.20x</span></label>
-          <input id="rotation-friction" type="range" min="0.2" max="2.5" step="0.05" value="0.2" />
-
-          <label for="ground-slipperiness">Ground slipperiness: <span id="ground-slipperiness-value">μ 0.00</span></label>
-          <input id="ground-slipperiness" type="range" min="0" max="1" step="0.01" value="0" />
-
-          <label for="die-slipperiness">Die slipperiness: <span id="die-slipperiness-value">μ 1.00</span></label>
-          <input id="die-slipperiness" type="range" min="0" max="1" step="0.01" value="1" />
-        </section>
+        <article id="game" class="doc-card">
+          <h2>4) Small game: two users roll D6, highest wins</h2>
+          <div class="split">
+            <pre><code id="game-snippet"></code></pre>
+            <div>
+              <button id="start-game">Setup player dice</button>
+              <button id="play-round">Play one round</button>
+              <p id="game-result" class="hint">Create player dice, then play.</p>
+            </div>
+          </div>
+        </article>
       </section>
-
-      <section id="die-list" class="die-grid"></section>
     </main>
 
-    <script src="/shared/dieEngine.js"></script>
-    <script type="module" src="/public/app.js"></script>
+    <script type="module" src="/public/docs.js"></script>
   </body>
 </html>
