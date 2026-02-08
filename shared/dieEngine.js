@@ -25,6 +25,8 @@
     const throwHeight = Number.isFinite(tuning.throwHeight) ? tuning.throwHeight : 1;
     const throwForward = Number.isFinite(tuning.throwForward) ? tuning.throwForward : 1;
     const throwRotation = Number.isFinite(tuning.throwRotation) ? tuning.throwRotation : 1;
+    const dieWeight = Number.isFinite(tuning.dieWeight) ? tuning.dieWeight : 1;
+    const rotationFriction = Number.isFinite(tuning.rotationFriction) ? tuning.rotationFriction : 1;
     const groundSlipperiness = Number.isFinite(tuning.groundSlipperiness) ? tuning.groundSlipperiness : 0;
     const dieSlipperiness = Number.isFinite(tuning.dieSlipperiness) ? tuning.dieSlipperiness : 0;
 
@@ -32,6 +34,8 @@
       throwHeight: clamp(throwHeight, 0.2, 6),
       throwForward: clamp(throwForward, 0, 6),
       throwRotation: clamp(throwRotation, 0, 6),
+      dieWeight: clamp(dieWeight, 0.4, 3),
+      rotationFriction: clamp(rotationFriction, 0.2, 2.5),
       groundSlipperiness: clamp(groundSlipperiness, 0, 1),
       dieSlipperiness: clamp(dieSlipperiness, 0, 1),
     };
@@ -209,7 +213,7 @@
         velocity: { x: 0, y: 0, z: 0 },
         angularVelocity: { x: 0, y: 0, z: 0 },
         vertices: config.vertices,
-        mass: 1,
+        mass: Number.isFinite(config.mass) ? Math.max(0.2, config.mass) : 1,
         invMass: 1,
         invInertia: config.invInertia,
         friction: Number.isFinite(config.friction) ? config.friction : 1.25,
@@ -218,6 +222,7 @@
         angularDamping: 8.2,
         ccdSweepRadius: 0.02,
       };
+      body.invMass = 1 / body.mass;
       this.bodies.push(body);
       return body;
     }
@@ -386,21 +391,23 @@
       };
       this.vertices = dieVertices(sides);
       this.faceNormals = getFaceNormals(sides);
-      const invInertia = this.#computeInertia(this.vertices);
+      const invInertia = this.#computeInertia(this.vertices, this.tuning.dieWeight);
       this.body = world.createDynamicBody({
         vertices: this.vertices,
         invInertia,
         position: { x: 0, y: 1.8, z: 0 },
         orientation: { x: 0, y: 0, z: 0, w: 1 },
         friction: 0.3 + (1 - this.tuning.dieSlipperiness) * 1.55,
+        mass: this.tuning.dieWeight,
       });
+      this.body.angularDamping = 3.6 + this.tuning.rotationFriction * 4.6;
       this.areaSize = areaSize;
       this.rollApplied = false;
       this.maxLinearSpeed = 0;
       this.maxAngularSpeed = 0;
     }
 
-    #computeInertia(vertices) {
+    #computeInertia(vertices, massScale = 1) {
       const bounds = vertices.reduce((acc, v) => ({
         minX: Math.min(acc.minX, v.x), maxX: Math.max(acc.maxX, v.x),
         minY: Math.min(acc.minY, v.y), maxY: Math.max(acc.maxY, v.y),
@@ -409,10 +416,11 @@
       const sx = bounds.maxX - bounds.minX;
       const sy = bounds.maxY - bounds.minY;
       const sz = bounds.maxZ - bounds.minZ;
+      const mass = Math.max(0.2, massScale);
       return {
-        x: 12 / ((sy * sy + sz * sz) || 1),
-        y: 12 / ((sx * sx + sz * sz) || 1),
-        z: 12 / ((sx * sx + sy * sy) || 1),
+        x: 12 / ((((sy * sy + sz * sz) || 1) * mass)),
+        y: 12 / ((((sx * sx + sz * sz) || 1) * mass)),
+        z: 12 / ((((sx * sx + sy * sy) || 1) * mass)),
       };
     }
 
@@ -588,6 +596,8 @@
             colliders: this.physics.staticColliders,
             groundFriction: 0.25 + (1 - this.tuning.groundSlipperiness) * 1.25,
             dieFriction: this.die.body.friction,
+            dieWeight: this.die.body.mass,
+            angularDamping: this.die.body.angularDamping,
           },
           tuning: this.tuning,
           collider: {
