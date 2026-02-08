@@ -2,7 +2,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
-const { createDiceApi } = require('./packages/storycard-dice/serverApi');
+const { randomUUID } = require('crypto');
+const DiceEngine = require('./shared/dieEngine');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -14,7 +15,8 @@ const MIME_TYPES = {
   '.json': 'application/json; charset=utf-8',
 };
 
-const diceApi = createDiceApi();
+const diceStore = new Map();
+let rollCounter = 0;
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': MIME_TYPES['.json'] });
@@ -45,16 +47,61 @@ function readRequestJson(req) {
   });
 }
 
+function createDie(body) {
+  const sides = DiceEngine.normalizeSides(body.sides);
+  const areaSize = Number.isFinite(body.areaSize) ? Math.max(4, Number(body.areaSize)) : 8;
+  const die = {
+    id: randomUUID(),
+    sides,
+    areaSize,
+    history: [],
+  };
+  diceStore.set(die.id, die);
+  return die;
+}
+
+function rollDie(die, options = {}) {
+  rollCounter += 1;
+  const seed = `${die.id}:${Date.now()}:${rollCounter}`;
+  const sim = DiceEngine.simulateRoll({
+    sides: die.sides,
+    seed,
+    areaSize: die.areaSize,
+    debug: options.debug,
+    tuning: options.tuning,
+  });
+
+  const roll = {
+    rollId: randomUUID(),
+    createdAt: new Date().toISOString(),
+    ...sim,
+  };
+
+  die.history.push(roll);
+  if (die.history.length > 50) {
+    die.history.shift();
+  }
+
+  return roll;
+}
+
 async function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/dice') {
-    sendJson(res, 200, { dice: diceApi.listDice() });
+    const list = Array.from(diceStore.values()).map((die) => ({
+      id: die.id,
+      sides: die.sides,
+      areaSize: die.areaSize,
+      rolls: die.history.length,
+      lastOutcome: die.history[die.history.length - 1]?.outcome ?? null,
+    }));
+    sendJson(res, 200, { dice: list });
     return true;
   }
 
   if (req.method === 'POST' && pathname === '/api/dice') {
     try {
       const body = await readRequestJson(req);
-      const die = diceApi.createDie(body);
+      const die = createDie(body);
       sendJson(res, 201, {
         die: {
           id: die.id,
@@ -71,7 +118,7 @@ async function handleApi(req, res, pathname) {
   const rollMatch = pathname.match(/^\/api\/dice\/([^/]+)\/roll$/);
   if (req.method === 'POST' && rollMatch) {
     const dieId = rollMatch[1];
-    const die = diceApi.getDie(dieId);
+    const die = diceStore.get(dieId);
     if (!die) {
       sendJson(res, 404, { error: 'Die not found' });
       return true;
@@ -83,7 +130,7 @@ async function handleApi(req, res, pathname) {
       body = {};
     }
 
-    const roll = diceApi.rollDie(die, { debug: body.debugPhysics, tuning: body.tuning });
+    const roll = rollDie(die, { debug: body.debugPhysics, tuning: body.tuning });
     if (body.debugPhysics && roll.metadata?.diagnostics) {
       console.log(`[physics-debug] die=${dieId} sides=${die.sides} dotUp=${roll.metadata.diagnostics.topDotUp.toFixed(4)} contacts=${roll.metadata.diagnostics.contactPoints}`);
       for (const line of roll.metadata.diagnostics.logs || []) {
@@ -97,7 +144,7 @@ async function handleApi(req, res, pathname) {
   const historyMatch = pathname.match(/^\/api\/dice\/([^/]+)\/history$/);
   if (req.method === 'GET' && historyMatch) {
     const dieId = historyMatch[1];
-    const die = diceApi.getDie(dieId);
+    const die = diceStore.get(dieId);
     if (!die) {
       sendJson(res, 404, { error: 'Die not found' });
       return true;
