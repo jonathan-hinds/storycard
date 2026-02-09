@@ -35,7 +35,7 @@
       throwForward: clamp(throwForward, 0, 6),
       throwRotation: clamp(throwRotation, 0, 6),
       dieWeight: clamp(dieWeight, 0.4, 3),
-      rotationFriction: clamp(rotationFriction, 0.2, 2.5),
+      rotationFriction: clamp(rotationFriction, 0, 2.5),
       groundSlipperiness: clamp(groundSlipperiness, 0, 1),
       dieSlipperiness: clamp(dieSlipperiness, 0, 1),
     };
