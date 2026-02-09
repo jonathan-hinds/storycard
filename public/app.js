@@ -21,6 +21,9 @@ const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
 const UV_PRECISION = 100000;
 const TEMPLATE_PADDING = 32;
 const TEMPLATE_MAX_SIZE = 2048;
+const textureLoader = new THREE.TextureLoader();
+const D6_SKIN_TEXTURE = textureLoader.load('./assets/d6skin.png');
+D6_SKIN_TEXTURE.colorSpace = THREE.SRGBColorSpace;
 
 function createDebugGroundTexture() {
   const size = 256;
@@ -782,7 +785,7 @@ function createDieMesh(sides) {
   if (geometry !== baseGeometry) {
     baseGeometry.dispose();
   }
-  const templateTexture = createDieTemplateTexture(sideCount, net);
+  const templateTexture = sideCount === 6 ? D6_SKIN_TEXTURE : createDieTemplateTexture(sideCount, net);
   const material = new THREE.MeshStandardMaterial({
     color: BASE_DIE_COLOR,
     map: templateTexture,
