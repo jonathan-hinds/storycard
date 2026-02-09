@@ -851,7 +851,7 @@ function createPhysicsDebugHelpers(areaSize, mesh) {
 function createSceneForCanvas(canvas, sides) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(300, 300, false);
+  renderer.setSize(canvas.clientWidth || 300, canvas.clientHeight || 300, false);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x11131a);
@@ -922,10 +922,8 @@ function createSceneForCanvas(canvas, sides) {
   const debugHelpers = createPhysicsDebugHelpers(areaSize, mesh);
   group.add(debugHelpers.helperGroup);
 
-  const fixedCameraQuaternion = new THREE.Quaternion();
   camera.position.copy(mesh.position).add(cameraOffset);
   camera.lookAt(mesh.position);
-  fixedCameraQuaternion.copy(camera.quaternion);
 
   return {
     renderer,
@@ -934,7 +932,6 @@ function createSceneForCanvas(canvas, sides) {
     mesh,
     faceValueMap,
     cameraOffset,
-    fixedCameraQuaternion,
     animation: null,
     currentValue: getCurrentRollValue(mesh, faceValueMap),
     debugHelpers,
@@ -943,9 +940,26 @@ function createSceneForCanvas(canvas, sides) {
   };
 }
 
+function resizeRendererToDisplaySize(visual) {
+  const canvas = visual.renderer.domElement;
+  const width = canvas.clientWidth || canvas.width;
+  const height = canvas.clientHeight || canvas.height;
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const expectedWidth = Math.floor(width * pixelRatio);
+  const expectedHeight = Math.floor(height * pixelRatio);
+  const needsResize = canvas.width !== expectedWidth || canvas.height !== expectedHeight;
+
+  if (!needsResize) return;
+
+  visual.renderer.setPixelRatio(pixelRatio);
+  visual.renderer.setSize(width, height, false);
+  visual.camera.aspect = width / Math.max(height, 1);
+  visual.camera.updateProjectionMatrix();
+}
+
 function syncCameraToDie(visual) {
   visual.camera.position.copy(visual.mesh.position).add(visual.cameraOffset);
-  visual.camera.quaternion.copy(visual.fixedCameraQuaternion);
+  visual.camera.lookAt(visual.mesh.position);
 }
 
 function applyFrameToMesh(mesh, frame) {
@@ -1122,6 +1136,7 @@ function tick() {
     }
 
     syncCameraToDie(visual);
+    resizeRendererToDisplaySize(visual);
 
     visual.renderer.render(visual.scene, visual.camera);
   }
