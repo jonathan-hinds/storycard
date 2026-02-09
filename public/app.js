@@ -82,7 +82,7 @@ const debugSliderConfig = [
     key: 'rotationFriction',
     inputId: 'rotation-friction',
     outputId: 'rotation-friction-value',
-    defaultValue: 0.2,
+    defaultValue: 0,
     formatValue: (value) => `${value.toFixed(2)}x`,
   },
   {
