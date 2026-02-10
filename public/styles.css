@@ -185,6 +185,13 @@ button {
   font-size: 0.92rem;
 }
 
+
+.die-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .die-canvas {
   width: 300px;
   height: 300px;

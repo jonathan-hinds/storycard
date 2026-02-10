@@ -1,6 +1,7 @@
 import {
   createSceneForCanvas,
   applyFrameToMesh,
+  downloadDieSkinTemplate,
   getCurrentRollValue,
   resizeRendererToDisplaySize,
   syncCameraToDie,
@@ -93,5 +94,9 @@ export class DieRollerClient {
     if (this.visual?.renderer) this.visual.renderer.dispose();
     this.visual = null;
     if (this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
+  }
+
+  downloadTemplateSkin(sides) {
+    downloadDieSkinTemplate(sides);
   }
 }

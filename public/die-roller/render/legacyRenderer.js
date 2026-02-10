@@ -17,8 +17,9 @@ const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
 const UV_PRECISION = 100000;
 const TEMPLATE_PADDING = 32;
 const TEMPLATE_MAX_SIZE = 2048;
+const D6_SKIN_TEXTURE_PATH = '/public/assets/d6skin.png';
 const textureLoader = new THREE.TextureLoader();
-const D6_SKIN_TEXTURE = textureLoader.load('./assets/d6skin.png');
+const D6_SKIN_TEXTURE = textureLoader.load(D6_SKIN_TEXTURE_PATH);
 D6_SKIN_TEXTURE.colorSpace = THREE.SRGBColorSpace;
 
 function createDebugGroundTexture() {
@@ -576,6 +577,32 @@ function downloadUvTemplate(sides) {
   link.click();
 }
 
+function downloadD6SkinTemplate() {
+  const image = new Image();
+  image.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+
+    const link = document.createElement('a');
+    link.download = 'd6-skin-template.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+  image.src = D6_SKIN_TEXTURE_PATH;
+}
+
+function downloadDieSkinTemplate(sides) {
+  const sideCount = Number.parseInt(sides, 10);
+  if (sideCount === 6) {
+    downloadD6SkinTemplate();
+    return;
+  }
+  downloadUvTemplate(sideCount);
+}
+
 function mapGeometryToNetUvs(geometry, net) {
   const faces = extractFacePolygons3D(geometry, net.length);
   const netById = new Map(net.map((face) => [face.id, face]));
@@ -975,6 +1002,7 @@ function applyFrameToMesh(mesh, frame) {
 
 export {
   debugTuning,
+  downloadDieSkinTemplate,
   createSceneForCanvas,
   applyFrameToMesh,
   getCurrentRollValue,
