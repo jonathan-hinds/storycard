@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Storycard Sandbox</title>
+    <title>Storycard Dice Module Demo</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="home">
+  <body data-page="dice">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -32,11 +32,27 @@
       </nav>
     </header>
 
-    <main class="landing">
-      <h1>Welcome to your game tools sandbox</h1>
-      <p>
-        Use the navigation above to open modules under <strong>Projects</strong> or browse placeholder API docs.
-      </p>
+    <main class="layout">
+      <section class="controls">
+        <h1>3D N-Sided Dice Demo</h1>
+        <p>Create independent dice instances. Every die gets its own panel, camera, and roll control.</p>
+
+        <form id="create-die-form" class="card">
+          <label for="sides">Die type</label>
+          <select id="sides" name="sides" required>
+            <option value="6" selected>D6</option>
+            <option value="8">D8</option>
+            <option value="12">D12</option>
+            <option value="20">D20</option>
+          </select>
+          <button type="submit">Create Die</button>
+        </form>
+      </section>
+
+      <section id="die-list" class="die-grid"></section>
     </main>
+
+    <script src="/shared/dieEngine.js"></script>
+    <script type="module" src="/public/app.js"></script>
   </body>
 </html>

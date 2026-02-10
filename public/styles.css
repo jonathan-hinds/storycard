@@ -9,10 +9,117 @@ body {
   color: #eef2ff;
 }
 
+.top-nav-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(13, 18, 29, 0.92);
+  border-bottom: 1px solid #252b3a;
+  backdrop-filter: blur(6px);
+}
+
+.top-nav {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 0.6rem 1rem;
+}
+
+.brand {
+  color: #eef2ff;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.menu {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+}
+
+.menu-item {
+  position: relative;
+}
+
+.menu-trigger {
+  border: 1px solid #3f4b67;
+  border-radius: 0.4rem;
+  background: #121723;
+  color: #eef2ff;
+  padding: 0.45rem 0.6rem;
+  font-size: 16px;
+}
+
+.flyout {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  min-width: 170px;
+  list-style: none;
+  margin: 0;
+  padding: 0.45rem;
+  border: 1px solid #3f4b67;
+  border-radius: 0.5rem;
+  background: #1a2130;
+  display: none;
+}
+
+.menu-item:hover .flyout,
+.menu-item:focus-within .flyout {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.flyout a {
+  text-decoration: none;
+  color: #eef2ff;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.35rem;
+  display: block;
+}
+
+.flyout a:hover,
+.flyout a:focus-visible {
+  background: #2c3549;
+}
+
+.home-btn {
+  margin-left: auto;
+  text-decoration: none;
+  border: 1px solid #5a6a90;
+  color: #d9e2f6;
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.7rem;
+}
+
+body[data-page='home'] .home-btn {
+  display: none;
+}
+
+.landing,
+.placeholder-page {
+  min-height: calc(100vh - 60px);
+  display: grid;
+  place-content: center;
+  gap: 0.7rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+.landing p,
+.placeholder-page p {
+  color: #c6d0e7;
+  max-width: 560px;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 320px 1fr;
-  min-height: 100vh;
+  min-height: calc(100vh - 60px);
 }
 
 .controls {
@@ -49,7 +156,6 @@ button {
   border-color: #5a6a90;
   color: #d9e2f6;
 }
-
 
 .die-grid {
   padding: 1rem;
@@ -96,8 +202,15 @@ button {
     border-right: 0;
     border-bottom: 1px solid #252b3a;
   }
-}
 
+  .top-nav {
+    flex-wrap: wrap;
+  }
+
+  .home-btn {
+    margin-left: 0;
+  }
+}
 
 .toggle {
   margin-top: 0.7rem;
@@ -112,7 +225,6 @@ button {
   font-size: 0.78rem;
   color: #9ab0d8;
 }
-
 
 .debug-controls {
   margin-top: 0.8rem;
