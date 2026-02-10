@@ -4,6 +4,7 @@ const path = require('path');
 const { URL } = require('url');
 const { randomUUID } = require('crypto');
 const DiceEngine = require('./shared/dieEngine');
+const { DieRollerServer } = require('./shared/die-roller');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -16,7 +17,7 @@ const MIME_TYPES = {
 };
 
 const diceStore = new Map();
-let rollCounter = 0;
+const dieRollerServer = new DieRollerServer();
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': MIME_TYPES['.json'] });
@@ -61,21 +62,13 @@ function createDie(body) {
 }
 
 function rollDie(die, options = {}) {
-  rollCounter += 1;
-  const seed = `${die.id}:${Date.now()}:${rollCounter}`;
-  const sim = DiceEngine.simulateRoll({
+  const roll = dieRollerServer.roll({
+    dieId: die.id,
     sides: die.sides,
-    seed,
     areaSize: die.areaSize,
     debug: options.debug,
     tuning: options.tuning,
   });
-
-  const roll = {
-    rollId: randomUUID(),
-    createdAt: new Date().toISOString(),
-    ...sim,
-  };
 
   die.history.push(roll);
   if (die.history.length > 50) {
