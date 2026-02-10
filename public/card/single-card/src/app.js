@@ -124,7 +124,52 @@ const state = {
   previewStartedAt: 0,
   dragOrigin: null,
   dropSlotIndex: null,
+  activePose: {
+    position: new THREE.Vector3(),
+    rotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
+  },
 };
+
+function setActiveCardPose(position, rotationX, rotationY = 0, rotationZ = 0) {
+  state.activePose.position.copy(position);
+  state.activePose.rotation.set(rotationX, rotationY, rotationZ);
+}
+
+function applyHandledCardSway(time) {
+  const card = state.activeCard;
+  if (!card || (state.mode !== 'preview' && state.mode !== 'drag')) {
+    return;
+  }
+
+  const elapsed = (time - state.previewStartedAt) * 0.001;
+  const basePos = state.activePose.position;
+  const baseRot = state.activePose.rotation;
+
+  const swayPosition = state.mode === 'preview'
+    ? new THREE.Vector3(
+      Math.sin(elapsed * 1.8) * 0.22,
+      Math.sin(elapsed * 2.4) * 0.07,
+      Math.cos(elapsed * 1.6) * 0.16,
+    )
+    : new THREE.Vector3(
+      Math.sin(elapsed * 3.6) * 0.05,
+      Math.sin(elapsed * 5.2) * 0.03,
+      Math.cos(elapsed * 4.1) * 0.04,
+    );
+
+  card.position.set(
+    basePos.x + swayPosition.x,
+    basePos.y + swayPosition.y,
+    basePos.z + swayPosition.z,
+  );
+
+  const swayAmount = state.mode === 'preview' ? 1 : 0.8;
+  card.rotation.set(
+    baseRot.x + Math.sin(elapsed * 2.2) * 0.04 * swayAmount,
+    baseRot.y + Math.sin(elapsed * 1.5) * 0.18 * swayAmount,
+    baseRot.z + Math.cos(elapsed * 1.8) * 0.03 * swayAmount,
+  );
+}
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -194,6 +239,12 @@ function setCardAsActive(card, mode) {
   card.renderOrder = 10;
   card.userData.mesh.material.emissive.setHex(0x111111);
   card.userData.tiltPivot.rotation.set(0, 0, 0);
+
+  if (mode === 'preview') {
+    setActiveCardPose(new THREE.Vector3(0, 1.52, 1.08), -0.68, 0, 0);
+  } else {
+    setActiveCardPose(card.position, CARD_FACE_ROTATION_X + 0.24, 0, 0);
+  }
 
   setStatus(
     mode === 'drag'
@@ -276,8 +327,7 @@ function updateDragPoseFromPointer(event) {
     return;
   }
 
-  card.position.set(point.x, 0.35, point.z);
-  card.rotation.set(CARD_FACE_ROTATION_X + 0.18, 0, 0);
+  setActiveCardPose(point.clone().setY(0.35), CARD_FACE_ROTATION_X + 0.24, 0, 0);
 
   const slot = findNearestSlot(point);
   state.dropSlotIndex = slot?.index ?? null;
@@ -519,15 +569,7 @@ async function handlePointerCancel(event) {
 }
 
 function animate(time) {
-  if (state.mode === 'preview' && state.activeCard) {
-    const card = state.activeCard;
-    const elapsed = (time - state.previewStartedAt) * 0.001;
-    const orbitX = Math.sin(elapsed * 1.8) * 0.35;
-    const orbitZ = Math.cos(elapsed * 1.6) * 0.22;
-
-    card.position.set(orbitX, 1.45 + Math.sin(elapsed * 2.4) * 0.06, 1.1 + orbitZ);
-    card.rotation.set(-0.45 + Math.sin(elapsed * 2.2) * 0.04, Math.sin(elapsed * 1.5) * 0.18, 0);
-  }
+  applyHandledCardSway(time);
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
