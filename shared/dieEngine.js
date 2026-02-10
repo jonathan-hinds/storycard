@@ -26,7 +26,7 @@
     const throwForward = Number.isFinite(tuning.throwForward) ? tuning.throwForward : 1;
     const throwRotation = Number.isFinite(tuning.throwRotation) ? tuning.throwRotation : 1;
     const dieWeight = Number.isFinite(tuning.dieWeight) ? tuning.dieWeight : 1;
-    const rotationFriction = Number.isFinite(tuning.rotationFriction) ? tuning.rotationFriction : 1;
+    const rotationFriction = Number.isFinite(tuning.rotationFriction) ? tuning.rotationFriction : 0;
     const groundSlipperiness = Number.isFinite(tuning.groundSlipperiness) ? tuning.groundSlipperiness : 0;
     const dieSlipperiness = Number.isFinite(tuning.dieSlipperiness) ? tuning.dieSlipperiness : 0;
 
@@ -400,7 +400,7 @@
         friction: 0.3 + (1 - this.tuning.dieSlipperiness) * 1.55,
         mass: this.tuning.dieWeight,
       });
-      this.body.angularDamping = 3.6 + this.tuning.rotationFriction * 4.6;
+      this.body.angularDamping = this.tuning.rotationFriction * 4.6;
       this.areaSize = areaSize;
       this.rollApplied = false;
       this.maxLinearSpeed = 0;
