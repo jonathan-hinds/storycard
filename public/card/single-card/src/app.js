@@ -34,15 +34,36 @@ table.position.y = -0.7;
 table.receiveShadow = true;
 scene.add(table);
 
+const slots = [];
 const cards = [];
 const cardConfigs = [
-  { id: 'card-alpha', color: 0x5f8dff, x: -2.4, z: -0.4 },
-  { id: 'card-beta', color: 0x8f6cff, x: -0.8, z: 0.2 },
-  { id: 'card-gamma', color: 0x2dc6ad, x: 0.9, z: -0.1 },
-  { id: 'card-delta', color: 0xf28a65, x: 2.5, z: 0.4 },
+  { id: 'card-alpha', color: 0x5f8dff, x: -1.5, z: -1.15 },
+  { id: 'card-beta', color: 0x8f6cff, x: 1.5, z: -1.15 },
+  { id: 'card-gamma', color: 0x2dc6ad, x: -1.5, z: 1.15 },
+  { id: 'card-delta', color: 0xf28a65, x: 1.5, z: 1.15 },
 ];
 
+const BOARD_Y = -0.54;
+const PICKUP_Y = 0.85;
+const RESTING_ROTATION_X = -Math.PI / 2;
+
 for (const config of cardConfigs) {
+  const slot = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.05, 2.8),
+    new THREE.MeshStandardMaterial({
+      color: 0x162132,
+      roughness: 0.98,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.72,
+    }),
+  );
+  slot.rotation.x = -Math.PI / 2;
+  slot.position.set(config.x, -0.69, config.z);
+  slot.receiveShadow = true;
+  scene.add(slot);
+  slots.push(slot);
+
   const card = CardMeshFactory.createCard({
     id: config.id,
     width: 1.8,
@@ -51,7 +72,14 @@ for (const config of cardConfigs) {
     cornerRadius: 0.15,
     color: config.color,
   });
-  card.position.set(config.x, 0, config.z);
+
+  card.position.set(config.x, BOARD_Y, config.z);
+  card.rotation.set(RESTING_ROTATION_X, 0, 0);
+  card.userData.home = {
+    position: new THREE.Vector3(config.x, BOARD_Y, config.z),
+    rotation: new THREE.Euler(RESTING_ROTATION_X, 0, 0),
+  };
+
   scene.add(card);
   cards.push(card);
 }
@@ -64,9 +92,9 @@ const state = {
   pointerNdc: new THREE.Vector2(),
 };
 
-const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-const dragPoint = new THREE.Vector3();
-const raycaster = new THREE.Raycaster();
+const focusCardPosition = new THREE.Vector3(0, PICKUP_Y, 2.4);
+const focusCardRotation = new THREE.Euler(-0.34, 0, 0);
+const clock = new THREE.Clock();
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -82,13 +110,6 @@ function updateSize() {
   camera.updateProjectionMatrix();
 }
 
-function eventToNdc(event) {
-  const rect = canvas.getBoundingClientRect();
-  state.pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  state.pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-}
-
-
 async function loadCardState() {
   try {
     const response = await fetch('/api/cards');
@@ -97,9 +118,9 @@ async function loadCardState() {
     }
     const payload = await response.json();
     const known = payload.cards?.length ?? 0;
-    setStatus(`Ready: click/touch a card to pick it up. Server knows ${known} cards.`);
+    setStatus(`Ready: hold a card to zoom it. Server knows ${known} cards.`);
   } catch (error) {
-    setStatus(`Ready: click/touch a card to pick it up. Server sync unavailable (${error.message}).`);
+    setStatus(`Ready: hold a card to zoom it. Server sync unavailable (${error.message}).`);
   }
 }
 
@@ -120,6 +141,13 @@ async function sendCardEvent(cardId, action) {
   }
 }
 
+function resetVisualState(card) {
+  const { mesh, tiltPivot } = card.userData;
+  tiltPivot.rotation.set(0, 0, 0);
+  mesh.material.emissive.setHex(0x000000);
+  card.renderOrder = 0;
+}
+
 async function handlePointerDown(event) {
   canvas.setPointerCapture(event.pointerId);
   state.activePointerId = event.pointerId;
@@ -135,34 +163,21 @@ async function handlePointerDown(event) {
   });
 
   state.pickedCard = card;
-  const { mesh, tiltPivot } = card.userData;
-  mesh.material.emissive.setHex(0x111111);
-  tiltPivot.rotation.x = -0.25;
-
-  card.position.y = 0.45;
+  card.userData.mesh.material.emissive.setHex(0x111111);
   card.renderOrder = 10;
 
   await sendCardEvent(card.userData.cardId, 'pickup');
-  setStatus(`Picked up ${card.userData.cardId}. Drag and release to put it down.`);
+  setStatus(`Holding ${card.userData.cardId}. Release to return it to its slot.`);
 }
 
-async function handlePointerMove(event) {
+function handlePointerMove(event) {
   if (state.activePointerId !== event.pointerId || !state.pickedCard) {
     return;
   }
 
-  eventToNdc(event);
-  raycaster.setFromCamera(state.pointerNdc, camera);
-  if (!raycaster.ray.intersectPlane(dragPlane, dragPoint)) {
-    return;
-  }
-
-  const card = state.pickedCard;
-  card.position.x = dragPoint.x;
-  card.position.z = dragPoint.z;
-
-  const { tiltPivot } = card.userData;
-  tiltPivot.rotation.y = THREE.MathUtils.clamp((dragPoint.x - card.position.x) * 0.5, -0.2, 0.2);
+  const rect = canvas.getBoundingClientRect();
+  state.pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  state.pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 }
 
 async function handlePointerUp(event) {
@@ -178,21 +193,56 @@ async function handlePointerUp(event) {
   }
 
   const card = state.pickedCard;
-  const { mesh, tiltPivot } = card.userData;
-
-  card.position.y = 0;
-  card.renderOrder = 0;
-  tiltPivot.rotation.set(0, 0, 0);
-  mesh.material.emissive.setHex(0x000000);
-
   await sendCardEvent(card.userData.cardId, 'putdown');
-  setStatus(`Put down ${card.userData.cardId}.`);
+  setStatus(`Returned ${card.userData.cardId} to the board.`);
 
   state.activePointerId = null;
   state.pickedCard = null;
 }
 
+function animateCards(timeSeconds) {
+  for (const card of cards) {
+    const { home, tiltPivot } = card.userData;
+    const isPicked = state.pickedCard === card;
+
+    if (isPicked) {
+      const orbitX = Math.sin(timeSeconds * 1.4) * 0.24;
+      const orbitY = Math.cos(timeSeconds * 1.8) * 0.08;
+
+      const targetPosition = new THREE.Vector3(
+        focusCardPosition.x + orbitX,
+        focusCardPosition.y + orbitY,
+        focusCardPosition.z,
+      );
+      card.position.lerp(targetPosition, 0.15);
+
+      const lookTiltY = THREE.MathUtils.clamp(state.pointerNdc.x * 0.2, -0.2, 0.2);
+      const lookTiltX = THREE.MathUtils.clamp(state.pointerNdc.y * 0.16, -0.16, 0.16);
+
+      card.rotation.x = THREE.MathUtils.lerp(card.rotation.x, focusCardRotation.x, 0.13);
+      card.rotation.y = THREE.MathUtils.lerp(card.rotation.y, focusCardRotation.y, 0.13);
+      card.rotation.z = THREE.MathUtils.lerp(card.rotation.z, focusCardRotation.z, 0.13);
+
+      tiltPivot.rotation.x = THREE.MathUtils.lerp(tiltPivot.rotation.x, 0.08 + lookTiltX, 0.2);
+      tiltPivot.rotation.y = THREE.MathUtils.lerp(tiltPivot.rotation.y, lookTiltY, 0.2);
+      tiltPivot.rotation.z = THREE.MathUtils.lerp(tiltPivot.rotation.z, Math.sin(timeSeconds * 2.5) * 0.05, 0.18);
+      continue;
+    }
+
+    card.position.lerp(home.position, 0.2);
+    card.rotation.x = THREE.MathUtils.lerp(card.rotation.x, home.rotation.x, 0.2);
+    card.rotation.y = THREE.MathUtils.lerp(card.rotation.y, home.rotation.y, 0.2);
+    card.rotation.z = THREE.MathUtils.lerp(card.rotation.z, home.rotation.z, 0.2);
+
+    if (state.pickedCard !== card) {
+      resetVisualState(card);
+    }
+  }
+}
+
 function animate() {
+  const elapsed = clock.getElapsedTime();
+  animateCards(elapsed);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
