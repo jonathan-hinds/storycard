@@ -3,6 +3,7 @@ import { CardMeshFactory } from './CardMeshFactory.js';
 import { CardPicker } from './CardPicker.js';
 
 const canvas = document.getElementById('single-card-canvas');
+const canvasContainer = canvas.parentElement;
 const statusEl = document.getElementById('single-card-status');
 const resetBtn = document.getElementById('single-card-reset');
 
@@ -380,7 +381,11 @@ function resetDemo() {
 }
 
 async function handlePointerDown(event) {
-  canvas.setPointerCapture(event.pointerId);
+  if (state.activePointerId != null) {
+    return;
+  }
+
+  canvasContainer.setPointerCapture(event.pointerId);
   state.activePointerId = event.pointerId;
   state.pressPointer.x = event.clientX;
   state.pressPointer.y = event.clientY;
@@ -392,7 +397,9 @@ async function handlePointerDown(event) {
   if (!card) {
     state.activePointerId = null;
     state.pendingCard = null;
-    canvas.releasePointerCapture(event.pointerId);
+    if (canvasContainer.hasPointerCapture(event.pointerId)) {
+      canvasContainer.releasePointerCapture(event.pointerId);
+    }
     setStatus('No card selected.');
     return;
   }
@@ -439,23 +446,26 @@ function handlePointerMove(event) {
   }
 
   if (state.mode === 'drag' && state.activeCard) {
+    event.preventDefault();
     updateDragPoseFromPointer(event);
   }
 }
 
-async function handlePointerUp(event) {
+async function endPointerInteraction(event, { commitDrop = true } = {}) {
   if (state.activePointerId !== event.pointerId) {
     return;
   }
 
-  canvas.releasePointerCapture(event.pointerId);
+  if (canvasContainer.hasPointerCapture(event.pointerId)) {
+    canvasContainer.releasePointerCapture(event.pointerId);
+  }
   window.clearTimeout(state.holdTimer);
   state.holdTimer = 0;
 
   const card = state.activeCard;
   const prevOrigin = state.dragOrigin;
 
-  if (card && state.mode === 'drag' && state.dropSlotIndex != null) {
+  if (card && commitDrop && state.mode === 'drag' && state.dropSlotIndex != null) {
     const slot = boardSlots[state.dropSlotIndex];
     slot.card = card;
     card.userData.zone = 'board';
@@ -500,6 +510,14 @@ async function handlePointerUp(event) {
   state.dragOrigin = null;
 }
 
+async function handlePointerUp(event) {
+  await endPointerInteraction(event, { commitDrop: true });
+}
+
+async function handlePointerCancel(event) {
+  await endPointerInteraction(event, { commitDrop: false });
+}
+
 function animate(time) {
   if (state.mode === 'preview' && state.activeCard) {
     const card = state.activeCard;
@@ -515,10 +533,10 @@ function animate(time) {
   requestAnimationFrame(animate);
 }
 
-canvas.addEventListener('pointerdown', handlePointerDown);
-canvas.addEventListener('pointermove', handlePointerMove);
-canvas.addEventListener('pointerup', handlePointerUp);
-canvas.addEventListener('pointercancel', handlePointerUp);
+canvasContainer.addEventListener('pointerdown', handlePointerDown);
+canvasContainer.addEventListener('pointermove', handlePointerMove);
+canvasContainer.addEventListener('pointerup', handlePointerUp);
+canvasContainer.addEventListener('pointercancel', handlePointerCancel);
 window.addEventListener('resize', updateSize);
 resetBtn.addEventListener('click', resetDemo);
 
