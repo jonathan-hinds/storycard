@@ -37,7 +37,7 @@ table.receiveShadow = true;
 scene.add(table);
 
 const boardArea = new THREE.Mesh(
-  new THREE.PlaneGeometry(8.3, 4.6),
+  new THREE.PlaneGeometry(8.3, 5.8),
   new THREE.MeshStandardMaterial({
     color: 0x243146,
     roughness: 0.85,
@@ -46,7 +46,7 @@ const boardArea = new THREE.Mesh(
     opacity: 0.45,
   }),
 );
-boardArea.position.set(0, -0.71, -0.2);
+boardArea.position.set(0, -0.71, 0.15);
 boardArea.rotation.x = -Math.PI / 2;
 scene.add(boardArea);
 
@@ -78,9 +78,9 @@ const boardSlotLayout = [
   { x: -2.1, z: -1.3 },
   { x: 0, z: -1.3 },
   { x: 2.1, z: -1.3 },
-  { x: -2.1, z: 0.8 },
-  { x: 0, z: 0.8 },
-  { x: 2.1, z: 0.8 },
+  { x: -2.1, z: 1.6 },
+  { x: 0, z: 1.6 },
+  { x: 2.1, z: 1.6 },
 ];
 
 boardSlotLayout.forEach((slot, index) => {
