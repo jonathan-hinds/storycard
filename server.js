@@ -19,6 +19,13 @@ const MIME_TYPES = {
 const diceStore = new Map();
 const dieRollerServer = new DieRollerServer();
 
+const cardStore = new Map([
+  ['card-alpha', { id: 'card-alpha', held: false, updatedAt: null }],
+  ['card-beta', { id: 'card-beta', held: false, updatedAt: null }],
+  ['card-gamma', { id: 'card-gamma', held: false, updatedAt: null }],
+  ['card-delta', { id: 'card-delta', held: false, updatedAt: null }],
+]);
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': MIME_TYPES['.json'] });
   res.end(JSON.stringify(payload));
@@ -131,6 +138,29 @@ async function handleApi(req, res, pathname) {
       }
     }
     sendJson(res, 200, { dieId, roll });
+    return true;
+  }
+
+
+  if (req.method === 'GET' && pathname === '/api/cards') {
+    sendJson(res, 200, { cards: Array.from(cardStore.values()) });
+    return true;
+  }
+
+  const cardActionMatch = pathname.match(/^\/api\/cards\/([^/]+)\/(pickup|putdown)$/);
+  if (req.method === 'POST' && cardActionMatch) {
+    const [, cardId, action] = cardActionMatch;
+    const card = cardStore.get(cardId);
+
+    if (!card) {
+      sendJson(res, 404, { error: 'Card not found' });
+      return true;
+    }
+
+    card.held = action === 'pickup';
+    card.updatedAt = Date.now();
+
+    sendJson(res, 200, { card });
     return true;
   }
 
