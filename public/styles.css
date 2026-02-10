@@ -246,3 +246,30 @@ button {
   font-size: 0.85rem;
   color: #d2dbf2;
 }
+
+.single-card-layout {
+  grid-template-columns: 320px 1fr;
+}
+
+.single-card-stage-wrap {
+  padding: 1rem;
+}
+
+.single-card-canvas {
+  width: 100%;
+  min-height: 560px;
+  border-radius: 0.8rem;
+  border: 1px solid #2a3448;
+  background: radial-gradient(circle at center, #273249, #101522 72%);
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .single-card-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .single-card-canvas {
+    min-height: 420px;
+  }
+}
