@@ -112,6 +112,9 @@ const pointerNdc = new THREE.Vector2();
 const PREVIEW_HOLD_DELAY_MS = 230;
 const DRAG_START_DISTANCE_PX = 10;
 const CARD_FACE_ROTATION_X = -Math.PI / 2;
+const HAND_CARD_BASE_Y = 0.1;
+const HAND_CARD_ARC_LIFT = 0.06;
+const HAND_CARD_FAN_ROTATION_Z = 0.08;
 
 const state = {
   activePointerId: null,
@@ -197,8 +200,12 @@ function clearHighlights() {
 
 function cardWorldPositionForHand(indexInHand, totalInHand) {
   const spread = Math.max(totalInHand - 1, 1);
+  const normalizedIndex = spread === 0 ? 0 : indexInHand / spread - 0.5;
   const x = (indexInHand - spread / 2) * 2.0;
-  return new THREE.Vector3(x, 0, 3.2);
+  const y = HAND_CARD_BASE_Y + (0.5 - Math.abs(normalizedIndex)) * HAND_CARD_ARC_LIFT;
+  const z = 3.2 + Math.abs(normalizedIndex) * 0.12;
+
+  return new THREE.Vector3(x, y, z);
 }
 
 function relayoutBoardAndHand() {
@@ -226,7 +233,9 @@ function relayoutBoardAndHand() {
 
     const pos = cardWorldPositionForHand(index, handCards.length);
     card.position.copy(pos);
-    card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
+    const spread = Math.max(handCards.length - 1, 1);
+    const normalizedIndex = spread === 0 ? 0 : index / spread - 0.5;
+    card.rotation.set(CARD_FACE_ROTATION_X, 0, -normalizedIndex * HAND_CARD_FAN_ROTATION_Z);
     card.userData.slotIndex = null;
   });
 }
