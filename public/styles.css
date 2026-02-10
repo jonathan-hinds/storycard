@@ -61,12 +61,13 @@ button {
 
 .die-item {
   width: 300px;
-  background: #202636;
-  border: 1px solid #2b3448;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05) 35%, rgba(20, 26, 38, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.78);
   border-radius: 0.6rem;
   padding: 0.7rem;
   display: grid;
   gap: 0.55rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 8px 24px rgba(0, 0, 0, 0.32);
 }
 
 .die-title {
