@@ -19,8 +19,15 @@ function renderDieCard({ id, sides }) {
 
   const mount = document.createElement('div');
 
+  const actions = document.createElement('div');
+  actions.className = 'die-actions';
+
   const rollBtn = document.createElement('button');
   rollBtn.textContent = 'Roll';
+
+  const downloadSkinBtn = document.createElement('button');
+  downloadSkinBtn.type = 'button';
+  downloadSkinBtn.textContent = 'Download skin template';
 
   const client = new DieRollerClient({
     container: mount,
@@ -35,8 +42,13 @@ function renderDieCard({ id, sides }) {
     await client.roll({ dice: [{ sides, id }] });
   });
 
+  downloadSkinBtn.addEventListener('click', () => {
+    client.downloadTemplateSkin(sides);
+  });
+
   clients.set(id, client);
-  item.append(title, result, mount, rollBtn);
+  actions.append(rollBtn, downloadSkinBtn);
+  item.append(title, result, mount, actions);
   return item;
 }
 
