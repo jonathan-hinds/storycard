@@ -18,6 +18,7 @@ const BOARD_SLOTS_PER_SIDE = 3;
 let client = null;
 let match = null;
 let matchmakingPollTimer = 0;
+let stateSyncInFlight = false;
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -215,6 +216,9 @@ function renderMatch() {
       canvas,
       statusElement: statusEl,
       template,
+      options: {
+        onCardStateCommitted: syncMatchStateAfterCardCommit,
+      },
     });
   } else {
     client.template = template;
@@ -227,6 +231,25 @@ function renderMatch() {
 
   setTurnLockState();
   updateSummaryPanels();
+}
+
+async function syncMatchStateAfterCardCommit() {
+  if (!match || match.turn !== PLAYER_SIDE || stateSyncInFlight) return;
+
+  const nextState = syncPlayerStateFromClient();
+  stateSyncInFlight = true;
+  try {
+    const status = await postJson('/api/phase-manager/match/sync-state', {
+      playerId,
+      hand: nextState.hand,
+      board: nextState.board,
+    });
+    applyMatchmakingStatus(status);
+  } catch (error) {
+    statusEl.textContent = `Card sync error: ${error.message}`;
+  } finally {
+    stateSyncInFlight = false;
+  }
 }
 
 function applyMatchmakingStatus(status) {

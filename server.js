@@ -461,6 +461,55 @@ async function handleApi(req, res, pathname) {
     return true;
   }
 
+  if (req.method === 'POST' && pathname === '/api/phase-manager/match/sync-state') {
+    let body = {};
+    try {
+      body = await readRequestJson(req);
+    } catch (error) {
+      body = {};
+    }
+
+    if (!body.playerId || typeof body.playerId !== 'string') {
+      sendJson(res, 400, { error: 'playerId is required' });
+      return true;
+    }
+
+    const status = phaseMatchmakingState.get(body.playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      sendJson(res, 409, { error: 'player is not in an active match' });
+      return true;
+    }
+
+    const match = phaseMatches.get(status.matchId);
+    if (!match) {
+      sendJson(res, 409, { error: 'active match not found' });
+      return true;
+    }
+
+    if (match.turnPlayerId !== body.playerId) {
+      sendJson(res, 409, { error: 'cannot sync state when it is not your turn' });
+      return true;
+    }
+
+    const playerState = match.cardsByPlayer.get(body.playerId);
+    if (!playerState) {
+      sendJson(res, 409, { error: 'player state not found in active match' });
+      return true;
+    }
+
+    const validated = validatePhaseTurnPayload(body, playerState.allCards);
+    if (validated.error) {
+      sendJson(res, 400, { error: validated.error });
+      return true;
+    }
+
+    playerState.hand = validated.hand;
+    playerState.board = validated.board;
+
+    sendJson(res, 200, getPlayerPhaseStatus(body.playerId));
+    return true;
+  }
+
 
   return false;
 }

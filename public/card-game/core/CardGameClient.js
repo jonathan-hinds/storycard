@@ -36,6 +36,7 @@ export class CardGameClient {
     this.zoneFramework = this.template.zoneFramework;
     validateZoneTemplate(this.template, this.zoneFramework);
     this.options = options;
+    this.onCardStateCommitted = options.onCardStateCommitted;
     this.net = new CardGameHttpClient(options.net || {});
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -362,6 +363,21 @@ export class CardGameClient {
     }
   }
 
+  async notifyCardStateCommitted(card) {
+    if (typeof this.onCardStateCommitted !== 'function' || !card) return;
+
+    try {
+      await this.onCardStateCommitted({
+        cardId: card.userData.cardId,
+        zone: card.userData.zone,
+        slotIndex: card.userData.slotIndex,
+        owner: card.userData.owner,
+      });
+    } catch (error) {
+      this.setStatus(`State sync callback error: ${error.message}`);
+    }
+  }
+
   resetDemo() {
     this.clearHighlights();
     this.clearActiveCard({ restore: false });
@@ -472,6 +488,7 @@ export class CardGameClient {
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
       await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: CARD_ZONE_TYPES.BOARD, slotIndex: slot.index });
       card.userData.owner = this.template.playerSide;
+      await this.notifyCardStateCommitted(card);
       this.setStatus(`Placed ${card.userData.cardId} into board slot ${slot.index + 1}.`);
     } else if (card) {
       if (prevOrigin?.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(prevOrigin.slotIndex)) {
@@ -486,6 +503,7 @@ export class CardGameClient {
       }
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
       await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: card.userData.zone, slotIndex: card.userData.slotIndex });
+      await this.notifyCardStateCommitted(card);
       this.setStatus(this.state.mode === 'preview' ? `Preview closed for ${card.userData.cardId}.` : `Returned ${card.userData.cardId} to ${card.userData.zone}.`);
     }
 
