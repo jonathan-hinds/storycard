@@ -15,8 +15,10 @@ const GRID_VERTICAL_PADDING_PX = 0;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
 const HOLD_DELAY_MS = 250;
+const DRAG_START_DISTANCE_PX = 10;
 const HOLD_SCALE = 1.52;
 const HOLD_Z_OFFSET = 2.2;
+const DRAG_Z_OFFSET = 2.4;
 
 const TYPE_COLORS = {
   assassin: 0x7f5af0,
@@ -126,13 +128,19 @@ export class CardLibraryScene {
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.pointerCard = null;
+    this.activePointerId = null;
+    this.draggingCard = null;
+    this.dragPosition = new THREE.Vector3();
+    this.dragPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    this.dragPlaneHit = new THREE.Vector3();
+    this.pressPointer = { x: 0, y: 0 };
     this.holdTimeoutId = null;
     this.heldCard = null;
     this.heldStartTime = 0;
 
     this.onPointerDown = this.onPointerDown.bind(this);
+    this.onPointerMove = this.onPointerMove.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
-    this.onPointerLeave = this.onPointerLeave.bind(this);
     this.onResize = this.onResize.bind(this);
 
     const hemiLight = new THREE.HemisphereLight(0xdce8ff, 0x1a1f2c, 1.1);
@@ -149,10 +157,10 @@ export class CardLibraryScene {
     fillLight.position.set(-5, -6, 4);
     this.scene.add(fillLight);
 
-    this.canvas.addEventListener('pointerdown', this.onPointerDown);
-    this.canvas.addEventListener('pointerup', this.onPointerUp);
-    this.canvas.addEventListener('pointercancel', this.onPointerUp);
-    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    this.scrollContainer.addEventListener('pointerdown', this.onPointerDown);
+    this.scrollContainer.addEventListener('pointermove', this.onPointerMove);
+    this.scrollContainer.addEventListener('pointerup', this.onPointerUp);
+    this.scrollContainer.addEventListener('pointercancel', this.onPointerUp);
     window.addEventListener('resize', this.onResize);
 
     this.onResize();
@@ -161,10 +169,10 @@ export class CardLibraryScene {
 
   destroy() {
     this.renderer.setAnimationLoop(null);
-    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
-    this.canvas.removeEventListener('pointerup', this.onPointerUp);
-    this.canvas.removeEventListener('pointercancel', this.onPointerUp);
-    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    this.scrollContainer.removeEventListener('pointerdown', this.onPointerDown);
+    this.scrollContainer.removeEventListener('pointermove', this.onPointerMove);
+    this.scrollContainer.removeEventListener('pointerup', this.onPointerUp);
+    this.scrollContainer.removeEventListener('pointercancel', this.onPointerUp);
     window.removeEventListener('resize', this.onResize);
     this.clearCards();
     this.renderer.dispose();
@@ -190,6 +198,7 @@ export class CardLibraryScene {
     this.cardRoots.length = 0;
     this.pointerCard = null;
     this.heldCard = null;
+    this.draggingCard = null;
   }
 
   setCards(cards) {
@@ -259,7 +268,12 @@ export class CardLibraryScene {
   }
 
   onPointerDown(event) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || this.activePointerId != null) return;
+    this.activePointerId = event.pointerId;
+    this.pressPointer.x = event.clientX;
+    this.pressPointer.y = event.clientY;
+    this.scrollContainer.setPointerCapture(event.pointerId);
+
     const target = this.pickCard(event);
     this.pointerCard = target;
     if (!target) return;
@@ -271,18 +285,73 @@ export class CardLibraryScene {
     }, HOLD_DELAY_MS);
   }
 
-  onPointerUp() {
+  getPointerDistanceFromPress(event) {
+    return Math.hypot(event.clientX - this.pressPointer.x, event.clientY - this.pressPointer.y);
+  }
+
+  clearPendingHold() {
     if (this.holdTimeoutId) {
       clearTimeout(this.holdTimeoutId);
       this.holdTimeoutId = null;
     }
+  }
+
+  beginDrag(card) {
+    this.clearPendingHold();
+    if (this.heldCard === card) {
+      this.heldCard.userData.targetHoldProgress = 0;
+      this.heldCard = null;
+    }
+    this.draggingCard = card;
+    this.scrollContainer.classList.add('cards-list--dragging');
+  }
+
+  updateDragFromPointer(event) {
+    if (!this.draggingCard) return;
+    this.setPointer(event);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    if (!this.raycaster.ray.intersectPlane(this.dragPlane, this.dragPlaneHit)) return;
+    this.dragPosition.copy(this.dragPlaneHit);
+  }
+
+  endDrag() {
+    if (!this.draggingCard) return;
+    this.draggingCard.userData.targetHoldProgress = 0;
+    this.draggingCard = null;
+    this.scrollContainer.classList.remove('cards-list--dragging');
+  }
+
+  onPointerMove(event) {
+    if (this.activePointerId !== event.pointerId) return;
+    if (this.pointerCard && this.getPointerDistanceFromPress(event) > DRAG_START_DISTANCE_PX) {
+      this.clearPendingHold();
+      if (this.heldCard) {
+        this.heldCard.userData.targetHoldProgress = 0;
+        this.heldCard = null;
+      }
+      if (!this.draggingCard) this.beginDrag(this.pointerCard);
+    }
+
+    if (this.draggingCard) {
+      event.preventDefault();
+      this.updateDragFromPointer(event);
+    }
+  }
+
+  onPointerUp(event) {
+    if (this.activePointerId !== event.pointerId) return;
+    if (this.scrollContainer.hasPointerCapture(event.pointerId)) {
+      this.scrollContainer.releasePointerCapture(event.pointerId);
+    }
+
+    this.clearPendingHold();
+
+    this.endDrag();
 
     if (this.heldCard) this.heldCard.userData.targetHoldProgress = 0;
     this.pointerCard = null;
-  }
-
-  onPointerLeave() {
-    this.onPointerUp();
+    this.heldCard = null;
+    this.activePointerId = null;
   }
 
   onResize() {
@@ -324,6 +393,14 @@ export class CardLibraryScene {
     const elapsed = this.clock.getElapsedTime();
 
     this.cardRoots.forEach((root) => {
+      if (this.draggingCard === root) {
+        root.position.set(this.dragPosition.x, this.dragPosition.y, DRAG_Z_OFFSET);
+        root.rotation.set(0, 0, 0);
+        root.scale.setScalar(HOLD_SCALE);
+        root.userData.holdProgress = 0;
+        return;
+      }
+
       const { basePosition, phase } = root.userData;
       const swirlX = Math.sin(elapsed * 1.8 + phase) * 0.09;
       const swirlZ = Math.cos(elapsed * 1.45 + phase * 1.2) * 0.05;
