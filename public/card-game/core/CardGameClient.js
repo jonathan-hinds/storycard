@@ -628,15 +628,21 @@ export class CardGameClient {
 
       const position = fromPosition.clone().lerp(targetPosition, eased);
       const arc = Math.sin(rawProgress * Math.PI) * animation.arcHeight;
-      const swirl = Math.sin(rawProgress * Math.PI * 2.4) * animation.swirlAmplitude;
-      position.y += arc + Math.sin((time * 0.001) * CARD_ANIMATION_MAGIC_SWAY_SPEED + animation.startAtMs * 0.001) * 0.05;
+      const settleEnvelope = (1 - rawProgress) ** 2;
+      const swirl = Math.sin(rawProgress * Math.PI * 2) * animation.swirlAmplitude * settleEnvelope;
+      const ambientLift = Math.sin((time * 0.001) * CARD_ANIMATION_MAGIC_SWAY_SPEED + animation.startAtMs * 0.001)
+        * 0.05
+        * settleEnvelope;
+      position.y += arc + ambientLift;
       position.x += swirl;
 
       card.position.copy(position);
       card.rotation.set(
         THREE.MathUtils.lerp(fromRotation.x, targetRotation.x, eased),
-        THREE.MathUtils.lerp(fromRotation.y, targetRotation.y, eased) + Math.cos(rawProgress * Math.PI * 2) * animation.swirlAmplitude * 0.7,
-        THREE.MathUtils.lerp(fromRotation.z, targetRotation.z, eased) + Math.sin(rawProgress * Math.PI * 1.5) * animation.swirlAmplitude,
+        THREE.MathUtils.lerp(fromRotation.y, targetRotation.y, eased)
+          + Math.cos(rawProgress * Math.PI * 2) * animation.swirlAmplitude * 0.7 * settleEnvelope,
+        THREE.MathUtils.lerp(fromRotation.z, targetRotation.z, eased)
+          + Math.sin(rawProgress * Math.PI * 2) * animation.swirlAmplitude * settleEnvelope,
       );
 
       if (rawProgress >= 1) {
