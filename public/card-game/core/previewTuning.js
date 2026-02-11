@@ -1,8 +1,8 @@
-const PREVIEW_TUNING_STORAGE_KEY = 'storycard.previewTuning.v1';
+const PREVIEW_TUNING_STORAGE_KEY = 'storycard.previewTuning.v2';
 
 export const DEFAULT_PREVIEW_TUNING = Object.freeze({
-  rotationX: -0.68,
-  cameraDistanceOffset: 0,
+  rotationX: -1.16,
+  cameraDistanceOffset: 1.2,
 });
 
 const PREVIEW_TUNING_BOUNDS = Object.freeze({
@@ -56,4 +56,3 @@ export function savePreviewTuning(tuning) {
 export function getPreviewTuningBounds() {
   return PREVIEW_TUNING_BOUNDS;
 }
-

@@ -49,18 +49,9 @@
             your three side card slots. Deck slots are reserved for future draw animations and networked game flow.
           </p>
           <button id="single-card-reset" type="button" class="secondary-action">Reset demo</button>
-          <div class="preview-tuning-controls" aria-label="Preview tuning sliders">
-            <h3>Preview Tuning</h3>
-            <label for="single-card-preview-rotation">Rotation (forward/backward)</label>
-            <input id="single-card-preview-rotation" type="range" min="-1.2" max="-0.2" step="0.01" />
-            <p id="single-card-preview-rotation-value" class="debug-pill">Rotation: 0.00 rad</p>
-
-            <label for="single-card-preview-distance">Distance from camera</label>
-            <input id="single-card-preview-distance" type="range" min="-1.2" max="1.2" step="0.01" />
-            <p id="single-card-preview-distance-value" class="debug-pill">Distance offset: 0.00</p>
-
-            <button id="single-card-preview-reset" type="button" class="secondary-action">Reset preview tuning</button>
-          </div>
+          <p>
+            Card preview now uses fixed tuning values for a consistent feel across the project.
+          </p>
           <p id="single-card-status" class="debug-pill">Loading…</p>
         </div>
       </section>
