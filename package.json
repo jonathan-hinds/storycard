@@ -15,5 +15,8 @@
     "multiplayer"
   ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "mongodb": "^6.13.0"
+  }
 }

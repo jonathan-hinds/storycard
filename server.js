@@ -7,6 +7,7 @@ const DiceEngine = require('./shared/dieEngine');
 const { DieRollerServer } = require('./shared/die-roller');
 const { CardGameServer } = require('./shared/card-game');
 const { PhaseManagerServer } = require('./shared/phase-manager');
+const { CARD_TYPES, listCards: listCatalogCards, createCard: createCatalogCard } = require('./shared/cards-catalog/mongoStore');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -148,6 +149,29 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === 'GET' && pathname === '/api/cards') {
     sendJson(res, 200, { cards: cardGameServer.listCards() });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/projects/cards') {
+    try {
+      const cards = await listCatalogCards();
+      sendJson(res, 200, { cards, cardTypes: CARD_TYPES });
+    } catch (error) {
+      sendJson(res, 500, { error: 'Unable to load cards from database' });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/projects/cards') {
+    try {
+      const body = await readRequestJson(req);
+      const card = await createCatalogCard(body);
+      sendJson(res, 201, { card });
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('required') || error.message.includes('must be an integer') || error.message.includes('must be one of');
+      sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create card' });
+    }
     return true;
   }
 

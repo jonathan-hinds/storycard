@@ -327,3 +327,96 @@ button {
 .phase-manager-turn-overlay[hidden] {
   display: none;
 }
+
+.cards-project-layout {
+  min-height: calc(100vh - 60px);
+  display: grid;
+  grid-template-columns: 340px 1fr;
+}
+
+.cards-panel {
+  border-right: 1px solid #252b3a;
+  background: #171b25;
+  padding: 1rem;
+}
+
+.cards-panel > p {
+  color: #c6d0e7;
+}
+
+.cards-status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #9bd0a8;
+}
+
+.cards-status[data-error='true'] {
+  color: #f4a8a8;
+}
+
+.cards-list-wrap {
+  padding: 1rem;
+}
+
+.cards-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.8rem;
+  align-content: start;
+}
+
+.catalog-card {
+  background: #202636;
+  border: 1px solid #3f4b67;
+  border-radius: 0.6rem;
+  padding: 0.8rem;
+}
+
+.catalog-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.catalog-card-type {
+  margin: 0.35rem 0 0.8rem;
+  color: #c6d0e7;
+}
+
+.catalog-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.catalog-card-stats div {
+  background: #171d2c;
+  border-radius: 0.45rem;
+  padding: 0.35rem;
+  text-align: center;
+}
+
+.catalog-card-stats dt {
+  font-size: 0.78rem;
+  color: #9ab0d8;
+}
+
+.catalog-card-stats dd {
+  margin: 0.2rem 0 0;
+  font-weight: 700;
+}
+
+.catalog-empty {
+  color: #c6d0e7;
+}
+
+@media (max-width: 900px) {
+  .cards-project-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cards-panel {
+    border-right: 0;
+    border-bottom: 1px solid #252b3a;
+  }
+}
