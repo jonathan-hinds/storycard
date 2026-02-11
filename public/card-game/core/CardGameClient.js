@@ -645,18 +645,33 @@ export class CardGameClient {
 
     const now = performance.now();
     const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
-    attackPlan.forEach((step, index) => {
-      const isOpponentAttack = step?.attackerSide === 'opponent';
-      const attackerGlobalSlotIndex = isOpponentAttack
-        ? step.attackerSlotIndex
-        : boardSlotsPerSide + step.attackerSlotIndex;
-      const defenderGlobalSlotIndex = isOpponentAttack
-        ? boardSlotsPerSide + step.targetSlotIndex
-        : step.targetSlotIndex;
+    const resolveAttackSlots = (step) => {
+      const preferredSide = step?.attackerSide === 'opponent' ? 'opponent' : 'player';
+      const orderedSides = preferredSide === 'opponent' ? ['opponent', 'player'] : ['player', 'opponent'];
 
-      const attackerSlot = this.boardSlots[attackerGlobalSlotIndex];
-      const defenderSlot = this.boardSlots[defenderGlobalSlotIndex];
-      if (!attackerSlot?.card || !defenderSlot) return;
+      for (const side of orderedSides) {
+        const isOpponentAttack = side === 'opponent';
+        const attackerGlobalSlotIndex = isOpponentAttack
+          ? step.attackerSlotIndex
+          : boardSlotsPerSide + step.attackerSlotIndex;
+        const defenderGlobalSlotIndex = isOpponentAttack
+          ? boardSlotsPerSide + step.targetSlotIndex
+          : step.targetSlotIndex;
+        const attackerSlot = this.boardSlots[attackerGlobalSlotIndex];
+        const defenderSlot = this.boardSlots[defenderGlobalSlotIndex];
+
+        if (!attackerSlot?.card || !defenderSlot) continue;
+        return { attackerSlot, defenderSlot };
+      }
+
+      return null;
+    };
+
+    attackPlan.forEach((step, index) => {
+      const resolvedSlots = resolveAttackSlots(step);
+      if (!resolvedSlots) return;
+
+      const { attackerSlot, defenderSlot } = resolvedSlots;
       this.combatAnimations.push({
         attackerCard: attackerSlot.card,
         originPosition: new THREE.Vector3(attackerSlot.x, 0, attackerSlot.z),

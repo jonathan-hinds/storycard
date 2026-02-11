@@ -148,6 +148,19 @@ function serializeMatchForPlayer(match, playerId) {
     canAttack: Number.isInteger(card.summonedTurn) && card.summonedTurn < match.turnNumber,
   }));
 
+  const commitAttacks = [];
+  for (const attackerId of match.players) {
+    const attackerSide = attackerId === playerId ? 'player' : 'opponent';
+    const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
+    for (const attack of attacks) {
+      commitAttacks.push({
+        ...attack,
+        attackerId,
+        attackerSide,
+      });
+    }
+  }
+
   return {
     id: match.id,
     turnNumber: match.turnNumber,
@@ -169,16 +182,7 @@ function serializeMatchForPlayer(match, playerId) {
     meta: {
       drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
       phaseStartedAt: match.phaseStartedAt,
-      commitAttacks: [
-        ...(match.pendingCommitAttacksByPlayer.get(playerId) || []).map((attack) => ({
-          ...attack,
-          attackerSide: 'player',
-        })),
-        ...(match.pendingCommitAttacksByPlayer.get(opponentId) || []).map((attack) => ({
-          ...attack,
-          attackerSide: 'opponent',
-        })),
-      ],
+      commitAttacks,
     },
   };
 }
