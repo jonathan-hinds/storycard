@@ -71,6 +71,8 @@ export class CardGameClient {
     this.state = {
       activePointerId: null,
       pendingCard: null,
+      pendingCardCanDrag: false,
+      pendingCardDidPickup: false,
       activeCard: null,
       mode: 'idle',
       holdTimer: 0,
@@ -406,6 +408,13 @@ export class CardGameClient {
     return true;
   }
 
+  canCardDrag(card) {
+    if (!card) return false;
+    if (card.userData.zone === CARD_ZONE_TYPES.HAND && card.userData.owner === this.template.playerSide) return true;
+    if (this.canCardAttack(card)) return true;
+    return false;
+  }
+
   async loadCardState() {
     try {
       const payload = await this.net.listCards();
@@ -493,11 +502,15 @@ export class CardGameClient {
     this.state.lastPointer.x = event.clientX;
     this.state.lastPointer.y = event.clientY;
     this.state.dropSlotIndex = null;
+    this.state.pendingCardCanDrag = false;
+    this.state.pendingCardDidPickup = false;
 
     const card = this.picker.pick(event);
     if (!card) {
       this.state.activePointerId = null;
       this.state.pendingCard = null;
+      this.state.pendingCardCanDrag = false;
+      this.state.pendingCardDidPickup = false;
       if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
       this.setStatus('No card selected.');
       return;
@@ -506,47 +519,26 @@ export class CardGameClient {
     if (card.userData.locked) {
       this.state.activePointerId = null;
       this.state.pendingCard = null;
+      this.state.pendingCardCanDrag = false;
+      this.state.pendingCardDidPickup = false;
       if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
       this.setStatus(`${card.userData.cardId} is still animating. Try again in a moment.`);
       return;
     }
 
-    if (card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner !== this.template.playerSide) {
-      this.state.activePointerId = null;
-      this.state.pendingCard = null;
-      if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
-      this.setStatus('Opponent cards are locked to their side. Drag one of your cards instead.');
-      return;
-    }
-
-    if (card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner === this.template.playerSide) {
-      if (card.userData.attackCommitted === true) {
-        this.state.activePointerId = null;
-        this.state.pendingCard = null;
-        if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
-        this.setStatus(`${card.userData.cardId} already committed its attack this turn.`);
-        return;
-      }
-      if (!this.canCardAttack(card)) {
-        this.state.activePointerId = null;
-        this.state.pendingCard = null;
-        if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
-        this.setStatus(`${card.userData.cardId} has summoning sickness and cannot attack yet.`);
-        return;
-      }
-    }
-
     this.state.pendingCard = card;
+    this.state.pendingCardCanDrag = this.canCardDrag(card);
+    this.state.pendingCardDidPickup = false;
     this.clearHighlights();
     this.state.dragOrigin = { zone: card.userData.zone, slotIndex: card.userData.slotIndex };
 
     if (this.canCardAttack(card)) {
       this.state.dropTargetSlotIndex = card.userData.targetSlotIndex;
-      return;
+    } else if (this.state.pendingCardCanDrag) {
+      if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(card.userData.slotIndex)) this.boardSlots[card.userData.slotIndex].card = null;
+      await this.sendCardEvent(card.userData.cardId, 'pickup', { zone: this.state.dragOrigin.zone });
+      this.state.pendingCardDidPickup = true;
     }
-
-    if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(card.userData.slotIndex)) this.boardSlots[card.userData.slotIndex].card = null;
-    await this.sendCardEvent(card.userData.cardId, 'pickup', { zone: this.state.dragOrigin.zone });
 
     this.state.holdTimer = window.setTimeout(() => {
       if (this.state.activePointerId !== event.pointerId || this.state.mode !== 'idle') return;
@@ -561,12 +553,12 @@ export class CardGameClient {
     const distance = this.getPointerDistanceFromPress(event);
     const card = this.state.activeCard ?? this.state.pendingCard;
 
-    if (this.state.mode === 'idle' && card && distance > DRAG_START_DISTANCE_PX) {
+    if (this.state.mode === 'idle' && card && this.state.pendingCardCanDrag && distance > DRAG_START_DISTANCE_PX) {
       this.setCardAsActive(card, 'drag');
       this.beginDrag(card);
     }
 
-    if (this.state.mode === 'preview' && distance > DRAG_START_DISTANCE_PX && this.state.activeCard) this.beginDrag(this.state.activeCard);
+    if (this.state.mode === 'preview' && this.state.pendingCardCanDrag && distance > DRAG_START_DISTANCE_PX && this.state.activeCard) this.beginDrag(this.state.activeCard);
     if (this.state.mode === 'drag' && this.state.activeCard) {
       event.preventDefault();
       if (this.canCardAttack(this.state.activeCard)) this.updateAttackTargetPoseFromPointer(event);
@@ -611,8 +603,10 @@ export class CardGameClient {
         card.userData.slotIndex = null;
       }
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
-      await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: card.userData.zone, slotIndex: card.userData.slotIndex });
-      await this.notifyCardStateCommitted(card);
+      if (this.state.pendingCardDidPickup) {
+        await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: card.userData.zone, slotIndex: card.userData.slotIndex });
+        await this.notifyCardStateCommitted(card);
+      }
       this.setStatus(this.state.mode === 'preview' ? `Preview closed for ${card.userData.cardId}.` : `Returned ${card.userData.cardId} to ${card.userData.zone}.`);
     }
 
@@ -622,6 +616,8 @@ export class CardGameClient {
 
     this.state.activePointerId = null;
     this.state.pendingCard = null;
+    this.state.pendingCardCanDrag = false;
+    this.state.pendingCardDidPickup = false;
     this.state.dragOrigin = null;
     this.state.dropTargetSlotIndex = null;
   }
