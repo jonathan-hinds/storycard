@@ -24,6 +24,7 @@ const CARD_FACE_ROTATION_X = -Math.PI / 2;
 const HAND_CARD_BASE_Y = 0.1;
 const HAND_CARD_ARC_LIFT = 0.06;
 const HAND_CARD_FAN_ROTATION_Z = 0.08;
+const CARD_ANIMATION_MAGIC_SWAY_SPEED = 7.2;
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -37,6 +38,7 @@ export class CardGameClient {
     validateZoneTemplate(this.template, this.zoneFramework);
     this.options = options;
     this.onCardStateCommitted = options.onCardStateCommitted;
+    this.cardAnimationHooks = Array.isArray(options.cardAnimationHooks) ? options.cardAnimationHooks : [];
     this.net = new CardGameHttpClient(options.net || {});
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -54,6 +56,7 @@ export class CardGameClient {
     this.cards = [];
     this.boardSlots = [];
     this.deckSlots = [];
+    this.cardAnimations = [];
     this.pointerNdc = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -229,6 +232,7 @@ export class CardGameClient {
     this.boardSlots.forEach((slot) => {
       if (!slot.card) return;
       const card = slot.card;
+      if (card.userData.isAnimating) return;
       if (card === this.state.activeCard && (this.state.mode === 'drag' || this.state.mode === 'preview')) return;
       card.userData.zone = CARD_ZONE_TYPES.BOARD;
       card.userData.slotIndex = slot.index;
@@ -238,6 +242,7 @@ export class CardGameClient {
 
     const handCards = this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.HAND);
     handCards.forEach((card, index) => {
+      if (card.userData.isAnimating) return;
       if (card === this.state.activeCard && (this.state.mode === 'drag' || this.state.mode === 'preview')) return;
       const pos = this.cardWorldPositionForHand(index, handCards.length);
       card.position.copy(pos);
@@ -385,6 +390,7 @@ export class CardGameClient {
     this.state.holdTimer = 0;
     this.state.activePointerId = null;
     this.boardSlots.forEach((slot) => { slot.card = null; });
+    this.cardAnimations.length = 0;
 
     for (const card of this.cards) this.scene.remove(card);
     this.cards.length = 0;
@@ -394,6 +400,9 @@ export class CardGameClient {
       card.userData.zone = isKnownZone(cfg.zone, this.zoneFramework) ? cfg.zone : CARD_ZONE_TYPES.HAND;
       card.userData.slotIndex = cfg.slotIndex ?? null;
       card.userData.owner = cfg.owner ?? this.template.playerSide;
+      card.userData.dealOrder = cfg.dealOrder ?? null;
+      card.userData.locked = false;
+      card.userData.isAnimating = false;
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
       if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(cfg.slotIndex)) {
         const slot = this.boardSlots[cfg.slotIndex];
@@ -407,6 +416,7 @@ export class CardGameClient {
     }
 
     this.relayoutBoardAndHand();
+    this.queueCardAnimationsFromHooks({ reason: 'reset' });
     this.picker.setCards(this.cards);
     this.setStatus('Demo reset. Zone framework enabled with mirrored player/opponent zones; board remains capped at 3 slots per side and 1 deck slot per side.');
   }
@@ -427,6 +437,14 @@ export class CardGameClient {
       this.state.pendingCard = null;
       if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
       this.setStatus('No card selected.');
+      return;
+    }
+
+    if (card.userData.locked) {
+      this.state.activePointerId = null;
+      this.state.pendingCard = null;
+      if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+      this.setStatus(`${card.userData.cardId} is still animating. Try again in a moment.`);
       return;
     }
 
@@ -546,7 +564,96 @@ export class CardGameClient {
     );
   }
 
+  queueCardAnimationsFromHooks(context = {}) {
+    if (!this.cardAnimationHooks.length) return;
+
+    const now = performance.now();
+    const animationContext = {
+      ...context,
+      template: this.template,
+      deckSlots: this.deckSlots,
+      boardSlots: this.boardSlots,
+    };
+
+    for (const card of this.cards) {
+      const targetPosition = card.position.clone();
+      const targetRotation = card.rotation.clone();
+
+      for (const hook of this.cardAnimationHooks) {
+        const config = hook(card, animationContext);
+        if (!config) continue;
+
+        const fromPosition = config.fromPosition
+          ? new THREE.Vector3(config.fromPosition.x, config.fromPosition.y, config.fromPosition.z)
+          : targetPosition.clone();
+        const fromRotation = config.fromRotation
+          ? new THREE.Euler(config.fromRotation.x, config.fromRotation.y, config.fromRotation.z)
+          : targetRotation.clone();
+
+        card.userData.locked = true;
+        card.userData.isAnimating = true;
+        card.position.copy(fromPosition);
+        card.rotation.copy(fromRotation);
+
+        this.cardAnimations.push({
+          card,
+          targetPosition,
+          targetRotation,
+          fromPosition,
+          fromRotation,
+          startAtMs: now + (config.delayMs ?? 0),
+          durationMs: Math.max(120, config.durationMs ?? 700),
+          arcHeight: config.arcHeight ?? 0.65,
+          swirlAmplitude: config.swirlAmplitude ?? 0.08,
+        });
+        break;
+      }
+    }
+  }
+
+  applyCardAnimations(time) {
+    if (!this.cardAnimations.length) return;
+
+    const nextAnimations = [];
+    for (const animation of this.cardAnimations) {
+      const { card, targetPosition, targetRotation, fromPosition, fromRotation } = animation;
+      const elapsed = time - animation.startAtMs;
+      if (elapsed < 0) {
+        nextAnimations.push(animation);
+        continue;
+      }
+
+      const rawProgress = THREE.MathUtils.clamp(elapsed / animation.durationMs, 0, 1);
+      const eased = 1 - ((1 - rawProgress) ** 3);
+
+      const position = fromPosition.clone().lerp(targetPosition, eased);
+      const arc = Math.sin(rawProgress * Math.PI) * animation.arcHeight;
+      const swirl = Math.sin(rawProgress * Math.PI * 2.4) * animation.swirlAmplitude;
+      position.y += arc + Math.sin((time * 0.001) * CARD_ANIMATION_MAGIC_SWAY_SPEED + animation.startAtMs * 0.001) * 0.05;
+      position.x += swirl;
+
+      card.position.copy(position);
+      card.rotation.set(
+        THREE.MathUtils.lerp(fromRotation.x, targetRotation.x, eased),
+        THREE.MathUtils.lerp(fromRotation.y, targetRotation.y, eased) + Math.cos(rawProgress * Math.PI * 2) * animation.swirlAmplitude * 0.7,
+        THREE.MathUtils.lerp(fromRotation.z, targetRotation.z, eased) + Math.sin(rawProgress * Math.PI * 1.5) * animation.swirlAmplitude,
+      );
+
+      if (rawProgress >= 1) {
+        card.position.copy(targetPosition);
+        card.rotation.copy(targetRotation);
+        card.userData.isAnimating = false;
+        card.userData.locked = false;
+      } else {
+        nextAnimations.push(animation);
+      }
+    }
+
+    this.cardAnimations = nextAnimations;
+  }
+
   animate(time) {
+    this.applyCardAnimations(time);
     this.applyHandledCardSway(time);
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = requestAnimationFrame(this.animate);

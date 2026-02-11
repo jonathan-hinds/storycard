@@ -1,4 +1,4 @@
-import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK } from '/public/card-game/index.js';
+import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook } from '/public/card-game/index.js';
 
 const canvas = document.getElementById('phase-manager-canvas');
 const statusEl = document.getElementById('phase-manager-status');
@@ -19,6 +19,7 @@ let client = null;
 let match = null;
 let matchmakingPollTimer = 0;
 let stateSyncInFlight = false;
+let lastAnimatedMatchId = null;
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -108,12 +109,13 @@ function buildTemplateFromMatch(currentMatch) {
     });
   });
 
-  currentMatch.players[PLAYER_SIDE].hand.forEach((card) => {
+  currentMatch.players[PLAYER_SIDE].hand.forEach((card, handIndex) => {
     initialCards.push({
       id: card.id,
       color: card.color,
       owner: PLAYER_SIDE,
       zone: CARD_ZONE_TYPES.HAND,
+      dealOrder: handIndex,
     });
   });
 
@@ -211,6 +213,10 @@ function renderMatch() {
   }
 
   const template = buildTemplateFromMatch(match);
+  const shouldAnimateInitialDeal = match.id !== lastAnimatedMatchId;
+  template.meta = {
+    animateInitialDeal: shouldAnimateInitialDeal,
+  };
   if (!client) {
     client = new CardGameClient({
       canvas,
@@ -218,12 +224,24 @@ function renderMatch() {
       template,
       options: {
         onCardStateCommitted: syncMatchStateAfterCardCommit,
+        cardAnimationHooks: [
+          createDeckToHandDealHook({
+            owner: PLAYER_SIDE,
+            shouldAnimate: (context) => context.template?.meta?.animateInitialDeal === true,
+            durationMs: 980,
+            staggerMs: 105,
+            arcHeight: 0.95,
+            swirlAmplitude: 0.14,
+          }),
+        ],
       },
     });
   } else {
     client.template = template;
     client.resetDemo();
   }
+
+  if (shouldAnimateInitialDeal) lastAnimatedMatchId = match.id;
 
   statusEl.textContent = match.turn === PLAYER_SIDE
     ? 'Your turn. Drag cards from your hand to your board, then click End Turn.'
@@ -273,6 +291,7 @@ function applyMatchmakingStatus(status) {
   }
 
   match = null;
+  lastAnimatedMatchId = null;
   if (client) {
     client.destroy();
     client = null;
@@ -342,6 +361,7 @@ function resetMatch() {
   stopMatchmakingPolling();
 
   match = null;
+  lastAnimatedMatchId = null;
   if (client) {
     client.destroy();
     client = null;
