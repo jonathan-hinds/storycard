@@ -247,17 +247,6 @@ button {
   color: #d2dbf2;
 }
 
-
-.preview-slider-row {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.preview-slider-row output {
-  font-size: 0.82rem;
-  color: #9ab0d8;
-}
-
 .single-card-layout {
   grid-template-columns: 320px 1fr;
 }
