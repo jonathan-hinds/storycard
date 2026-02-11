@@ -367,8 +367,8 @@ button {
 }
 
 .cards-list {
-  min-height: 520px;
-  max-height: calc(100vh - 180px);
+  min-height: 500px;
+  height: clamp(500px, calc(100vh - 190px), 680px);
   overflow-y: auto;
   border-radius: 0.75rem;
   border: 1px solid #2f3b55;
@@ -434,5 +434,10 @@ button {
   .cards-panel {
     border-right: 0;
     border-bottom: 1px solid #252b3a;
+  }
+
+  .cards-list {
+    min-height: 420px;
+    height: min(58vh, 560px);
   }
 }
