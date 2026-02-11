@@ -61,11 +61,14 @@
       </section>
 
       <section class="cards-list-wrap" aria-live="polite">
-        <h2>Stored Cards</h2>
-        <div id="card-list" class="cards-list"></div>
+        <h2>Card Library</h2>
+        <p class="cards-library-caption">Browse cards in the Card Library module (built on top of the core Card module) for game-building workflows.</p>
+        <div id="card-list" class="cards-list">
+          <canvas id="card-library-canvas" class="cards-library-canvas" aria-label="3D card library scene"></canvas>
+        </div>
       </section>
     </main>
 
-    <script src="/public/projects/cards.js" defer></script>
+    <script type="module" src="/public/projects/cards.js"></script>
   </body>
 </html>
