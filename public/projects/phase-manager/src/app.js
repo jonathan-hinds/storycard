@@ -281,7 +281,9 @@ function renderMatch() {
   const commitAnimationKey = `${match.id}:${match.turnNumber}:${match.phase}`;
   const commitAttacks = Array.isArray(match.meta?.commitAttacks) ? match.meta.commitAttacks : [];
   if (match.phase === 2 && client && typeof client.playCommitPhaseAnimations === 'function' && commitAnimationKey !== lastAnimatedCommitKey) {
-    client.playCommitPhaseAnimations(commitAttacks);
+    client.playCommitPhaseAnimations(commitAttacks, {
+      interAttackDelayMs: 740,
+    });
     lastAnimatedCommitKey = commitAnimationKey;
   }
 
