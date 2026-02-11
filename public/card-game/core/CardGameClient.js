@@ -25,6 +25,9 @@ const HAND_CARD_BASE_Y = 0.1;
 const HAND_CARD_ARC_LIFT = 0.06;
 const HAND_CARD_FAN_ROTATION_Z = 0.08;
 const CARD_ANIMATION_MAGIC_SWAY_SPEED = 7.2;
+const PLACED_CARD_SWIRL_AMPLITUDE = 0.024;
+const PLACED_CARD_VERTICAL_SWAY_AMPLITUDE = 0.028;
+const PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE = 0.032;
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -564,6 +567,27 @@ export class CardGameClient {
     );
   }
 
+  applyPlacedCardAmbientSway(time) {
+    const elapsed = time * 0.001;
+
+    for (const slot of this.boardSlots) {
+      const card = slot.card;
+      if (!card) continue;
+      if (card.userData.isAnimating || card.userData.locked) continue;
+      if (card === this.state.activeCard && (this.state.mode === 'preview' || this.state.mode === 'drag')) continue;
+
+      const phaseSeed = slot.index * 0.9;
+      const swirlX = Math.sin(elapsed * 1.8 + phaseSeed) * PLACED_CARD_SWIRL_AMPLITUDE;
+      const swirlZ = Math.cos(elapsed * 1.45 + phaseSeed * 1.2) * PLACED_CARD_SWIRL_AMPLITUDE * 0.55;
+      const ambientLift = Math.sin(elapsed * 2.15 + phaseSeed * 0.7) * PLACED_CARD_VERTICAL_SWAY_AMPLITUDE;
+      const rotationalFlareY = Math.sin(elapsed * 1.7 + phaseSeed) * PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE;
+      const rotationalFlareZ = Math.cos(elapsed * 1.95 + phaseSeed * 1.3) * PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE * 0.4;
+
+      card.position.set(slot.x + swirlX, ambientLift, slot.z + swirlZ);
+      card.rotation.set(CARD_FACE_ROTATION_X, rotationalFlareY, rotationalFlareZ);
+    }
+  }
+
   queueCardAnimationsFromHooks(context = {}) {
     if (!this.cardAnimationHooks.length) return;
 
@@ -661,6 +685,7 @@ export class CardGameClient {
   animate(time) {
     this.applyCardAnimations(time);
     this.applyHandledCardSway(time);
+    this.applyPlacedCardAmbientSway(time);
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = requestAnimationFrame(this.animate);
   }
