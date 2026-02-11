@@ -26,7 +26,10 @@ const PHASE_DECK_SIZE_PER_PLAYER = 10;
 const PHASE_STARTING_HAND_SIZE = 3;
 const PHASE_MAX_HAND_SIZE = 7;
 const PHASE_BOARD_SLOTS_PER_SIDE = 3;
-const PHASE_COMMIT_DURATION_MS = 1800;
+const PHASE_COMMIT_ATTACK_START_DELAY_MS = 250;
+const PHASE_COMMIT_ATTACK_DURATION_MS = 620;
+const PHASE_COMMIT_ATTACK_GAP_MS = 140;
+const PHASE_COMMIT_FALLBACK_DURATION_MS = 1800;
 
 const cardGameServer = new CardGameServer({
   cards: [
@@ -152,6 +155,7 @@ function serializeMatchForPlayer(match, playerId) {
     const pendingByPlayer = match.pendingCommitAttacksByPlayer || new Map();
     const canonicalPlayerOrder = [...match.players].sort((a, b) => a.localeCompare(b));
     const timeline = [];
+    const attackStepMs = PHASE_COMMIT_ATTACK_DURATION_MS + PHASE_COMMIT_ATTACK_GAP_MS;
 
     canonicalPlayerOrder.forEach((attackerId) => {
       const attacks = [...(pendingByPlayer.get(attackerId) || [])]
@@ -160,8 +164,12 @@ function serializeMatchForPlayer(match, playerId) {
         timeline.push({
           attackerSide: attackerId === playerId ? 'player' : 'opponent',
           targetSide: attackerId === playerId ? 'opponent' : 'player',
+          attackerCardId: attack.attackerCardId,
+          targetCardId: attack.targetCardId,
           attackerSlotIndex: attack.attackerSlotIndex,
           targetSlotIndex: attack.targetSlotIndex,
+          startOffsetMs: PHASE_COMMIT_ATTACK_START_DELAY_MS + timeline.length * attackStepMs,
+          durationMs: PHASE_COMMIT_ATTACK_DURATION_MS,
         });
       });
     });
@@ -190,6 +198,10 @@ function serializeMatchForPlayer(match, playerId) {
     meta: {
       drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
       phaseStartedAt: match.phaseStartedAt,
+      commitAnimationsStartAt: (match.phaseStartedAt || Date.now()) + PHASE_COMMIT_ATTACK_START_DELAY_MS,
+      commitPhaseDurationMs: Number.isFinite(match.commitPhaseDurationMs)
+        ? match.commitPhaseDurationMs
+        : PHASE_COMMIT_FALLBACK_DURATION_MS,
       commitAttacks: buildCommitAttackTimeline(),
     },
   };
@@ -238,18 +250,30 @@ function advanceMatchToDecisionPhase(match) {
 function resolveCommitPhase(match) {
   match.phase = 2;
   match.phaseStartedAt = Date.now();
+  const attackStepMs = PHASE_COMMIT_ATTACK_DURATION_MS + PHASE_COMMIT_ATTACK_GAP_MS;
   const pendingAttacks = new Map();
+  let totalAttackCount = 0;
   match.players.forEach((playerId) => {
     const playerState = match.cardsByPlayer.get(playerId);
+    const opponentId = match.players.find((id) => id !== playerId);
+    const opponentState = opponentId ? match.cardsByPlayer.get(opponentId) : null;
     const attacks = playerState?.board
       ?.filter((card) => card.attackCommitted === true && Number.isInteger(card.slotIndex) && Number.isInteger(card.targetSlotIndex))
       .map((card) => ({
+        attackerCardId: card.id,
+        targetCardId: opponentState?.board?.find((opponentCard) => opponentCard.slotIndex === card.targetSlotIndex)?.id || null,
         attackerSlotIndex: card.slotIndex,
         targetSlotIndex: card.targetSlotIndex,
       })) || [];
+    totalAttackCount += attacks.length;
     pendingAttacks.set(playerId, attacks);
   });
   match.pendingCommitAttacksByPlayer = pendingAttacks;
+  const minimumDisplayMs = PHASE_COMMIT_FALLBACK_DURATION_MS;
+  const animatedDurationMs = totalAttackCount
+    ? PHASE_COMMIT_ATTACK_START_DELAY_MS + (totalAttackCount * attackStepMs) + 80
+    : minimumDisplayMs;
+  match.commitPhaseDurationMs = Math.max(minimumDisplayMs, animatedDurationMs);
 }
 
 function readyPlayerInMatch(match, playerId) {
@@ -365,7 +389,10 @@ function getPlayerPhaseStatus(playerId) {
       phaseMatchmakingState.set(playerId, { status: 'idle' });
       return { status: 'idle', queueCount: phaseQueue.length };
     }
-    if (match.phase === 2 && Date.now() - (match.phaseStartedAt || 0) >= PHASE_COMMIT_DURATION_MS) {
+    const commitPhaseDurationMs = Number.isFinite(match.commitPhaseDurationMs)
+      ? match.commitPhaseDurationMs
+      : PHASE_COMMIT_FALLBACK_DURATION_MS;
+    if (match.phase === 2 && Date.now() - (match.phaseStartedAt || 0) >= commitPhaseDurationMs) {
       advanceMatchToDecisionPhase(match);
     }
 
@@ -420,6 +447,7 @@ function findPhaseMatch(playerId) {
       readyPlayers: new Set(),
       lastDrawnCardsByPlayer: new Map(),
       pendingCommitAttacksByPlayer: new Map(),
+      commitPhaseDurationMs: PHASE_COMMIT_FALLBACK_DURATION_MS,
       createdAt: Date.now(),
     };
     phaseMatches.set(matchId, match);

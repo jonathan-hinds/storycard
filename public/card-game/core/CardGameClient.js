@@ -656,30 +656,44 @@ export class CardGameClient {
     const synchronizedStartAtMs = Number.isFinite(syncStartAtMs)
       ? now + (syncStartAtMs - Date.now())
       : now;
-    const attackDurationMs = 620;
-    const attackGapMs = 140;
-    const attackStepMs = attackDurationMs + attackGapMs;
+    const fallbackAttackDurationMs = 620;
+    const fallbackAttackGapMs = 140;
+    const fallbackAttackStepMs = fallbackAttackDurationMs + fallbackAttackGapMs;
+    const cardsById = new Map(this.cards.map((card) => [card.userData.cardId, card]));
 
     attackPlan.forEach((step, index) => {
       const attackerSide = step?.attackerSide === 'opponent' ? 'opponent' : 'player';
       const targetSide = step?.targetSide === 'player' ? 'player' : 'opponent';
-      const attackerSlotIndex = resolveBoardSlotIndex(attackerSide, step.attackerSlotIndex);
-      const defenderSlotIndex = resolveBoardSlotIndex(targetSide, step.targetSlotIndex);
-      if (!Number.isInteger(attackerSlotIndex) || !Number.isInteger(defenderSlotIndex)) return;
+      const attackerSlotIndex = resolveBoardSlotIndex(attackerSide, step?.attackerSlotIndex);
+      const defenderSlotIndex = resolveBoardSlotIndex(targetSide, step?.targetSlotIndex);
+
+      const attackerCardById = step?.attackerCardId ? cardsById.get(step.attackerCardId) : null;
+      const defenderCardById = step?.targetCardId ? cardsById.get(step.targetCardId) : null;
 
       const attackerSlot = this.boardSlots[attackerSlotIndex];
       const defenderSlot = this.boardSlots[defenderSlotIndex];
-      if (!attackerSlot?.card || !defenderSlot) return;
+      const attackerCard = attackerCardById || attackerSlot?.card;
+      const defenderCard = defenderCardById || defenderSlot?.card || null;
+      if (!attackerCard) return;
+
+      const attackDurationMs = Number.isFinite(step?.durationMs) ? Math.max(200, step.durationMs) : fallbackAttackDurationMs;
+      const startOffsetMs = Number.isFinite(step?.startOffsetMs) ? Math.max(0, step.startOffsetMs) : index * fallbackAttackStepMs;
+      const defenderPosition = defenderCard
+        ? defenderCard.position.clone()
+        : (defenderSlot ? new THREE.Vector3(defenderSlot.x, 0, defenderSlot.z) : new THREE.Vector3(attackerCard.position.x, attackerCard.position.y, attackerCard.position.z - 0.8));
+
       this.combatAnimations.push({
-        attackerCard: attackerSlot.card,
-        originPosition: new THREE.Vector3(attackerSlot.x, 0, attackerSlot.z),
-        defenderPosition: new THREE.Vector3(defenderSlot.x, 0, defenderSlot.z),
-        startAtMs: synchronizedStartAtMs + index * attackStepMs,
+        attackerCard,
+        originPosition: attackerCard.position.clone(),
+        defenderPosition,
+        startAtMs: synchronizedStartAtMs + startOffsetMs,
         durationMs: attackDurationMs,
-        defenderCard: defenderSlot.card,
+        defenderCard,
         didHit: false,
       });
     });
+
+    this.combatAnimations.sort((a, b) => a.startAtMs - b.startAtMs);
 
     const latest = this.combatAnimations.reduce((max, item) => Math.max(max, item.startAtMs + item.durationMs), now);
     window.setTimeout(() => onDone?.(), Math.max(0, latest - now + 50));
