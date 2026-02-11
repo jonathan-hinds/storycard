@@ -21,6 +21,7 @@ let matchmakingPollTimer = 0;
 let stateSyncInFlight = false;
 let lastAnimatedMatchId = null;
 let lastAnimatedTurnKey = null;
+let lastAnimatedCommitKey = null;
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -103,6 +104,9 @@ function buildTemplateFromMatch(currentMatch) {
       owner: OPPONENT_SIDE,
       zone: CARD_ZONE_TYPES.BOARD,
       slotIndex,
+      canAttack: false,
+      attackCommitted: false,
+      targetSlotIndex: null,
     });
   });
 
@@ -114,6 +118,9 @@ function buildTemplateFromMatch(currentMatch) {
       owner: PLAYER_SIDE,
       zone: CARD_ZONE_TYPES.BOARD,
       slotIndex: BOARD_SLOTS_PER_SIDE + relativeSlotIndex,
+      canAttack: card.canAttack === true,
+      attackCommitted: card.attackCommitted === true,
+      targetSlotIndex: Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null,
     });
   });
 
@@ -139,7 +146,7 @@ function buildTemplateFromMatch(currentMatch) {
 }
 
 function syncPlayerStateFromClient() {
-  if (!client || !match) return { hand: [], board: [] };
+  if (!client || !match) return { hand: [], board: [], attacks: [] };
 
   const allPlayerCards = client.cards
     .filter((card) => card.userData.owner === PLAYER_SIDE)
@@ -159,7 +166,9 @@ function syncPlayerStateFromClient() {
     .sort((a, b) => a.slotIndex - b.slotIndex)
     .map(({ id, color, slotIndex }) => ({ id, color, slotIndex: slotIndex - BOARD_SLOTS_PER_SIDE }));
 
-  return { hand, board };
+  const attacks = typeof client.getCombatDecisions === 'function' ? client.getCombatDecisions() : [];
+
+  return { hand, board, attacks };
 }
 
 function setReadyLockState() {
@@ -269,10 +278,17 @@ function renderMatch() {
   if (shouldAnimateInitialDeal) lastAnimatedMatchId = match.id;
   if (shouldAnimateTurnDraw) lastAnimatedTurnKey = turnAnimationKey;
 
+  const commitAnimationKey = `${match.id}:${match.turnNumber}:${match.phase}`;
+  const commitAttacks = Array.isArray(match.meta?.commitAttacks) ? match.meta.commitAttacks : [];
+  if (match.phase === 2 && client && typeof client.playCommitPhaseAnimations === 'function' && commitAnimationKey !== lastAnimatedCommitKey) {
+    client.playCommitPhaseAnimations(commitAttacks);
+    lastAnimatedCommitKey = commitAnimationKey;
+  }
+
   statusEl.textContent = match.phase === 1
     ? (match.youAreReady
       ? 'You are readied up. Waiting for opponent to ready…'
-      : 'Decision phase: drag cards from hand to board, then click Ready Up.')
+      : 'Decision phase: play cards, then drag ready board cards onto enemy cards to queue attacks, then click Ready Up.')
     : 'Commit phase resolving automatically…';
 
   setReadyLockState();
@@ -289,6 +305,7 @@ async function syncMatchStateAfterCardCommit() {
       playerId,
       hand: nextState.hand,
       board: nextState.board,
+      attacks: nextState.attacks,
     });
     applyMatchmakingStatus(status);
   } catch (error) {
@@ -340,6 +357,7 @@ function applyMatchmakingStatus(status) {
   match = null;
   lastAnimatedMatchId = null;
   lastAnimatedTurnKey = null;
+  lastAnimatedCommitKey = null;
   if (client) {
     client.destroy();
     client = null;
@@ -395,6 +413,7 @@ function readyUp() {
     playerId,
     hand: nextState.hand,
     board: nextState.board,
+    attacks: nextState.attacks,
   })
     .then((status) => {
       applyMatchmakingStatus(status);
@@ -411,6 +430,7 @@ function resetMatch() {
   match = null;
   lastAnimatedMatchId = null;
   lastAnimatedTurnKey = null;
+  lastAnimatedCommitKey = null;
   if (client) {
     client.destroy();
     client = null;

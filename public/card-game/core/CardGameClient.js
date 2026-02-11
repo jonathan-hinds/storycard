@@ -28,6 +28,7 @@ const CARD_ANIMATION_MAGIC_SWAY_SPEED = 7.2;
 const PLACED_CARD_SWIRL_AMPLITUDE = 0.024;
 const PLACED_CARD_VERTICAL_SWAY_AMPLITUDE = 0.028;
 const PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE = 0.032;
+const ATTACK_TARGET_SCALE = 1.12;
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -60,6 +61,8 @@ export class CardGameClient {
     this.boardSlots = [];
     this.deckSlots = [];
     this.cardAnimations = [];
+    this.combatAnimations = [];
+    this.combatShakeEffects = [];
     this.pointerNdc = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -76,6 +79,7 @@ export class CardGameClient {
       previewStartedAt: 0,
       dragOrigin: null,
       dropSlotIndex: null,
+      dropTargetSlotIndex: null,
       activePose: {
         position: new THREE.Vector3(),
         rotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
@@ -219,6 +223,15 @@ export class CardGameClient {
   clearHighlights() {
     for (const slot of this.boardSlots) slot.mesh.material.opacity = slot.side === this.template.playerSide ? 0.2 : 0.17;
     for (const card of this.cards) card.userData.mesh.material.emissive.setHex(0x000000);
+    this.clearAttackTargetHover();
+  }
+
+  clearAttackTargetHover() {
+    for (const card of this.cards) {
+      if (!card.userData.isAttackHover) continue;
+      card.scale.setScalar(1);
+      card.userData.isAttackHover = false;
+    }
   }
 
   cardWorldPositionForHand(indexInHand, totalInHand) {
@@ -341,6 +354,38 @@ export class CardGameClient {
     }
   }
 
+  findNearestEnemyBoardSlot(worldPoint, maxDistance = 1.25) {
+    let closest = null;
+    let closestDist = Infinity;
+    for (const slot of this.boardSlots) {
+      if (slot.side === this.template.playerSide) continue;
+      if (!slot.card) continue;
+      const d = Math.hypot(worldPoint.x - slot.x, worldPoint.z - slot.z);
+      if (d < closestDist) {
+        closest = slot;
+        closestDist = d;
+      }
+    }
+    if (!closest || closestDist > maxDistance) return null;
+    return closest;
+  }
+
+  updateAttackTargetPoseFromPointer(event) {
+    const card = this.state.activeCard;
+    if (!card) return;
+    const point = this.pointerToBoardPoint(event);
+    if (!point) return;
+
+    this.setActiveCardPose(point.clone().setY(0.45), CARD_FACE_ROTATION_X + 0.18, 0, 0);
+    const targetSlot = this.findNearestEnemyBoardSlot(point);
+    this.state.dropTargetSlotIndex = targetSlot?.index ?? null;
+    this.clearAttackTargetHover();
+    if (targetSlot?.card) {
+      targetSlot.card.scale.setScalar(ATTACK_TARGET_SCALE);
+      targetSlot.card.userData.isAttackHover = true;
+    }
+  }
+
   beginDrag(card) {
     if (!card) return;
     if (this.state.mode === 'idle') this.setCardAsActive(card, 'drag');
@@ -350,6 +395,15 @@ export class CardGameClient {
     }
     window.clearTimeout(this.state.holdTimer);
     this.state.holdTimer = 0;
+  }
+
+  canCardAttack(card) {
+    if (!card) return false;
+    if (card.userData.zone !== CARD_ZONE_TYPES.BOARD) return false;
+    if (card.userData.owner !== this.template.playerSide) return false;
+    if (card.userData.canAttack !== true) return false;
+    if (card.userData.attackCommitted === true) return false;
+    return true;
   }
 
   async loadCardState() {
@@ -407,6 +461,11 @@ export class CardGameClient {
       card.userData.shouldDealAnimate = cfg.shouldDealAnimate === true;
       card.userData.locked = false;
       card.userData.isAnimating = false;
+      card.userData.canAttack = cfg.canAttack === true;
+      card.userData.attackCommitted = cfg.attackCommitted === true;
+      card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
+      card.userData.isAttackHover = false;
+      card.scale.setScalar(1);
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
       if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(cfg.slotIndex)) {
         const slot = this.boardSlots[cfg.slotIndex];
@@ -460,9 +519,31 @@ export class CardGameClient {
       return;
     }
 
+    if (card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner === this.template.playerSide) {
+      if (card.userData.attackCommitted === true) {
+        this.state.activePointerId = null;
+        this.state.pendingCard = null;
+        if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+        this.setStatus(`${card.userData.cardId} already committed its attack this turn.`);
+        return;
+      }
+      if (!this.canCardAttack(card)) {
+        this.state.activePointerId = null;
+        this.state.pendingCard = null;
+        if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+        this.setStatus(`${card.userData.cardId} has summoning sickness and cannot attack yet.`);
+        return;
+      }
+    }
+
     this.state.pendingCard = card;
     this.clearHighlights();
     this.state.dragOrigin = { zone: card.userData.zone, slotIndex: card.userData.slotIndex };
+
+    if (this.canCardAttack(card)) {
+      this.state.dropTargetSlotIndex = card.userData.targetSlotIndex;
+      return;
+    }
 
     if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(card.userData.slotIndex)) this.boardSlots[card.userData.slotIndex].card = null;
     await this.sendCardEvent(card.userData.cardId, 'pickup', { zone: this.state.dragOrigin.zone });
@@ -488,7 +569,8 @@ export class CardGameClient {
     if (this.state.mode === 'preview' && distance > DRAG_START_DISTANCE_PX && this.state.activeCard) this.beginDrag(this.state.activeCard);
     if (this.state.mode === 'drag' && this.state.activeCard) {
       event.preventDefault();
-      this.updateDragPoseFromPointer(event);
+      if (this.canCardAttack(this.state.activeCard)) this.updateAttackTargetPoseFromPointer(event);
+      else this.updateDragPoseFromPointer(event);
     }
   }
 
@@ -501,7 +583,12 @@ export class CardGameClient {
     const card = this.state.activeCard;
     const prevOrigin = this.state.dragOrigin;
 
-    if (card && commitDrop && this.state.mode === 'drag' && this.state.dropSlotIndex != null) {
+    if (card && commitDrop && this.state.mode === 'drag' && this.canCardAttack(card) && this.state.dropTargetSlotIndex != null) {
+      card.userData.attackCommitted = true;
+      card.userData.targetSlotIndex = this.state.dropTargetSlotIndex;
+      await this.notifyCardStateCommitted(card);
+      this.setStatus(`Attack queued: ${card.userData.cardId} -> enemy slot ${this.state.dropTargetSlotIndex + 1}.`);
+    } else if (card && commitDrop && this.state.mode === 'drag' && this.state.dropSlotIndex != null) {
       const slot = this.boardSlots[this.state.dropSlotIndex];
       slot.card = card;
       card.userData.zone = CARD_ZONE_TYPES.BOARD;
@@ -536,6 +623,122 @@ export class CardGameClient {
     this.state.activePointerId = null;
     this.state.pendingCard = null;
     this.state.dragOrigin = null;
+    this.state.dropTargetSlotIndex = null;
+  }
+
+  getCombatDecisions() {
+    const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
+    return this.cards
+      .filter((card) => card.userData.owner === this.template.playerSide && card.userData.zone === CARD_ZONE_TYPES.BOARD)
+      .filter((card) => card.userData.attackCommitted === true && Number.isInteger(card.userData.slotIndex) && Number.isInteger(card.userData.targetSlotIndex))
+      .map((card) => ({
+        attackerSlotIndex: card.userData.slotIndex - boardSlotsPerSide,
+        targetSlotIndex: card.userData.targetSlotIndex,
+      }));
+  }
+
+  playCommitPhaseAnimations(attackPlan = [], { onDone } = {}) {
+    if (!Array.isArray(attackPlan) || !attackPlan.length) {
+      onDone?.();
+      return;
+    }
+
+    const now = performance.now();
+    const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
+    attackPlan.forEach((step, index) => {
+      const attackerSlot = this.boardSlots[boardSlotsPerSide + step.attackerSlotIndex];
+      const defenderSlot = this.boardSlots[step.targetSlotIndex];
+      if (!attackerSlot?.card || !defenderSlot) return;
+      this.combatAnimations.push({
+        attackerCard: attackerSlot.card,
+        originPosition: new THREE.Vector3(attackerSlot.x, 0, attackerSlot.z),
+        defenderPosition: new THREE.Vector3(defenderSlot.x, 0, defenderSlot.z),
+        startAtMs: now + index * 230,
+        durationMs: 620,
+        defenderCard: defenderSlot.card,
+        didHit: false,
+      });
+    });
+
+    const latest = this.combatAnimations.reduce((max, item) => Math.max(max, item.startAtMs + item.durationMs), now);
+    window.setTimeout(() => onDone?.(), Math.max(0, latest - now + 50));
+  }
+
+  applyCombatAnimations(time) {
+    if (this.combatAnimations.length) {
+      const pending = [];
+      for (const animation of this.combatAnimations) {
+        const elapsed = time - animation.startAtMs;
+        if (elapsed < 0) {
+          pending.push(animation);
+          continue;
+        }
+
+        const t = THREE.MathUtils.clamp(elapsed / animation.durationMs, 0, 1);
+        const card = animation.attackerCard;
+        card.userData.locked = true;
+        const origin = animation.originPosition;
+        const defender = animation.defenderPosition;
+        let pos = origin.clone();
+
+        if (t < 0.25) {
+          const wind = t / 0.25;
+          pos.x = THREE.MathUtils.lerp(origin.x, origin.x, wind);
+          pos.y = THREE.MathUtils.lerp(0, 0.28, wind);
+          pos.z = THREE.MathUtils.lerp(origin.z, origin.z + 0.35, wind);
+        } else if (t < 0.72) {
+          const lunge = (t - 0.25) / 0.47;
+          pos.x = THREE.MathUtils.lerp(origin.x, defender.x, lunge);
+          pos.y = THREE.MathUtils.lerp(0.28, 0.1, lunge);
+          pos.z = THREE.MathUtils.lerp(origin.z + 0.35, defender.z, lunge);
+        } else {
+          const recover = (t - 0.72) / 0.28;
+          pos.x = THREE.MathUtils.lerp(defender.x, origin.x, recover);
+          pos.y = THREE.MathUtils.lerp(0.1, 0, recover);
+          pos.z = THREE.MathUtils.lerp(defender.z, origin.z, recover);
+        }
+
+        card.position.copy(pos);
+        card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
+
+        if (!animation.didHit && t >= 0.62 && animation.defenderCard) {
+          animation.didHit = true;
+          this.combatShakeEffects.push({
+            card: animation.defenderCard,
+            startAtMs: time,
+            durationMs: 180,
+            basePosition: animation.defenderCard.position.clone(),
+          });
+        }
+
+        if (t >= 1) {
+          card.position.copy(origin);
+          card.userData.locked = false;
+        } else {
+          pending.push(animation);
+        }
+      }
+      this.combatAnimations = pending;
+    }
+
+    if (!this.combatShakeEffects.length) return;
+    const remaining = [];
+    for (const shake of this.combatShakeEffects) {
+      const elapsed = time - shake.startAtMs;
+      const progress = THREE.MathUtils.clamp(elapsed / shake.durationMs, 0, 1);
+      const envelope = (1 - progress) ** 2;
+      shake.card.position.set(
+        shake.basePosition.x + Math.sin(progress * Math.PI * 8) * 0.08 * envelope,
+        shake.basePosition.y,
+        shake.basePosition.z,
+      );
+      if (progress >= 1) {
+        shake.card.position.copy(shake.basePosition);
+      } else {
+        remaining.push(shake);
+      }
+    }
+    this.combatShakeEffects = remaining;
   }
 
   async handlePointerUp(event) {
@@ -685,6 +888,7 @@ export class CardGameClient {
 
   animate(time) {
     this.applyCardAnimations(time);
+    this.applyCombatAnimations(time);
     this.applyHandledCardSway(time);
     this.applyPlacedCardAmbientSway(time);
     this.renderer.render(this.scene, this.camera);
