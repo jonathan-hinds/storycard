@@ -21,6 +21,9 @@ const HAND_PORTRAIT_CLOSENESS = 0.35;
 const PREVIEW_HOLD_DELAY_MS = 230;
 const DRAG_START_DISTANCE_PX = 10;
 const CARD_FACE_ROTATION_X = -Math.PI / 2;
+const COMMIT_ATTACK_DURATION_MS = 620;
+const COMMIT_ATTACK_GAP_MS = 140;
+
 const HAND_CARD_BASE_Y = 0.1;
 const HAND_CARD_ARC_LIFT = 0.06;
 const HAND_CARD_FAN_ROTATION_Z = 0.08;
@@ -644,7 +647,9 @@ export class CardGameClient {
     const resolveBoardSlotIndex = (side, slotIndex) => {
       if (!Number.isInteger(slotIndex)) return null;
       if (slotIndex < 0 || slotIndex >= boardSlotsPerSide) return null;
-      return side === this.template.playerSide ? boardSlotsPerSide + slotIndex : slotIndex;
+      if (side === 'player') return boardSlotsPerSide + slotIndex;
+      if (side === 'opponent') return slotIndex;
+      return null;
     };
 
     if (!Array.isArray(attackPlan) || !attackPlan.length) {
@@ -656,8 +661,8 @@ export class CardGameClient {
     const synchronizedStartAtMs = Number.isFinite(syncStartAtMs)
       ? now + (syncStartAtMs - Date.now())
       : now;
-    const attackDurationMs = 620;
-    const attackGapMs = 140;
+    const attackDurationMs = COMMIT_ATTACK_DURATION_MS;
+    const attackGapMs = COMMIT_ATTACK_GAP_MS;
     const attackStepMs = attackDurationMs + attackGapMs;
 
     attackPlan.forEach((step, index) => {
