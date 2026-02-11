@@ -22,6 +22,15 @@ camera.lookAt(0, 0, 0.4);
 const CAMERA_BASE_FOV = 45;
 const CAMERA_BASE_Y = 8.2;
 const CAMERA_BASE_Z = 4.8;
+const CAMERA_LOOK_AT_Y = 0;
+const CAMERA_LOOK_AT_Z = 0.4;
+const CAMERA_PORTRAIT_FOV_BOOST = 20;
+const CAMERA_PORTRAIT_Y_BOOST = 3.2;
+const CAMERA_PORTRAIT_Z_BOOST = 1.8;
+
+const HAND_BASE_Z = 3.2;
+const HAND_CAMERA_CLOSENESS = 0.45;
+const HAND_PORTRAIT_CLOSENESS = 0.35;
 
 const hemiLight = new THREE.HemisphereLight(0xeaf2ff, 0x202938, 0.9);
 scene.add(hemiLight);
@@ -238,6 +247,7 @@ const state = {
     position: new THREE.Vector3(),
     rotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
   },
+  portraitIntensity: 0,
 };
 
 function setActiveCardPose(position, rotationX, rotationY = 0, rotationZ = 0) {
@@ -293,14 +303,22 @@ function updateSize() {
   const height = Math.max(minHeight, window.innerHeight - 140);
   const aspect = width / height;
   const portraitIntensity = THREE.MathUtils.clamp((1 - aspect) / 0.45, 0, 1);
+  state.portraitIntensity = portraitIntensity;
 
-  camera.fov = CAMERA_BASE_FOV + portraitIntensity * 14;
-  camera.position.set(0, CAMERA_BASE_Y + portraitIntensity * 2.4, CAMERA_BASE_Z + portraitIntensity * 0.9);
-  camera.lookAt(0, 0, 0.4);
+  camera.fov = CAMERA_BASE_FOV + portraitIntensity * CAMERA_PORTRAIT_FOV_BOOST;
+  camera.position.set(
+    0,
+    CAMERA_BASE_Y + portraitIntensity * CAMERA_PORTRAIT_Y_BOOST,
+    CAMERA_BASE_Z + portraitIntensity * CAMERA_PORTRAIT_Z_BOOST,
+  );
+  camera.lookAt(0, CAMERA_LOOK_AT_Y, CAMERA_LOOK_AT_Z);
 
   renderer.setSize(width, height, false);
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
+
+  handArea.position.z = HAND_BASE_Z + HAND_CAMERA_CLOSENESS + portraitIntensity * HAND_PORTRAIT_CLOSENESS;
+  relayoutBoardAndHand();
 }
 
 function clearHighlights() {
@@ -318,7 +336,8 @@ function cardWorldPositionForHand(indexInHand, totalInHand) {
   const normalizedIndex = spread === 0 ? 0 : indexInHand / spread - 0.5;
   const x = (indexInHand - spread / 2) * 2.0;
   const y = HAND_CARD_BASE_Y + (0.5 - Math.abs(normalizedIndex)) * HAND_CARD_ARC_LIFT;
-  const z = 3.2 + Math.abs(normalizedIndex) * 0.12;
+  const handZ = HAND_BASE_Z + HAND_CAMERA_CLOSENESS + state.portraitIntensity * HAND_PORTRAIT_CLOSENESS;
+  const z = handZ + Math.abs(normalizedIndex) * 0.12;
 
   return new THREE.Vector3(x, y, z);
 }
