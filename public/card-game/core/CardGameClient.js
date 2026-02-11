@@ -646,8 +646,16 @@ export class CardGameClient {
     const now = performance.now();
     const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
     attackPlan.forEach((step, index) => {
-      const attackerSlot = this.boardSlots[boardSlotsPerSide + step.attackerSlotIndex];
-      const defenderSlot = this.boardSlots[step.targetSlotIndex];
+      const isOpponentAttack = step?.attackerSide === 'opponent';
+      const attackerGlobalSlotIndex = isOpponentAttack
+        ? step.attackerSlotIndex
+        : boardSlotsPerSide + step.attackerSlotIndex;
+      const defenderGlobalSlotIndex = isOpponentAttack
+        ? boardSlotsPerSide + step.targetSlotIndex
+        : step.targetSlotIndex;
+
+      const attackerSlot = this.boardSlots[attackerGlobalSlotIndex];
+      const defenderSlot = this.boardSlots[defenderGlobalSlotIndex];
       if (!attackerSlot?.card || !defenderSlot) return;
       this.combatAnimations.push({
         attackerCard: attackerSlot.card,
