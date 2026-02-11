@@ -4,6 +4,7 @@ import { CardPicker } from '../render/CardPicker.js';
 import { CardGameHttpClient } from '../net/httpClient.js';
 import { SINGLE_CARD_TEMPLATE } from '../templates/singleCardTemplate.js';
 import { CARD_ZONE_TYPES, isKnownZone, validateZoneTemplate } from './zoneFramework.js';
+import { DEFAULT_PREVIEW_TUNING, sanitizePreviewTuning } from './previewTuning.js';
 
 const CAMERA_BASE_FOV = 45;
 const CAMERA_BASE_Y = 8.2;
@@ -29,6 +30,7 @@ const PLACED_CARD_SWIRL_AMPLITUDE = 0.024;
 const PLACED_CARD_VERTICAL_SWAY_AMPLITUDE = 0.028;
 const PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE = 0.032;
 const ATTACK_TARGET_SCALE = 1.12;
+const PREVIEW_BASE_POSITION = Object.freeze({ x: 0, y: 1.52, z: 1.08 });
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -41,6 +43,7 @@ export class CardGameClient {
     this.zoneFramework = this.template.zoneFramework;
     validateZoneTemplate(this.template, this.zoneFramework);
     this.options = options;
+    this.previewTuning = sanitizePreviewTuning(options.previewTuning || DEFAULT_PREVIEW_TUNING);
     this.onCardStateCommitted = options.onCardStateCommitted;
     this.cardAnimationHooks = Array.isArray(options.cardAnimationHooks) ? options.cardAnimationHooks : [];
     this.net = new CardGameHttpClient(options.net || {});
@@ -276,6 +279,22 @@ export class CardGameClient {
     this.state.activePose.rotation.set(rotationX, rotationY, rotationZ);
   }
 
+  setPreviewTuning(nextPreviewTuning = {}) {
+    this.previewTuning = sanitizePreviewTuning(nextPreviewTuning);
+    if (this.state.mode === 'preview' && this.state.activeCard) {
+      this.setActiveCardPose(
+        new THREE.Vector3(
+          PREVIEW_BASE_POSITION.x,
+          PREVIEW_BASE_POSITION.y,
+          PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+        ),
+        this.previewTuning.rotationX,
+        0,
+        0,
+      );
+    }
+  }
+
   setCardAsActive(card, mode) {
     this.state.activeCard = card;
     this.state.mode = mode;
@@ -283,7 +302,18 @@ export class CardGameClient {
     card.renderOrder = 10;
     card.userData.mesh.material.emissive.setHex(0x111111);
     card.userData.tiltPivot.rotation.set(0, 0, 0);
-    if (mode === 'preview') this.setActiveCardPose(new THREE.Vector3(0, 1.52, 1.08), -0.68, 0, 0);
+    if (mode === 'preview') {
+      this.setActiveCardPose(
+        new THREE.Vector3(
+          PREVIEW_BASE_POSITION.x,
+          PREVIEW_BASE_POSITION.y,
+          PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+        ),
+        this.previewTuning.rotationX,
+        0,
+        0,
+      );
+    }
     else this.setActiveCardPose(card.position, CARD_FACE_ROTATION_X + 0.24, 0, 0);
     this.setStatus(mode === 'drag'
       ? `Dragging ${card.userData.cardId}. Release to commit to a board slot.`
