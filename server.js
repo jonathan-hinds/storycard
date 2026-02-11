@@ -26,7 +26,10 @@ const PHASE_DECK_SIZE_PER_PLAYER = 10;
 const PHASE_STARTING_HAND_SIZE = 3;
 const PHASE_MAX_HAND_SIZE = 7;
 const PHASE_BOARD_SLOTS_PER_SIDE = 3;
-const PHASE_COMMIT_DURATION_MS = 1800;
+const PHASE_COMMIT_ANIMATION_LEAD_MS = 1500;
+const PHASE_COMMIT_ATTACK_DURATION_MS = 620;
+const PHASE_COMMIT_ATTACK_GAP_MS = 140;
+const PHASE_COMMIT_DURATION_MS = PHASE_COMMIT_ANIMATION_LEAD_MS + PHASE_COMMIT_ATTACK_DURATION_MS;
 
 const cardGameServer = new CardGameServer({
   cards: [
@@ -190,6 +193,8 @@ function serializeMatchForPlayer(match, playerId) {
     meta: {
       drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
       phaseStartedAt: match.phaseStartedAt,
+      commitAnimationStartAt: match.commitAnimationStartAt || null,
+      commitResolutionAt: match.commitResolutionAt || null,
       commitAttacks: buildCommitAttackTimeline(),
     },
   };
@@ -217,12 +222,28 @@ function applyDecisionPhaseStartDraw(match) {
   match.lastDrawnCardsByPlayer = drawnCardsByPlayer;
 }
 
+function calculateCommitResolutionAt(match) {
+  const pendingByPlayer = match.pendingCommitAttacksByPlayer || new Map();
+  const totalAttackCount = Array.from(pendingByPlayer.values())
+    .reduce((sum, attacks) => sum + (Array.isArray(attacks) ? attacks.length : 0), 0);
+  if (totalAttackCount <= 0) {
+    return (match.commitAnimationStartAt || match.phaseStartedAt || Date.now()) + PHASE_COMMIT_ATTACK_DURATION_MS;
+  }
+
+  const totalAnimationWindowMs = (totalAttackCount - 1)
+    * (PHASE_COMMIT_ATTACK_DURATION_MS + PHASE_COMMIT_ATTACK_GAP_MS)
+    + PHASE_COMMIT_ATTACK_DURATION_MS;
+  return (match.commitAnimationStartAt || match.phaseStartedAt || Date.now()) + totalAnimationWindowMs;
+}
+
 function advanceMatchToDecisionPhase(match) {
   match.turnNumber += 1;
   match.phase = 1;
   match.phaseStartedAt = Date.now();
   match.readyPlayers.clear();
   match.pendingCommitAttacksByPlayer = new Map();
+  match.commitAnimationStartAt = null;
+  match.commitResolutionAt = null;
   match.players.forEach((playerId) => {
     const playerState = match.cardsByPlayer.get(playerId);
     if (!playerState) return;
@@ -250,6 +271,8 @@ function resolveCommitPhase(match) {
     pendingAttacks.set(playerId, attacks);
   });
   match.pendingCommitAttacksByPlayer = pendingAttacks;
+  match.commitAnimationStartAt = match.phaseStartedAt + PHASE_COMMIT_ANIMATION_LEAD_MS;
+  match.commitResolutionAt = calculateCommitResolutionAt(match);
 }
 
 function readyPlayerInMatch(match, playerId) {
@@ -365,7 +388,7 @@ function getPlayerPhaseStatus(playerId) {
       phaseMatchmakingState.set(playerId, { status: 'idle' });
       return { status: 'idle', queueCount: phaseQueue.length };
     }
-    if (match.phase === 2 && Date.now() - (match.phaseStartedAt || 0) >= PHASE_COMMIT_DURATION_MS) {
+    if (match.phase === 2 && Date.now() >= (match.commitResolutionAt || ((match.phaseStartedAt || 0) + PHASE_COMMIT_DURATION_MS))) {
       advanceMatchToDecisionPhase(match);
     }
 
@@ -420,6 +443,8 @@ function findPhaseMatch(playerId) {
       readyPlayers: new Set(),
       lastDrawnCardsByPlayer: new Map(),
       pendingCommitAttacksByPlayer: new Map(),
+      commitAnimationStartAt: null,
+      commitResolutionAt: null,
       createdAt: Date.now(),
     };
     phaseMatches.set(matchId, match);
