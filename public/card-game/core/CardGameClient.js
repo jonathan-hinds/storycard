@@ -677,7 +677,7 @@ export class CardGameClient {
         originPosition: new THREE.Vector3(attackerSlot.x, 0, attackerSlot.z),
         defenderPosition: new THREE.Vector3(defenderSlot.x, 0, defenderSlot.z),
         startAtMs: now + index * interAttackDelayMs,
-        durationMs: 620,
+        durationMs: 760,
         defenderCard: defenderSlot.card,
         didHit: false,
       });
@@ -702,35 +702,65 @@ export class CardGameClient {
         card.userData.locked = true;
         const origin = animation.originPosition;
         const defender = animation.defenderPosition;
+        const attackAxis = defender.clone().sub(origin).setY(0).normalize();
+        const chargePosition = origin.clone().addScaledVector(attackAxis, -0.32);
+        chargePosition.y = 0.34;
+        const impactPosition = defender.clone().addScaledVector(attackAxis, -0.08);
+        impactPosition.y = 0.12;
         let pos = origin.clone();
 
-        if (t < 0.25) {
-          const wind = t / 0.25;
-          pos.x = THREE.MathUtils.lerp(origin.x, origin.x, wind);
-          pos.y = THREE.MathUtils.lerp(0, 0.28, wind);
-          pos.z = THREE.MathUtils.lerp(origin.z, origin.z + 0.35, wind);
-        } else if (t < 0.72) {
-          const lunge = (t - 0.25) / 0.47;
-          pos.x = THREE.MathUtils.lerp(origin.x, defender.x, lunge);
-          pos.y = THREE.MathUtils.lerp(0.28, 0.1, lunge);
-          pos.z = THREE.MathUtils.lerp(origin.z + 0.35, defender.z, lunge);
+        if (t < 0.24) {
+          const windUp = t / 0.24;
+          const easedWindUp = THREE.MathUtils.smootherstep(windUp, 0, 1);
+          pos.lerpVectors(origin, chargePosition, easedWindUp);
+        } else if (t < 0.36) {
+          const hold = (t - 0.24) / 0.12;
+          const pulse = Math.sin(hold * Math.PI * 4) * 0.015;
+          pos.copy(chargePosition);
+          pos.y += pulse;
+        } else if (t < 0.58) {
+          const lunge = (t - 0.36) / 0.22;
+          const easedLunge = 1 - ((1 - lunge) ** 3);
+          pos.lerpVectors(chargePosition, impactPosition, easedLunge);
+          pos.y -= Math.sin(lunge * Math.PI) * 0.05;
+        } else if (t < 0.76) {
+          const rebound = (t - 0.58) / 0.18;
+          const recoilDistance = Math.sin(rebound * Math.PI) * 0.18;
+          pos.copy(impactPosition).addScaledVector(attackAxis, -recoilDistance);
+          pos.y += Math.sin(rebound * Math.PI * 2) * 0.035;
         } else {
-          const recover = (t - 0.72) / 0.28;
-          pos.x = THREE.MathUtils.lerp(defender.x, origin.x, recover);
-          pos.y = THREE.MathUtils.lerp(0.1, 0, recover);
-          pos.z = THREE.MathUtils.lerp(defender.z, origin.z, recover);
+          const recover = (t - 0.76) / 0.24;
+          const easedRecover = THREE.MathUtils.smootherstep(recover, 0, 1);
+          pos.lerpVectors(impactPosition, origin, easedRecover);
         }
 
         card.position.copy(pos);
         card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
 
-        if (!animation.didHit && t >= 0.62 && animation.defenderCard) {
+        if (!animation.didHit && t >= 0.58 && animation.defenderCard) {
           animation.didHit = true;
+          const collisionAxis = attackAxis.lengthSq() > 0 ? attackAxis : new THREE.Vector3(0, 0, 1);
           this.combatShakeEffects.push({
             card: animation.defenderCard,
             startAtMs: time,
-            durationMs: 180,
+            durationMs: 240,
             basePosition: animation.defenderCard.position.clone(),
+            baseRotationZ: animation.defenderCard.rotation.z,
+            axis: collisionAxis.clone(),
+            amplitude: 0.16,
+            swayAmplitude: 0.06,
+            rollAmplitude: 0.09,
+          });
+          this.combatShakeEffects.push({
+            card,
+            startAtMs: time,
+            durationMs: 220,
+            basePosition: pos.clone(),
+            baseRotationZ: card.rotation.z,
+            axis: collisionAxis.clone().multiplyScalar(-1),
+            amplitude: 0.09,
+            swayAmplitude: 0.04,
+            rollAmplitude: 0.05,
           });
         }
 
@@ -750,13 +780,19 @@ export class CardGameClient {
       const elapsed = time - shake.startAtMs;
       const progress = THREE.MathUtils.clamp(elapsed / shake.durationMs, 0, 1);
       const envelope = (1 - progress) ** 2;
+      const axis = shake.axis || new THREE.Vector3(1, 0, 0);
+      const swayAxis = new THREE.Vector3(-axis.z, 0, axis.x);
+      const impulse = Math.sin(progress * Math.PI * 3.5) * (shake.amplitude ?? 0.08) * envelope;
+      const sway = Math.sin(progress * Math.PI * 7) * (shake.swayAmplitude ?? 0.04) * envelope;
       shake.card.position.set(
-        shake.basePosition.x + Math.sin(progress * Math.PI * 8) * 0.08 * envelope,
-        shake.basePosition.y,
-        shake.basePosition.z,
+        shake.basePosition.x + axis.x * impulse + swayAxis.x * sway,
+        shake.basePosition.y + Math.abs(Math.sin(progress * Math.PI * 6)) * 0.03 * envelope,
+        shake.basePosition.z + axis.z * impulse + swayAxis.z * sway,
       );
+      shake.card.rotation.z = (shake.baseRotationZ ?? 0) + Math.sin(progress * Math.PI * 6) * (shake.rollAmplitude ?? 0.05) * envelope;
       if (progress >= 1) {
         shake.card.position.copy(shake.basePosition);
+        shake.card.rotation.z = shake.baseRotationZ ?? 0;
       } else {
         remaining.push(shake);
       }
