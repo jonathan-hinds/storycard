@@ -26,7 +26,9 @@ const PHASE_DECK_SIZE_PER_PLAYER = 10;
 const PHASE_STARTING_HAND_SIZE = 3;
 const PHASE_MAX_HAND_SIZE = 7;
 const PHASE_BOARD_SLOTS_PER_SIDE = 3;
-const PHASE_COMMIT_DURATION_MS = 1800;
+const PHASE_COMMIT_INTER_ATTACK_DELAY_MS = 740;
+const PHASE_COMMIT_ATTACK_ANIMATION_DURATION_MS = 760;
+const PHASE_COMMIT_SETTLE_BUFFER_MS = 80;
 
 const cardGameServer = new CardGameServer({
   cards: [
@@ -213,6 +215,7 @@ function advanceMatchToDecisionPhase(match) {
   match.turnNumber += 1;
   match.phase = 1;
   match.phaseStartedAt = Date.now();
+  match.phaseEndsAt = null;
   match.readyPlayers.clear();
   match.pendingCommitAttacksByPlayer = new Map();
   match.players.forEach((playerId) => {
@@ -242,6 +245,21 @@ function resolveCommitPhase(match) {
     pendingAttacks.set(playerId, attacks);
   });
   match.pendingCommitAttacksByPlayer = pendingAttacks;
+  match.phaseEndsAt = match.phaseStartedAt + getCommitPhaseDurationMs(match);
+}
+
+function getCommitPhaseDurationMs(match) {
+  const commitAttackCount = Array
+    .from(match.pendingCommitAttacksByPlayer.values())
+    .reduce((sum, attacks) => sum + (Array.isArray(attacks) ? attacks.length : 0), 0);
+
+  if (commitAttackCount <= 0) {
+    return PHASE_COMMIT_SETTLE_BUFFER_MS;
+  }
+
+  return ((commitAttackCount - 1) * PHASE_COMMIT_INTER_ATTACK_DELAY_MS)
+    + PHASE_COMMIT_ATTACK_ANIMATION_DURATION_MS
+    + PHASE_COMMIT_SETTLE_BUFFER_MS;
 }
 
 function readyPlayerInMatch(match, playerId) {
@@ -357,7 +375,7 @@ function getPlayerPhaseStatus(playerId) {
       phaseMatchmakingState.set(playerId, { status: 'idle' });
       return { status: 'idle', queueCount: phaseQueue.length };
     }
-    if (match.phase === 2 && Date.now() - (match.phaseStartedAt || 0) >= PHASE_COMMIT_DURATION_MS) {
+    if (match.phase === 2 && Date.now() >= (match.phaseEndsAt || match.phaseStartedAt || 0)) {
       advanceMatchToDecisionPhase(match);
     }
 
@@ -409,6 +427,7 @@ function findPhaseMatch(playerId) {
       turnNumber: 1,
       phase: 1,
       phaseStartedAt: Date.now(),
+      phaseEndsAt: null,
       readyPlayers: new Set(),
       lastDrawnCardsByPlayer: new Map(),
       pendingCommitAttacksByPlayer: new Map(),
