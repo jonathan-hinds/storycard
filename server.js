@@ -148,6 +148,12 @@ function serializeMatchForPlayer(match, playerId) {
     canAttack: Number.isInteger(card.summonedTurn) && card.summonedTurn < match.turnNumber,
   }));
 
+  const commitAttacks = (match.pendingCommitAttackSequence || []).map((attack) => ({
+    attackerSide: attack.attackerId === playerId ? 'player' : 'opponent',
+    attackerSlotIndex: attack.attackerSlotIndex,
+    targetSlotIndex: attack.targetSlotIndex,
+  }));
+
   return {
     id: match.id,
     turnNumber: match.turnNumber,
@@ -169,7 +175,7 @@ function serializeMatchForPlayer(match, playerId) {
     meta: {
       drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
       phaseStartedAt: match.phaseStartedAt,
-      commitAttacks: [...(match.pendingCommitAttacksByPlayer.get(playerId) || [])],
+      commitAttacks,
     },
   };
 }
@@ -202,6 +208,7 @@ function advanceMatchToDecisionPhase(match) {
   match.phaseStartedAt = Date.now();
   match.readyPlayers.clear();
   match.pendingCommitAttacksByPlayer = new Map();
+  match.pendingCommitAttackSequence = [];
   match.players.forEach((playerId) => {
     const playerState = match.cardsByPlayer.get(playerId);
     if (!playerState) return;
@@ -229,6 +236,25 @@ function resolveCommitPhase(match) {
     pendingAttacks.set(playerId, attacks);
   });
   match.pendingCommitAttacksByPlayer = pendingAttacks;
+
+  const commitAttackSequence = [];
+  match.players.forEach((playerId) => {
+    const attacks = pendingAttacks.get(playerId) || [];
+    attacks.forEach((attack) => {
+      commitAttackSequence.push({
+        attackerId: playerId,
+        attackerSlotIndex: attack.attackerSlotIndex,
+        targetSlotIndex: attack.targetSlotIndex,
+      });
+    });
+  });
+
+  commitAttackSequence.sort((a, b) => {
+    if (a.attackerSlotIndex !== b.attackerSlotIndex) return a.attackerSlotIndex - b.attackerSlotIndex;
+    return match.players.indexOf(a.attackerId) - match.players.indexOf(b.attackerId);
+  });
+
+  match.pendingCommitAttackSequence = commitAttackSequence;
 }
 
 function readyPlayerInMatch(match, playerId) {
@@ -399,6 +425,7 @@ function findPhaseMatch(playerId) {
       readyPlayers: new Set(),
       lastDrawnCardsByPlayer: new Map(),
       pendingCommitAttacksByPlayer: new Map(),
+      pendingCommitAttackSequence: [],
       createdAt: Date.now(),
     };
     phaseMatches.set(matchId, match);
