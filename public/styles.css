@@ -371,7 +371,6 @@ button {
   height: clamp(500px, calc(100vh - 190px), 680px);
   overflow-y: auto;
   background: #0f1320;
-  padding-bottom: 72px;
 }
 
 .cards-library-canvas {
