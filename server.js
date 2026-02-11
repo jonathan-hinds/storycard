@@ -6,6 +6,7 @@ const { randomUUID } = require('crypto');
 const DiceEngine = require('./shared/dieEngine');
 const { DieRollerServer } = require('./shared/die-roller');
 const { CardGameServer } = require('./shared/card-game');
+const { PhaseManagerServer } = require('./shared/phase-manager');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -28,6 +29,9 @@ const cardGameServer = new CardGameServer({
     { id: 'card-delta', held: false, updatedAt: null, zone: 'board', slotIndex: 4 },
   ],
 });
+
+
+const phaseManagerServer = new PhaseManagerServer();
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': MIME_TYPES['.json'] });
@@ -187,6 +191,78 @@ async function handleApi(req, res, pathname) {
       areaSize: die.areaSize,
       history: die.history,
     });
+    return true;
+  }
+
+
+  if (req.method === 'POST' && pathname === '/api/phase-manager/matchmaking') {
+    try {
+      const body = await readRequestJson(req);
+      if (!body.playerId) {
+        sendJson(res, 400, { error: 'playerId is required' });
+        return true;
+      }
+      sendJson(res, 200, phaseManagerServer.findMatch(body.playerId));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message });
+    }
+    return true;
+  }
+
+  const matchmakingStatusMatch = pathname.match(/^\/api\/phase-manager\/matchmaking\/([^/]+)$/);
+  if (req.method === 'GET' && matchmakingStatusMatch) {
+    const [, playerId] = matchmakingStatusMatch;
+    sendJson(res, 200, phaseManagerServer.getMatchmakingStatus(playerId));
+    return true;
+  }
+
+  const phaseMatchStateMatch = pathname.match(/^\/api\/phase-manager\/matches\/([^/]+)$/);
+  if (req.method === 'GET' && phaseMatchStateMatch) {
+    const [, matchId] = phaseMatchStateMatch;
+    const playerId = new URL(req.url, `http://${req.headers.host}`).searchParams.get('playerId');
+    if (!playerId) {
+      sendJson(res, 400, { error: 'playerId is required' });
+      return true;
+    }
+    const match = phaseManagerServer.matches.get(matchId);
+    const view = phaseManagerServer.getMatchView(match, playerId);
+    if (!view) {
+      sendJson(res, 404, { error: 'Match not found' });
+      return true;
+    }
+    sendJson(res, 200, { match: view });
+    return true;
+  }
+
+  const phaseEndTurnMatch = pathname.match(/^\/api\/phase-manager\/matches\/([^/]+)\/end-turn$/);
+  if (req.method === 'POST' && phaseEndTurnMatch) {
+    const [, matchId] = phaseEndTurnMatch;
+    try {
+      const body = await readRequestJson(req);
+      if (!body.playerId) {
+        sendJson(res, 400, { error: 'playerId is required' });
+        return true;
+      }
+      const match = phaseManagerServer.syncAndEndTurn(matchId, body.playerId, body.playerState || {});
+      sendJson(res, 200, { match });
+    } catch (error) {
+      sendJson(res, 400, { error: error.message });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/phase-manager/leave') {
+    try {
+      const body = await readRequestJson(req);
+      if (!body.playerId) {
+        sendJson(res, 400, { error: 'playerId is required' });
+        return true;
+      }
+      phaseManagerServer.leave(body.playerId);
+      sendJson(res, 200, { status: 'ok' });
+    } catch (error) {
+      sendJson(res, 400, { error: error.message });
+    }
     return true;
   }
 
