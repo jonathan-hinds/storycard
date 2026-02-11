@@ -627,14 +627,20 @@ export class CardGameClient {
   }
 
   getCombatDecisions() {
-    const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
+    const playerSlots = this.boardSlots.filter((slot) => slot.side === this.template.playerSide);
+    const relativeIndexByGlobalSlot = new Map(playerSlots.map((slot, relativeIndex) => [slot.index, relativeIndex]));
     return this.cards
       .filter((card) => card.userData.owner === this.template.playerSide && card.userData.zone === CARD_ZONE_TYPES.BOARD)
       .filter((card) => card.userData.attackCommitted === true && Number.isInteger(card.userData.slotIndex) && Number.isInteger(card.userData.targetSlotIndex))
-      .map((card) => ({
-        attackerSlotIndex: card.userData.slotIndex - boardSlotsPerSide,
-        targetSlotIndex: card.userData.targetSlotIndex,
-      }));
+      .map((card) => {
+        const attackerSlotIndex = relativeIndexByGlobalSlot.get(card.userData.slotIndex);
+        if (!Number.isInteger(attackerSlotIndex)) return null;
+        return {
+          attackerSlotIndex,
+          targetSlotIndex: card.userData.targetSlotIndex,
+        };
+      })
+      .filter(Boolean);
   }
 
   playCommitPhaseAnimations(attackPlan = [], { onDone } = {}) {
@@ -644,18 +650,23 @@ export class CardGameClient {
     }
 
     const now = performance.now();
-    const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
-    attackPlan.forEach((step, index) => {
-      const isOpponentAttack = step?.attackerSide === 'opponent';
-      const attackerGlobalSlotIndex = isOpponentAttack
-        ? step.attackerSlotIndex
-        : boardSlotsPerSide + step.attackerSlotIndex;
-      const defenderGlobalSlotIndex = isOpponentAttack
-        ? boardSlotsPerSide + step.targetSlotIndex
-        : step.targetSlotIndex;
+    const opponentSide = this.boardSlots.find((slot) => slot.side !== this.template.playerSide)?.side;
+    const slotsBySide = new Map();
+    for (const slot of this.boardSlots) {
+      if (!slotsBySide.has(slot.side)) slotsBySide.set(slot.side, []);
+      slotsBySide.get(slot.side).push(slot);
+    }
+    for (const sideSlots of slotsBySide.values()) {
+      sideSlots.sort((a, b) => a.index - b.index);
+    }
 
-      const attackerSlot = this.boardSlots[attackerGlobalSlotIndex];
-      const defenderSlot = this.boardSlots[defenderGlobalSlotIndex];
+    attackPlan.forEach((step, index) => {
+      if (!Number.isInteger(step?.attackerSlotIndex) || !Number.isInteger(step?.targetSlotIndex)) return;
+      const isOpponentAttack = step?.attackerSide === 'opponent';
+      const attackerSide = isOpponentAttack ? opponentSide : this.template.playerSide;
+      const defenderSide = isOpponentAttack ? this.template.playerSide : opponentSide;
+      const attackerSlot = slotsBySide.get(attackerSide)?.[step.attackerSlotIndex];
+      const defenderSlot = slotsBySide.get(defenderSide)?.[step.targetSlotIndex];
       if (!attackerSlot?.card || !defenderSlot) return;
       this.combatAnimations.push({
         attackerCard: attackerSlot.card,
