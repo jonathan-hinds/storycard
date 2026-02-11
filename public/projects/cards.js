@@ -1,48 +1,27 @@
+import { CardLibraryScene } from '/public/projects/card-library/CardLibraryScene.js';
+
 const form = document.getElementById('create-card-form');
 const status = document.getElementById('create-card-status');
 const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
+const cardLibraryCanvas = document.getElementById('card-library-canvas');
 
-function renderCard(card) {
-  const cardItem = document.createElement('article');
-  cardItem.className = 'catalog-card';
-
-  const title = document.createElement('h3');
-  title.className = 'catalog-card-title';
-  title.textContent = card.name;
-
-  const type = document.createElement('p');
-  type.className = 'catalog-card-type';
-  type.textContent = card.type;
-
-  const stats = document.createElement('dl');
-  stats.className = 'catalog-card-stats';
-  stats.innerHTML = `
-    <div><dt>Damage</dt><dd>${card.damage}</dd></div>
-    <div><dt>Health</dt><dd>${card.health}</dd></div>
-    <div><dt>Speed</dt><dd>${card.speed}</dd></div>
-  `;
-
-  cardItem.append(title, type, stats);
-  return cardItem;
-}
+const cardLibraryScene = new CardLibraryScene({
+  canvas: cardLibraryCanvas,
+  scrollContainer: cardList,
+});
 
 function renderCards(cards) {
-  cardList.innerHTML = '';
-
   if (!cards.length) {
-    const empty = document.createElement('p');
-    empty.className = 'catalog-empty';
-    empty.textContent = 'No cards yet. Create your first card using the form.';
-    cardList.append(empty);
+    cardLibraryCanvas.hidden = true;
+    cardList.innerHTML = '<p class="catalog-empty">No cards yet. Create your first card using the form.</p>';
     return;
   }
 
-  const fragment = document.createDocumentFragment();
-  cards.forEach((card) => {
-    fragment.append(renderCard(card));
-  });
-  cardList.append(fragment);
+  cardList.innerHTML = '';
+  cardList.append(cardLibraryCanvas);
+  cardLibraryCanvas.hidden = false;
+  cardLibraryScene.setCards(cards);
 }
 
 function setStatus(message, isError = false) {
@@ -109,3 +88,7 @@ form.addEventListener('submit', async (event) => {
 });
 
 fetchCards();
+
+window.addEventListener('beforeunload', () => {
+  cardLibraryScene.destroy();
+});
