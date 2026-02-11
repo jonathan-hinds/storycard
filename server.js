@@ -22,6 +22,8 @@ const dieRollerServer = new DieRollerServer();
 const phaseQueue = [];
 const phaseMatchmakingState = new Map();
 const phaseMatches = new Map();
+const PHASE_CARDS_PER_PLAYER = 3;
+const PHASE_BOARD_SLOTS_PER_SIDE = 3;
 
 const cardGameServer = new CardGameServer({
   cards: [
@@ -124,6 +126,67 @@ function clearPlayerMatchmakingState(playerId) {
   phaseMatchmakingState.set(playerId, { status: 'idle' });
 }
 
+function randomCardColor() {
+  const colorPool = [0x5f8dff, 0x8f6cff, 0x2dc6ad, 0xf28a65, 0xf1c965, 0xe76fb9, 0x4ecdc4, 0xff6b6b, 0xc7f464, 0xffa94d];
+  return colorPool[Math.floor(Math.random() * colorPool.length)];
+}
+
+function serializeMatchForPlayer(match, playerId) {
+  const opponentId = match.players.find((id) => id !== playerId) || null;
+  const playerState = match.cardsByPlayer.get(playerId);
+  const opponentState = opponentId ? match.cardsByPlayer.get(opponentId) : null;
+
+  if (!playerState || !opponentState || !opponentId) {
+    return null;
+  }
+
+  return {
+    id: match.id,
+    turn: match.turnPlayerId === playerId ? 'player' : 'opponent',
+    players: {
+      player: {
+        hand: [...playerState.hand],
+        board: [...playerState.board],
+      },
+      opponent: {
+        hand: [...opponentState.hand],
+        board: [...opponentState.board],
+      },
+    },
+  };
+}
+
+function validatePhaseTurnPayload(payload, allCards) {
+  const hand = Array.isArray(payload.hand) ? payload.hand : [];
+  const board = Array.isArray(payload.board) ? payload.board : [];
+
+  if (board.length > PHASE_BOARD_SLOTS_PER_SIDE) {
+    return { error: `board is limited to ${PHASE_BOARD_SLOTS_PER_SIDE} cards` };
+  }
+
+  const knownCards = new Map(allCards.map((card) => [card.id, card]));
+  const merged = [...hand, ...board];
+  const uniqueIds = new Set(merged.map((card) => card.id));
+  if (merged.length !== uniqueIds.size) {
+    return { error: 'hand and board must not contain duplicate cards' };
+  }
+
+  if (uniqueIds.size !== knownCards.size) {
+    return { error: `expected exactly ${knownCards.size} cards between hand and board` };
+  }
+
+  for (const cardId of uniqueIds) {
+    if (!knownCards.has(cardId)) {
+      return { error: `unknown card submitted: ${cardId}` };
+    }
+  }
+
+  return {
+    hand: hand.map((card) => knownCards.get(card.id)),
+    board: board.map((card) => knownCards.get(card.id)),
+  };
+}
+
 function getPlayerPhaseStatus(playerId) {
   const status = phaseMatchmakingState.get(playerId) || { status: 'idle' };
   if (status.status === 'searching') {
@@ -147,6 +210,7 @@ function getPlayerPhaseStatus(playerId) {
       opponentId,
       isYourTurn: match.turnPlayerId === playerId,
       queueCount: phaseQueue.length,
+      matchState: serializeMatchForPlayer(match, playerId),
     };
   }
 
@@ -162,9 +226,25 @@ function findPhaseMatch(playerId) {
   const opponentId = phaseQueue.shift();
   if (opponentId && opponentId !== playerId) {
     const matchId = `match-${randomUUID().slice(0, 8)}`;
+    const players = [opponentId, playerId];
+    const cardsByPlayer = new Map();
+
+    players.forEach((id) => {
+      const cards = Array.from({ length: PHASE_CARDS_PER_PLAYER }, (_, index) => ({
+        id: `${id}-card-${index + 1}`,
+        color: randomCardColor(),
+      }));
+      cardsByPlayer.set(id, {
+        allCards: cards,
+        hand: cards,
+        board: [],
+      });
+    });
+
     const match = {
       id: matchId,
-      players: [opponentId, playerId],
+      players,
+      cardsByPlayer,
       turnPlayerId: opponentId,
       createdAt: Date.now(),
     };
@@ -327,6 +407,60 @@ async function handleApi(req, res, pathname) {
     sendJson(res, 200, { status: 'idle', queueCount: phaseQueue.length });
     return true;
   }
+
+  if (req.method === 'POST' && pathname === '/api/phase-manager/match/end-turn') {
+    let body = {};
+    try {
+      body = await readRequestJson(req);
+    } catch (error) {
+      body = {};
+    }
+
+    if (!body.playerId || typeof body.playerId !== 'string') {
+      sendJson(res, 400, { error: 'playerId is required' });
+      return true;
+    }
+
+    const status = phaseMatchmakingState.get(body.playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      sendJson(res, 409, { error: 'player is not in an active match' });
+      return true;
+    }
+
+    const match = phaseMatches.get(status.matchId);
+    if (!match) {
+      sendJson(res, 409, { error: 'active match not found' });
+      return true;
+    }
+
+    if (match.turnPlayerId !== body.playerId) {
+      sendJson(res, 409, { error: 'cannot end turn when it is not your turn' });
+      return true;
+    }
+
+    const playerState = match.cardsByPlayer.get(body.playerId);
+    if (!playerState) {
+      sendJson(res, 409, { error: 'player state not found in active match' });
+      return true;
+    }
+
+    const validated = validatePhaseTurnPayload(body, playerState.allCards);
+    if (validated.error) {
+      sendJson(res, 400, { error: validated.error });
+      return true;
+    }
+
+    playerState.hand = validated.hand;
+    playerState.board = validated.board;
+    const nextPlayerId = match.players.find((id) => id !== body.playerId);
+    if (nextPlayerId) {
+      match.turnPlayerId = nextPlayerId;
+    }
+
+    sendJson(res, 200, getPlayerPhaseStatus(body.playerId));
+    return true;
+  }
+
 
   return false;
 }

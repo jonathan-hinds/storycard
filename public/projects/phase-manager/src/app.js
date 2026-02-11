@@ -17,7 +17,6 @@ const BOARD_SLOTS_PER_SIDE = 3;
 
 let client = null;
 let match = null;
-let opponentTurnTimer = 0;
 let matchmakingPollTimer = 0;
 
 function createTabPlayerId() {
@@ -50,31 +49,6 @@ async function getJson(url) {
     throw new Error(payload.error || 'Request failed');
   }
   return payload;
-}
-
-const colorPool = [0x5f8dff, 0x8f6cff, 0x2dc6ad, 0xf28a65, 0xf1c965, 0xe76fb9, 0x4ecdc4, 0xff6b6b, 0xc7f464, 0xffa94d];
-
-function randomCard(prefix, index) {
-  const id = `${prefix}-${index + 1}-${Math.random().toString(36).slice(2, 7)}`;
-  const color = colorPool[Math.floor(Math.random() * colorPool.length)];
-  return { id, color };
-}
-
-function createNewMatch({ matchId, isYourTurn }) {
-  return {
-    id: matchId,
-    turn: isYourTurn ? PLAYER_SIDE : OPPONENT_SIDE,
-    players: {
-      [PLAYER_SIDE]: {
-        hand: Array.from({ length: 3 }, (_, index) => randomCard('p', index)),
-        board: [],
-      },
-      [OPPONENT_SIDE]: {
-        hand: Array.from({ length: 3 }, (_, index) => randomCard('o', index)),
-        board: [],
-      },
-    },
-  };
 }
 
 function stopMatchmakingPolling() {
@@ -153,7 +127,7 @@ function buildTemplateFromMatch(currentMatch) {
 }
 
 function syncPlayerStateFromClient() {
-  if (!client || !match) return;
+  if (!client || !match) return { hand: [], board: [] };
 
   const allPlayerCards = client.cards
     .filter((card) => card.userData.owner === PLAYER_SIDE)
@@ -164,19 +138,22 @@ function syncPlayerStateFromClient() {
       slotIndex: card.userData.slotIndex,
     }));
 
-  match.players[PLAYER_SIDE].hand = allPlayerCards
+  const hand = allPlayerCards
     .filter((card) => card.zone === CARD_ZONE_TYPES.HAND)
     .map(({ id, color }) => ({ id, color }));
 
-  match.players[PLAYER_SIDE].board = allPlayerCards
+  const board = allPlayerCards
     .filter((card) => card.zone === CARD_ZONE_TYPES.BOARD)
     .sort((a, b) => a.slotIndex - b.slotIndex)
     .map(({ id, color }) => ({ id, color }));
+
+  return { hand, board };
 }
 
 function setTurnLockState() {
   const isPlayerTurn = Boolean(match) && match.turn === PLAYER_SIDE;
   endTurnBtn.disabled = !match || !isPlayerTurn;
+  canvas.style.pointerEvents = isPlayerTurn ? 'auto' : 'none';
 
   if (!match) {
     overlayEl.hidden = false;
@@ -191,9 +168,6 @@ function setTurnLockState() {
 function updateSummaryPanels() {
   if (!match) {
     queueSummaryEl.textContent = 'Queue: idle';
-  }
-
-  if (!match) {
     matchLabelEl.textContent = 'No active match';
     playerSummaryEl.textContent = 'Player: waiting for matchmaking';
     opponentSummaryEl.textContent = 'Opponent: waiting for matchmaking';
@@ -259,19 +233,26 @@ function applyMatchmakingStatus(status) {
   updateQueueSummary(status);
 
   if (status.status === 'matched') {
-    stopMatchmakingPolling();
     matchmakingBtn.disabled = true;
     matchmakingBtn.textContent = 'Match Found';
 
-    if (!match || match.id !== status.matchId) {
-      window.clearTimeout(opponentTurnTimer);
-      match = createNewMatch({ matchId: status.matchId, isYourTurn: Boolean(status.isYourTurn) });
+    const nextMatch = status.matchState || null;
+    const nextSerialized = JSON.stringify(nextMatch);
+    const currentSerialized = JSON.stringify(match);
+    if (nextSerialized !== currentSerialized) {
+      match = nextMatch;
       renderMatch();
-      if (!status.isYourTurn) {
-        opponentTurnTimer = window.setTimeout(runOpponentTurn, 900);
-      }
+    } else {
+      setTurnLockState();
+      updateSummaryPanels();
     }
     return;
+  }
+
+  match = null;
+  if (client) {
+    client.destroy();
+    client = null;
   }
 
   if (status.status === 'searching') {
@@ -279,11 +260,13 @@ function applyMatchmakingStatus(status) {
     matchmakingBtn.disabled = true;
     matchmakingBtn.textContent = 'Searching...';
     setTurnLockState();
+    updateSummaryPanels();
     return;
   }
 
   matchmakingBtn.disabled = false;
   matchmakingBtn.textContent = 'Find Match';
+  renderMatch();
 }
 
 async function pollMatchmakingStatus() {
@@ -295,29 +278,13 @@ async function pollMatchmakingStatus() {
   }
 }
 
-function runOpponentTurn() {
-  if (!match || match.turn !== OPPONENT_SIDE) return;
-
-  const opponent = match.players[OPPONENT_SIDE];
-  if (opponent.hand.length > 0 && opponent.board.length < BOARD_SLOTS_PER_SIDE) {
-    const nextCard = opponent.hand.shift();
-    opponent.board.push(nextCard);
-  }
-
-  match.turn = PLAYER_SIDE;
-  renderMatch();
-}
-
 function beginMatchmaking() {
   if (match) return;
-
-  stopMatchmakingPolling();
-  window.clearTimeout(opponentTurnTimer);
 
   postJson('/api/phase-manager/matchmaking/find', { playerId })
     .then((status) => {
       applyMatchmakingStatus(status);
-      if (status.status !== 'matched') {
+      if (!matchmakingPollTimer) {
         matchmakingPollTimer = window.setInterval(pollMatchmakingStatus, 1200);
       }
     })
@@ -331,16 +298,25 @@ function beginMatchmaking() {
 function endTurn() {
   if (!match || match.turn !== PLAYER_SIDE) return;
 
-  syncPlayerStateFromClient();
-  match.turn = OPPONENT_SIDE;
-  renderMatch();
+  const nextState = syncPlayerStateFromClient();
+  endTurnBtn.disabled = true;
 
-  opponentTurnTimer = window.setTimeout(runOpponentTurn, 900);
+  postJson('/api/phase-manager/match/end-turn', {
+    playerId,
+    hand: nextState.hand,
+    board: nextState.board,
+  })
+    .then((status) => {
+      applyMatchmakingStatus(status);
+    })
+    .catch((error) => {
+      statusEl.textContent = `End turn error: ${error.message}`;
+      setTurnLockState();
+    });
 }
 
 function resetMatch() {
   stopMatchmakingPolling();
-  window.clearTimeout(opponentTurnTimer);
 
   match = null;
   if (client) {
@@ -353,6 +329,7 @@ function resetMatch() {
       updateQueueSummary(status);
       matchmakingBtn.disabled = false;
       matchmakingBtn.textContent = 'Find Match';
+      matchmakingPollTimer = window.setInterval(pollMatchmakingStatus, 1200);
     })
     .catch((error) => {
       statusEl.textContent = `Reset error: ${error.message}`;
@@ -366,4 +343,5 @@ endTurnBtn.addEventListener('click', endTurn);
 resetBtn.addEventListener('click', resetMatch);
 
 renderMatch();
+matchmakingPollTimer = window.setInterval(pollMatchmakingStatus, 1200);
 pollMatchmakingStatus();
