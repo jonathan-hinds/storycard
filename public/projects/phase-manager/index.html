@@ -38,22 +38,24 @@
       <section class="controls">
         <h1>Phase Manager Project</h1>
         <p>
-          This is a new, isolated project space for turn flow and phase logic development. The card module below is loaded
-          as a dependency so game-loop behavior can be prototyped without changing the existing single-card sandbox.
+          This sandbox now focuses on a lightweight multiplayer turn loop: start matchmaking, deal 3 cards to each player,
+          play cards only on your turn, and pass with End Turn.
         </p>
 
         <div class="card">
-          <h2>Current Setup</h2>
-          <p>
-            For now this page mirrors the card interaction demo so phase-manager logic can be layered on top in later iterations.
-            Card-module behavior remains unchanged and reusable across both projects.
-          </p>
-          <button id="phase-manager-reset" type="button" class="secondary-action">Reset demo</button>
+          <h2>Turn Flow Sandbox</h2>
+          <button id="phase-manager-matchmaking" type="button">Find Match</button>
+          <button id="phase-manager-end-turn" type="button" class="secondary-action" disabled>End Turn</button>
+          <button id="phase-manager-reset" type="button" class="secondary-action">Reset Match</button>
+          <p id="phase-manager-match-label" class="debug-pill">No active match</p>
+          <p id="phase-manager-player-summary" class="debug-pill">Player: waiting for matchmaking</p>
+          <p id="phase-manager-opponent-summary" class="debug-pill">Opponent: waiting for matchmaking</p>
           <p id="phase-manager-status" class="debug-pill">Loading…</p>
         </div>
       </section>
 
-      <section class="single-card-stage-wrap">
+      <section class="single-card-stage-wrap phase-manager-stage-wrap">
+        <div id="phase-manager-turn-overlay" class="phase-manager-turn-overlay">Start matchmaking to begin a match.</div>
         <canvas id="phase-manager-canvas" class="single-card-canvas" aria-label="Phase manager card interaction canvas"></canvas>
       </section>
     </main>

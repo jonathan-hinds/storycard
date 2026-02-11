@@ -277,3 +277,27 @@ button {
     min-height: 320px;
   }
 }
+
+.phase-manager-stage-wrap {
+  position: relative;
+}
+
+.phase-manager-turn-overlay {
+  position: absolute;
+  inset: 1rem;
+  border-radius: 0.8rem;
+  border: 1px dashed rgba(170, 187, 223, 0.55);
+  background: rgba(14, 18, 28, 0.66);
+  color: #d9e2f6;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 1rem;
+  z-index: 2;
+  pointer-events: all;
+}
+
+.phase-manager-turn-overlay[hidden] {
+  display: none;
+}
