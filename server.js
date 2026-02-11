@@ -26,6 +26,7 @@ const PHASE_DECK_SIZE_PER_PLAYER = 10;
 const PHASE_STARTING_HAND_SIZE = 3;
 const PHASE_MAX_HAND_SIZE = 7;
 const PHASE_BOARD_SLOTS_PER_SIDE = 3;
+const PHASE_COMMIT_DURATION_MS = 1800;
 
 const cardGameServer = new CardGameServer({
   cards: [
@@ -142,6 +143,11 @@ function serializeMatchForPlayer(match, playerId) {
     return null;
   }
 
+  const serializeBoard = (boardCards) => boardCards.map((card) => ({
+    ...card,
+    canAttack: Number.isInteger(card.summonedTurn) && card.summonedTurn < match.turnNumber,
+  }));
+
   return {
     id: match.id,
     turnNumber: match.turnNumber,
@@ -151,17 +157,19 @@ function serializeMatchForPlayer(match, playerId) {
     players: {
       player: {
         hand: [...playerState.hand],
-        board: [...playerState.board],
+        board: serializeBoard(playerState.board),
         deckCount: playerState.deck.length,
       },
       opponent: {
         hand: [...opponentState.hand],
-        board: [...opponentState.board],
+        board: serializeBoard(opponentState.board),
         deckCount: opponentState.deck.length,
       },
     },
     meta: {
       drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
+      phaseStartedAt: match.phaseStartedAt,
+      commitAttacks: [...(match.pendingCommitAttacksByPlayer.get(playerId) || [])],
     },
   };
 }
@@ -191,15 +199,36 @@ function applyDecisionPhaseStartDraw(match) {
 function advanceMatchToDecisionPhase(match) {
   match.turnNumber += 1;
   match.phase = 1;
+  match.phaseStartedAt = Date.now();
   match.readyPlayers.clear();
+  match.pendingCommitAttacksByPlayer = new Map();
+  match.players.forEach((playerId) => {
+    const playerState = match.cardsByPlayer.get(playerId);
+    if (!playerState) return;
+    playerState.board = playerState.board.map((card) => ({
+      ...card,
+      attackCommitted: false,
+      targetSlotIndex: null,
+    }));
+  });
   applyDecisionPhaseStartDraw(match);
 }
 
 function resolveCommitPhase(match) {
   match.phase = 2;
-  // Placeholder for future action resolution logic.
-  // For now the commit phase resolves immediately and starts the next turn.
-  advanceMatchToDecisionPhase(match);
+  match.phaseStartedAt = Date.now();
+  const pendingAttacks = new Map();
+  match.players.forEach((playerId) => {
+    const playerState = match.cardsByPlayer.get(playerId);
+    const attacks = playerState?.board
+      ?.filter((card) => card.attackCommitted === true && Number.isInteger(card.slotIndex) && Number.isInteger(card.targetSlotIndex))
+      .map((card) => ({
+        attackerSlotIndex: card.slotIndex,
+        targetSlotIndex: card.targetSlotIndex,
+      })) || [];
+    pendingAttacks.set(playerId, attacks);
+  });
+  match.pendingCommitAttacksByPlayer = pendingAttacks;
 }
 
 function readyPlayerInMatch(match, playerId) {
@@ -211,7 +240,7 @@ function readyPlayerInMatch(match, playerId) {
   resolveCommitPhase(match);
 }
 
-function validatePhaseTurnPayload(payload, playerState) {
+function validatePhaseTurnPayload(payload, playerState, currentTurnNumber) {
   const hand = Array.isArray(payload.hand) ? payload.hand : [];
   const board = Array.isArray(payload.board) ? payload.board : [];
 
@@ -241,6 +270,7 @@ function validatePhaseTurnPayload(payload, playerState) {
     }
   }
 
+  const previousBoardIds = new Set(playerState.board.map((card) => card.id));
   const usedBoardSlots = new Set();
   const normalizedBoard = [];
   for (const boardCard of board) {
@@ -254,10 +284,42 @@ function validatePhaseTurnPayload(payload, playerState) {
       return { error: 'board card slotIndex values must be unique' };
     }
     usedBoardSlots.add(boardCard.slotIndex);
+    const knownCard = knownCards.get(boardCard.id);
+    const cardWasAlreadyOnBoard = previousBoardIds.has(boardCard.id);
     normalizedBoard.push({
-      ...knownCards.get(boardCard.id),
+      ...knownCard,
       slotIndex: boardCard.slotIndex,
+      summonedTurn: cardWasAlreadyOnBoard ? knownCard.summonedTurn : currentTurnNumber,
+      attackCommitted: false,
+      targetSlotIndex: null,
     });
+  }
+
+  const attacks = Array.isArray(payload.attacks) ? payload.attacks : [];
+  const seenAttackerSlots = new Set();
+  for (const attack of attacks) {
+    if (!Number.isInteger(attack.attackerSlotIndex) || !Number.isInteger(attack.targetSlotIndex)) {
+      return { error: 'attacks must include integer attackerSlotIndex and targetSlotIndex' };
+    }
+    if (attack.attackerSlotIndex < 0 || attack.attackerSlotIndex >= PHASE_BOARD_SLOTS_PER_SIDE) {
+      return { error: `attackerSlotIndex must be between 0 and ${PHASE_BOARD_SLOTS_PER_SIDE - 1}` };
+    }
+    if (attack.targetSlotIndex < 0 || attack.targetSlotIndex >= PHASE_BOARD_SLOTS_PER_SIDE) {
+      return { error: `targetSlotIndex must be between 0 and ${PHASE_BOARD_SLOTS_PER_SIDE - 1}` };
+    }
+    if (seenAttackerSlots.has(attack.attackerSlotIndex)) {
+      return { error: 'a board slot may only commit one attack per turn' };
+    }
+    const attackerCard = normalizedBoard.find((card) => card.slotIndex === attack.attackerSlotIndex);
+    if (!attackerCard) {
+      return { error: `no attacker card found in slot ${attack.attackerSlotIndex}` };
+    }
+    if (!Number.isInteger(attackerCard.summonedTurn) || attackerCard.summonedTurn >= currentTurnNumber) {
+      return { error: `card in slot ${attack.attackerSlotIndex} has summoning sickness` };
+    }
+    attackerCard.attackCommitted = true;
+    attackerCard.targetSlotIndex = attack.targetSlotIndex;
+    seenAttackerSlots.add(attack.attackerSlotIndex);
   }
 
   return {
@@ -282,6 +344,10 @@ function getPlayerPhaseStatus(playerId) {
       phaseMatchmakingState.set(playerId, { status: 'idle' });
       return { status: 'idle', queueCount: phaseQueue.length };
     }
+    if (match.phase === 2 && Date.now() - (match.phaseStartedAt || 0) >= PHASE_COMMIT_DURATION_MS) {
+      advanceMatchToDecisionPhase(match);
+    }
+
     const opponentId = match.players.find((id) => id !== playerId) || null;
     return {
       status: 'matched',
@@ -311,6 +377,9 @@ function findPhaseMatch(playerId) {
       const cards = Array.from({ length: PHASE_DECK_SIZE_PER_PLAYER }, (_, index) => ({
         id: `${id}-card-${index + 1}`,
         color: randomCardColor(),
+        summonedTurn: null,
+        attackCommitted: false,
+        targetSlotIndex: null,
       }));
       cardsByPlayer.set(id, {
         allCards: cards,
@@ -326,8 +395,10 @@ function findPhaseMatch(playerId) {
       cardsByPlayer,
       turnNumber: 1,
       phase: 1,
+      phaseStartedAt: Date.now(),
       readyPlayers: new Set(),
       lastDrawnCardsByPlayer: new Map(),
+      pendingCommitAttacksByPlayer: new Map(),
       createdAt: Date.now(),
     };
     phaseMatches.set(matchId, match);
@@ -531,7 +602,7 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    const validated = validatePhaseTurnPayload(body, playerState);
+    const validated = validatePhaseTurnPayload(body, playerState, match.turnNumber);
     if (validated.error) {
       sendJson(res, 400, { error: validated.error });
       return true;
@@ -586,7 +657,7 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    const validated = validatePhaseTurnPayload(body, playerState);
+    const validated = validatePhaseTurnPayload(body, playerState, match.turnNumber);
     if (validated.error) {
       sendJson(res, 400, { error: validated.error });
       return true;
