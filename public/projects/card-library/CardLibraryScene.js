@@ -11,8 +11,7 @@ const CARD_WIDTH = 1.8;
 const CARD_HEIGHT = 2.5;
 const CARD_THICKNESS = 0.08;
 const ROW_HEIGHT_PX = 280;
-const GRID_VERTICAL_TOP_PADDING_PX = 140;
-const GRID_VERTICAL_BOTTOM_PADDING_PX = 240;
+const GRID_VERTICAL_PADDING_PX = 160;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0.9;
 const HOLD_DELAY_MS = 250;
@@ -291,7 +290,7 @@ export class CardLibraryScene {
     const rows = Math.max(Math.ceil(this.cards.length / GRID_COLUMNS), 1);
     const desiredHeight = Math.max(
       this.scrollContainer.clientHeight,
-      rows * ROW_HEIGHT_PX + GRID_VERTICAL_TOP_PADDING_PX + GRID_VERTICAL_BOTTOM_PADDING_PX,
+      rows * ROW_HEIGHT_PX + GRID_VERTICAL_PADDING_PX,
     );
     const viewportHeight = Math.max(this.scrollContainer.clientHeight, ROW_HEIGHT_PX);
 
