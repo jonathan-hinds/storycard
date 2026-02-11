@@ -51,3 +51,36 @@ Call `destroy()` to dispose renderer resources, remove the canvas, and stop anim
 ## Deterministic harness
 
 Use `node scripts/verify-refactor.js` to compare deterministic `simulateRoll` snapshots against the packaged server adapter.
+
+
+## Card game client usage
+
+```js
+import { CardGameClient, SINGLE_CARD_TEMPLATE } from '/public/card-game/index.js';
+
+const client = new CardGameClient({
+  canvas: document.getElementById('single-card-canvas'),
+  statusElement: document.getElementById('single-card-status'),
+  resetButton: document.getElementById('single-card-reset'),
+  template: SINGLE_CARD_TEMPLATE,
+  options: {
+    net: { baseUrl: '' },
+  },
+});
+
+// Later
+client.destroy();
+```
+
+## Card game server usage
+
+```js
+const { CardGameServer } = require('./shared/card-game');
+
+const cards = new CardGameServer({
+  cards: [{ id: 'card-alpha', held: false, updatedAt: null }],
+});
+
+cards.listCards();
+cards.applyCardAction('card-alpha', 'pickup');
+```
