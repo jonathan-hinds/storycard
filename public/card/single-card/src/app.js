@@ -94,6 +94,7 @@ scene.add(handArea);
 
 const cards = [];
 const boardSlots = [];
+const deckSlots = [];
 const playerBoardSlotMaterial = new THREE.MeshStandardMaterial({
   color: 0x7ca0e7,
   transparent: true,
@@ -110,13 +111,27 @@ const opponentBoardSlotMaterial = new THREE.MeshStandardMaterial({
   metalness: 0.08,
 });
 
+const GRID_COLUMN_SPACING = 2.1;
+const GRID_START_X = -3.15;
+const GRID_COLUMNS = [
+  GRID_START_X,
+  GRID_START_X + GRID_COLUMN_SPACING,
+  GRID_START_X + GRID_COLUMN_SPACING * 2,
+  GRID_START_X + GRID_COLUMN_SPACING * 3,
+];
+
 const boardSlotLayout = [
-  { x: -2.1, z: -1.3, side: 'opponent' },
-  { x: 0, z: -1.3, side: 'opponent' },
-  { x: 2.1, z: -1.3, side: 'opponent' },
-  { x: -2.1, z: 1.6, side: 'player' },
-  { x: 0, z: 1.6, side: 'player' },
-  { x: 2.1, z: 1.6, side: 'player' },
+  { x: GRID_COLUMNS[1], z: -1.3, side: 'opponent' },
+  { x: GRID_COLUMNS[2], z: -1.3, side: 'opponent' },
+  { x: GRID_COLUMNS[3], z: -1.3, side: 'opponent' },
+  { x: GRID_COLUMNS[1], z: 1.6, side: 'player' },
+  { x: GRID_COLUMNS[2], z: 1.6, side: 'player' },
+  { x: GRID_COLUMNS[3], z: 1.6, side: 'player' },
+];
+
+const deckSlotLayout = [
+  { x: GRID_COLUMNS[0], z: -1.3, side: 'opponent' },
+  { x: GRID_COLUMNS[0], z: 1.6, side: 'player' },
 ];
 
 const PLAYER_SIDE = 'player';
@@ -139,6 +154,46 @@ boardSlotLayout.forEach((slot, index) => {
     side: slot.side,
     card: null,
     mesh: slotMesh,
+  });
+});
+
+deckSlotLayout.forEach((slot) => {
+  const zoneColor = slot.side === PLAYER_SIDE ? 0x5f83c7 : 0xa06085;
+  const slotMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.95, 2.65),
+    new THREE.MeshStandardMaterial({
+      color: zoneColor,
+      transparent: true,
+      opacity: 0.26,
+      roughness: 0.86,
+      metalness: 0.07,
+    }),
+  );
+
+  slotMesh.rotation.x = -Math.PI / 2;
+  slotMesh.position.set(slot.x, -0.694, slot.z);
+  scene.add(slotMesh);
+
+  const deck = CardMeshFactory.createCard({
+    id: `${slot.side}-deck`,
+    width: 1.8,
+    height: 2.5,
+    thickness: 0.42,
+    cornerRadius: 0.15,
+    color: slot.side === PLAYER_SIDE ? 0x2e436a : 0x5d3653,
+  });
+
+  deck.position.set(slot.x, 0.17, slot.z);
+  deck.rotation.set(-Math.PI / 2, 0, 0);
+  deck.userData.zone = 'deck';
+  deck.userData.owner = slot.side;
+  deck.userData.locked = true;
+  scene.add(deck);
+
+  deckSlots.push({
+    ...slot,
+    mesh: slotMesh,
+    deck,
   });
 });
 
@@ -427,9 +482,9 @@ async function loadCardState() {
     }
     const payload = await response.json();
     const known = payload.cards?.length ?? 0;
-    setStatus(`Ready. Each side has 3 board slots. You can only play into your side. Server knows ${known} cards.`);
+    setStatus(`Ready. Each side has 3 board slots plus a reserved deck slot. You can only play into your side. Server knows ${known} cards.`);
   } catch (error) {
-    setStatus(`Ready. Each side has 3 board slots. You can only play into your side. Server sync unavailable (${error.message}).`);
+    setStatus(`Ready. Each side has 3 board slots plus a reserved deck slot. You can only play into your side. Server sync unavailable (${error.message}).`);
   }
 }
 
@@ -494,7 +549,7 @@ function resetDemo() {
 
   relayoutBoardAndHand();
   picker.setCards(cards);
-  setStatus('Demo reset. Each player can place up to 3 cards on their side of the board.');
+  setStatus('Demo reset. Each player can place up to 3 cards on their side; deck slots are reserved for future draw flows.');
 }
 
 async function handlePointerDown(event) {
