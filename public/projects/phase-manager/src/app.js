@@ -1,4 +1,4 @@
-import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook } from '/public/card-game/index.js';
+import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
 
 const canvas = document.getElementById('phase-manager-canvas');
 const statusEl = document.getElementById('phase-manager-status');
@@ -22,6 +22,7 @@ let stateSyncInFlight = false;
 let lastAnimatedMatchId = null;
 let lastAnimatedTurnKey = null;
 let lastAnimatedCommitKey = null;
+const previewTuning = loadPreviewTuning();
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -254,6 +255,7 @@ function renderMatch() {
       template,
       options: {
         onCardStateCommitted: syncMatchStateAfterCardCommit,
+        previewTuning,
         cardAnimationHooks: [
           createDeckToHandDealHook({
             owner: PLAYER_SIDE,

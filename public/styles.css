@@ -278,6 +278,32 @@ button {
   }
 }
 
+
+.preview-tuning-controls {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.65rem;
+  border: 1px solid #3a465f;
+  border-radius: 0.55rem;
+  background: #1a2130;
+}
+
+.preview-tuning-controls h3 {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+}
+
+.preview-tuning-controls label {
+  font-size: 0.82rem;
+  color: #d2dbf2;
+}
+
+.preview-tuning-controls input[type='range'] {
+  width: 100%;
+  padding: 0;
+}
+
 .phase-manager-stage-wrap {
   position: relative;
 }
