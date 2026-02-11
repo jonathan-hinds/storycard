@@ -19,6 +19,10 @@ const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
 camera.position.set(0, 8.2, 4.8);
 camera.lookAt(0, 0, 0.4);
 
+const CAMERA_BASE_FOV = 45;
+const CAMERA_BASE_Y = 8.2;
+const CAMERA_BASE_Z = 4.8;
+
 const hemiLight = new THREE.HemisphereLight(0xeaf2ff, 0x202938, 0.9);
 scene.add(hemiLight);
 
@@ -284,10 +288,18 @@ function setStatus(message) {
 function updateSize() {
   const parent = canvas.parentElement;
   const width = parent.clientWidth;
-  const height = Math.max(460, window.innerHeight - 140);
+  const compactViewport = window.innerWidth <= 900;
+  const minHeight = compactViewport ? 320 : 460;
+  const height = Math.max(minHeight, window.innerHeight - 140);
+  const aspect = width / height;
+  const portraitIntensity = THREE.MathUtils.clamp((1 - aspect) / 0.45, 0, 1);
+
+  camera.fov = CAMERA_BASE_FOV + portraitIntensity * 14;
+  camera.position.set(0, CAMERA_BASE_Y + portraitIntensity * 2.4, CAMERA_BASE_Z + portraitIntensity * 0.9);
+  camera.lookAt(0, 0, 0.4);
 
   renderer.setSize(width, height, false);
-  camera.aspect = width / height;
+  camera.aspect = aspect;
   camera.updateProjectionMatrix();
 }
 
