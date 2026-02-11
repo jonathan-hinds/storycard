@@ -22,10 +22,10 @@ const dieRollerServer = new DieRollerServer();
 
 const cardGameServer = new CardGameServer({
   cards: [
-    { id: 'card-alpha', held: false, updatedAt: null },
-    { id: 'card-beta', held: false, updatedAt: null },
-    { id: 'card-gamma', held: false, updatedAt: null },
-    { id: 'card-delta', held: false, updatedAt: null },
+    { id: 'card-alpha', held: false, updatedAt: null, zone: 'board', slotIndex: 0 },
+    { id: 'card-beta', held: false, updatedAt: null, zone: 'board', slotIndex: 1 },
+    { id: 'card-gamma', held: false, updatedAt: null, zone: 'board', slotIndex: 3 },
+    { id: 'card-delta', held: false, updatedAt: null, zone: 'board', slotIndex: 4 },
   ],
 });
 
@@ -160,7 +160,14 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    const updatedCard = cardGameServer.applyCardAction(cardId, action);
+    let payload = {};
+    try {
+      payload = await readRequestJson(req);
+    } catch (error) {
+      payload = {};
+    }
+
+    const updatedCard = cardGameServer.applyCardAction(cardId, action, payload);
     sendJson(res, 200, { card: updatedCard });
     return true;
   }
