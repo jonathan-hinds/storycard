@@ -10,9 +10,10 @@ const GRID_BOTTOM_PADDING = 1.1;
 const CARD_WIDTH = 1.8;
 const CARD_HEIGHT = 2.5;
 const CARD_THICKNESS = 0.08;
-const ROW_HEIGHT_PX = 250;
-const GRID_VERTICAL_PADDING_PX = 96;
+const ROW_HEIGHT_PX = 280;
+const GRID_VERTICAL_PADDING_PX = 160;
 const TARGET_VISIBLE_ROWS = 2;
+const CAMERA_VERTICAL_OVERSCAN = 0.9;
 const HOLD_DELAY_MS = 250;
 const HOLD_SCALE = 1.52;
 const HOLD_Z_OFFSET = 2.2;
@@ -301,7 +302,11 @@ export class CardLibraryScene {
     const totalWidth = GRID_LEFT_PADDING * 2 + (GRID_COLUMNS - 1) * GRID_X_SPACING + CARD_WIDTH;
     const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
     const visibleHeight =
-      GRID_TOP_PADDING + GRID_BOTTOM_PADDING + CARD_HEIGHT + (visibleRows - 1) * GRID_Y_SPACING;
+      GRID_TOP_PADDING +
+      GRID_BOTTOM_PADDING +
+      CARD_HEIGHT +
+      (visibleRows - 1) * GRID_Y_SPACING +
+      CAMERA_VERTICAL_OVERSCAN * 2;
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
     const viewportAspect = width / viewportHeight;
     const fitDistanceX = totalWidth / (2 * Math.tan(fov / 2) * viewportAspect);
