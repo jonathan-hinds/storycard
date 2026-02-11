@@ -148,6 +148,27 @@ function serializeMatchForPlayer(match, playerId) {
     canAttack: Number.isInteger(card.summonedTurn) && card.summonedTurn < match.turnNumber,
   }));
 
+  const buildCommitAttackTimeline = () => {
+    const pendingByPlayer = match.pendingCommitAttacksByPlayer || new Map();
+    const canonicalPlayerOrder = [...match.players].sort((a, b) => a.localeCompare(b));
+    const timeline = [];
+
+    canonicalPlayerOrder.forEach((attackerId) => {
+      const attacks = [...(pendingByPlayer.get(attackerId) || [])]
+        .sort((a, b) => a.attackerSlotIndex - b.attackerSlotIndex);
+      attacks.forEach((attack) => {
+        timeline.push({
+          attackerSide: attackerId === playerId ? 'player' : 'opponent',
+          targetSide: attackerId === playerId ? 'opponent' : 'player',
+          attackerSlotIndex: attack.attackerSlotIndex,
+          targetSlotIndex: attack.targetSlotIndex,
+        });
+      });
+    });
+
+    return timeline;
+  };
+
   return {
     id: match.id,
     turnNumber: match.turnNumber,
@@ -169,7 +190,7 @@ function serializeMatchForPlayer(match, playerId) {
     meta: {
       drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
       phaseStartedAt: match.phaseStartedAt,
-      commitAttacks: [...(match.pendingCommitAttacksByPlayer.get(playerId) || [])],
+      commitAttacks: buildCommitAttackTimeline(),
     },
   };
 }
