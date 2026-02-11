@@ -13,34 +13,30 @@ const opponentSummaryEl = document.getElementById('phase-manager-opponent-summar
 const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
+const PLAYER_ID_KEY = 'phase-manager-player-id';
 
 let client = null;
 let match = null;
-let opponentTurnTimer = 0;
+let pollTimer = 0;
+let isMatchmaking = false;
 
-const colorPool = [0x5f8dff, 0x8f6cff, 0x2dc6ad, 0xf28a65, 0xf1c965, 0xe76fb9, 0x4ecdc4, 0xff6b6b, 0xc7f464, 0xffa94d];
-
-function randomCard(prefix, index) {
-  const id = `${prefix}-${index + 1}-${Math.random().toString(36).slice(2, 7)}`;
-  const color = colorPool[Math.floor(Math.random() * colorPool.length)];
-  return { id, color };
+function getOrCreatePlayerId() {
+  const existing = window.localStorage.getItem(PLAYER_ID_KEY);
+  if (existing) return existing;
+  const nextId = `player-${Math.random().toString(36).slice(2, 10)}`;
+  window.localStorage.setItem(PLAYER_ID_KEY, nextId);
+  return nextId;
 }
 
-function createNewMatch() {
-  return {
-    id: `match-${Math.random().toString(36).slice(2, 8)}`,
-    turn: PLAYER_SIDE,
-    players: {
-      [PLAYER_SIDE]: {
-        hand: Array.from({ length: 3 }, (_, index) => randomCard('p', index)),
-        board: [],
-      },
-      [OPPONENT_SIDE]: {
-        hand: Array.from({ length: 3 }, (_, index) => randomCard('o', index)),
-        board: [],
-      },
-    },
-  };
+const playerId = getOrCreatePlayerId();
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(path, options);
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || 'Request failed');
+  }
+  return payload;
 }
 
 function getBoardSlotLayout() {
@@ -72,7 +68,7 @@ function getHiddenZoneLayout() {
 function buildTemplateFromMatch(currentMatch) {
   const initialCards = [];
 
-  currentMatch.players[OPPONENT_SIDE].board.forEach((card, index) => {
+  currentMatch.players.opponent.board.forEach((card, index) => {
     initialCards.push({
       id: card.id,
       color: card.color,
@@ -82,7 +78,7 @@ function buildTemplateFromMatch(currentMatch) {
     });
   });
 
-  currentMatch.players[PLAYER_SIDE].board.forEach((card, index) => {
+  currentMatch.players.player.board.forEach((card, index) => {
     initialCards.push({
       id: card.id,
       color: card.color,
@@ -92,7 +88,7 @@ function buildTemplateFromMatch(currentMatch) {
     });
   });
 
-  currentMatch.players[PLAYER_SIDE].hand.forEach((card) => {
+  currentMatch.players.player.hand.forEach((card) => {
     initialCards.push({
       id: card.id,
       color: card.color,
@@ -111,10 +107,12 @@ function buildTemplateFromMatch(currentMatch) {
   };
 }
 
-function syncPlayerStateFromClient() {
-  if (!client || !match) return;
+function getPlayerStateFromClient() {
+  if (!client || !match) {
+    return { hand: [], board: [] };
+  }
 
-  const allPlayerCards = client.cards
+  const cards = client.cards
     .filter((card) => card.userData.owner === PLAYER_SIDE)
     .map((card) => ({
       id: card.userData.cardId,
@@ -123,19 +121,26 @@ function syncPlayerStateFromClient() {
       slotIndex: card.userData.slotIndex,
     }));
 
-  match.players[PLAYER_SIDE].hand = allPlayerCards
-    .filter((card) => card.zone === CARD_ZONE_TYPES.HAND)
-    .map(({ id, color }) => ({ id, color }));
-
-  match.players[PLAYER_SIDE].board = allPlayerCards
-    .filter((card) => card.zone === CARD_ZONE_TYPES.BOARD)
-    .sort((a, b) => a.slotIndex - b.slotIndex)
-    .map(({ id, color }) => ({ id, color }));
+  return {
+    hand: cards
+      .filter((card) => card.zone === CARD_ZONE_TYPES.HAND)
+      .map(({ id, color }) => ({ id, color })),
+    board: cards
+      .filter((card) => card.zone === CARD_ZONE_TYPES.BOARD)
+      .sort((a, b) => a.slotIndex - b.slotIndex)
+      .map(({ id, color }) => ({ id, color })),
+  };
 }
 
 function setTurnLockState() {
-  const isPlayerTurn = Boolean(match) && match.turn === PLAYER_SIDE;
+  const isPlayerTurn = Boolean(match) && match.isPlayerTurn;
   endTurnBtn.disabled = !match || !isPlayerTurn;
+
+  if (isMatchmaking && !match) {
+    overlayEl.hidden = false;
+    overlayEl.textContent = 'Looking for an opponent…';
+    return;
+  }
 
   if (!match) {
     overlayEl.hidden = false;
@@ -149,22 +154,24 @@ function setTurnLockState() {
 
 function updateSummaryPanels() {
   if (!match) {
-    matchLabelEl.textContent = 'No active match';
+    matchLabelEl.textContent = isMatchmaking ? 'Searching for match…' : 'No active match';
     playerSummaryEl.textContent = 'Player: waiting for matchmaking';
     opponentSummaryEl.textContent = 'Opponent: waiting for matchmaking';
     return;
   }
 
-  const player = match.players[PLAYER_SIDE];
-  const opponent = match.players[OPPONENT_SIDE];
-  matchLabelEl.textContent = `${match.id} • ${match.turn === PLAYER_SIDE ? 'Your turn' : 'Opponent turn'}`;
+  const player = match.players.player;
+  const opponent = match.players.opponent;
+  matchLabelEl.textContent = `${match.id} • ${match.isPlayerTurn ? 'Your turn' : 'Opponent turn'}`;
   playerSummaryEl.textContent = `Player — hand: ${player.hand.length}, board: ${player.board.length}`;
-  opponentSummaryEl.textContent = `Opponent — hand: ${opponent.hand.length}, board: ${opponent.board.length}`;
+  opponentSummaryEl.textContent = `Opponent — hand: ${opponent.handCount}, board: ${opponent.board.length}`;
 }
 
 function renderMatch() {
   if (!match) {
-    statusEl.textContent = 'Click matchmaking to create a 1v1 turn test.';
+    statusEl.textContent = isMatchmaking
+      ? 'Searching for an opponent…'
+      : 'Click matchmaking to create a 1v1 turn test.';
     setTurnLockState();
     updateSummaryPanels();
     return;
@@ -182,7 +189,7 @@ function renderMatch() {
     client.resetDemo();
   }
 
-  statusEl.textContent = match.turn === PLAYER_SIDE
+  statusEl.textContent = match.isPlayerTurn
     ? 'Your turn. Drag cards from your hand to your board, then click End Turn.'
     : 'Opponent turn. Waiting for remote action…';
 
@@ -190,37 +197,101 @@ function renderMatch() {
   updateSummaryPanels();
 }
 
-function runOpponentTurn() {
-  if (!match || match.turn !== OPPONENT_SIDE) return;
+async function refreshMatchState() {
+  if (!match) return;
+  try {
+    const payload = await apiRequest(`/api/phase-manager/matches/${match.id}?playerId=${encodeURIComponent(playerId)}`);
+    match = payload.match;
+    isMatchmaking = false;
+    renderMatch();
+  } catch (error) {
+    statusEl.textContent = error.message;
+  }
+}
 
-  const opponent = match.players[OPPONENT_SIDE];
-  if (opponent.hand.length > 0 && opponent.board.length < BOARD_SLOTS_PER_SIDE) {
-    const nextCard = opponent.hand.shift();
-    opponent.board.push(nextCard);
+async function pollState() {
+  window.clearTimeout(pollTimer);
+
+  try {
+    if (!match && isMatchmaking) {
+      const payload = await apiRequest(`/api/phase-manager/matchmaking/${encodeURIComponent(playerId)}`);
+      if (payload.status === 'matched') {
+        match = payload.match;
+        isMatchmaking = false;
+        renderMatch();
+      } else {
+        setTurnLockState();
+        updateSummaryPanels();
+      }
+    } else if (match) {
+      await refreshMatchState();
+    }
+  } catch (error) {
+    statusEl.textContent = error.message;
+  } finally {
+    pollTimer = window.setTimeout(pollState, 1000);
+  }
+}
+
+async function beginMatchmaking() {
+  window.clearTimeout(pollTimer);
+  isMatchmaking = true;
+  match = null;
+  renderMatch();
+
+  try {
+    const payload = await apiRequest('/api/phase-manager/matchmaking', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId }),
+    });
+
+    if (payload.status === 'matched') {
+      match = payload.match;
+      isMatchmaking = false;
+    }
+    renderMatch();
+  } catch (error) {
+    isMatchmaking = false;
+    statusEl.textContent = error.message;
+    renderMatch();
+  } finally {
+    pollState();
+  }
+}
+
+async function endTurn() {
+  if (!match || !match.isPlayerTurn) return;
+
+  try {
+    const payload = await apiRequest(`/api/phase-manager/matches/${match.id}/end-turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerId,
+        playerState: getPlayerStateFromClient(),
+      }),
+    });
+    match = payload.match;
+    renderMatch();
+  } catch (error) {
+    statusEl.textContent = error.message;
+  }
+}
+
+async function resetMatch() {
+  window.clearTimeout(pollTimer);
+  try {
+    await apiRequest('/api/phase-manager/leave', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId }),
+    });
+  } catch (_error) {
+    // ignore reset errors
   }
 
-  match.turn = PLAYER_SIDE;
-  renderMatch();
-}
-
-function beginMatchmaking() {
-  window.clearTimeout(opponentTurnTimer);
-  match = createNewMatch();
-  renderMatch();
-}
-
-function endTurn() {
-  if (!match || match.turn !== PLAYER_SIDE) return;
-
-  syncPlayerStateFromClient();
-  match.turn = OPPONENT_SIDE;
-  renderMatch();
-
-  opponentTurnTimer = window.setTimeout(runOpponentTurn, 900);
-}
-
-function resetMatch() {
-  window.clearTimeout(opponentTurnTimer);
+  isMatchmaking = false;
   match = null;
   if (client) {
     client.destroy();
@@ -234,3 +305,4 @@ endTurnBtn.addEventListener('click', endTurn);
 resetBtn.addEventListener('click', resetMatch);
 
 renderMatch();
+pollState();
