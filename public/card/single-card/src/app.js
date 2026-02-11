@@ -50,6 +50,34 @@ boardArea.position.set(0, -0.71, 0.15);
 boardArea.rotation.x = -Math.PI / 2;
 scene.add(boardArea);
 
+const playerTerritoryArea = new THREE.Mesh(
+  new THREE.PlaneGeometry(8.3, 2.9),
+  new THREE.MeshStandardMaterial({
+    color: 0x2f4c7f,
+    roughness: 0.86,
+    metalness: 0.08,
+    transparent: true,
+    opacity: 0.38,
+  }),
+);
+playerTerritoryArea.position.set(0, -0.708, 1.6);
+playerTerritoryArea.rotation.x = -Math.PI / 2;
+scene.add(playerTerritoryArea);
+
+const opponentTerritoryArea = new THREE.Mesh(
+  new THREE.PlaneGeometry(8.3, 2.9),
+  new THREE.MeshStandardMaterial({
+    color: 0x5a2f4f,
+    roughness: 0.86,
+    metalness: 0.08,
+    transparent: true,
+    opacity: 0.26,
+  }),
+);
+opponentTerritoryArea.position.set(0, -0.708, -1.3);
+opponentTerritoryArea.rotation.x = -Math.PI / 2;
+scene.add(opponentTerritoryArea);
+
 const handArea = new THREE.Mesh(
   new THREE.PlaneGeometry(8.6, 2),
   new THREE.MeshStandardMaterial({
@@ -66,7 +94,7 @@ scene.add(handArea);
 
 const cards = [];
 const boardSlots = [];
-const boardSlotMaterial = new THREE.MeshStandardMaterial({
+const playerBoardSlotMaterial = new THREE.MeshStandardMaterial({
   color: 0x7ca0e7,
   transparent: true,
   opacity: 0.2,
@@ -74,31 +102,51 @@ const boardSlotMaterial = new THREE.MeshStandardMaterial({
   metalness: 0.08,
 });
 
+const opponentBoardSlotMaterial = new THREE.MeshStandardMaterial({
+  color: 0xd08db1,
+  transparent: true,
+  opacity: 0.17,
+  roughness: 0.9,
+  metalness: 0.08,
+});
+
 const boardSlotLayout = [
-  { x: -2.1, z: -1.3 },
-  { x: 0, z: -1.3 },
-  { x: 2.1, z: -1.3 },
-  { x: -2.1, z: 1.6 },
-  { x: 0, z: 1.6 },
-  { x: 2.1, z: 1.6 },
+  { x: -2.1, z: -1.3, side: 'opponent' },
+  { x: 0, z: -1.3, side: 'opponent' },
+  { x: 2.1, z: -1.3, side: 'opponent' },
+  { x: -2.1, z: 1.6, side: 'player' },
+  { x: 0, z: 1.6, side: 'player' },
+  { x: 2.1, z: 1.6, side: 'player' },
 ];
 
+const PLAYER_SIDE = 'player';
+
 boardSlotLayout.forEach((slot, index) => {
+  const slotMaterial = slot.side === PLAYER_SIDE
+    ? playerBoardSlotMaterial.clone()
+    : opponentBoardSlotMaterial.clone();
   const slotMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(1.95, 2.65),
-    boardSlotMaterial.clone(),
+    slotMaterial,
   );
   slotMesh.rotation.x = -Math.PI / 2;
   slotMesh.position.set(slot.x, -0.695, slot.z);
   scene.add(slotMesh);
-  boardSlots.push({ index, x: slot.x, z: slot.z, card: null, mesh: slotMesh });
+  boardSlots.push({
+    index,
+    x: slot.x,
+    z: slot.z,
+    side: slot.side,
+    card: null,
+    mesh: slotMesh,
+  });
 });
 
 const initialCards = [
-  { id: 'card-alpha', color: 0x5f8dff, zone: 'board', slotIndex: 0 },
-  { id: 'card-beta', color: 0x8f6cff, zone: 'board', slotIndex: 1 },
-  { id: 'card-gamma', color: 0x2dc6ad, zone: 'board', slotIndex: 3 },
-  { id: 'card-delta', color: 0xf28a65, zone: 'board', slotIndex: 4 },
+  { id: 'card-alpha', color: 0x5f8dff, zone: 'board', slotIndex: 0, owner: 'opponent' },
+  { id: 'card-beta', color: 0x8f6cff, zone: 'board', slotIndex: 1, owner: 'opponent' },
+  { id: 'card-gamma', color: 0x2dc6ad, zone: 'board', slotIndex: 3, owner: 'player' },
+  { id: 'card-delta', color: 0xf28a65, zone: 'board', slotIndex: 4, owner: 'player' },
   { id: 'card-epsilon', color: 0xf1c965, zone: 'hand' },
   { id: 'card-zeta', color: 0xe76fb9, zone: 'hand' },
 ];
@@ -190,7 +238,7 @@ function updateSize() {
 
 function clearHighlights() {
   for (const slot of boardSlots) {
-    slot.mesh.material.opacity = 0.2;
+    slot.mesh.material.opacity = slot.side === PLAYER_SIDE ? 0.2 : 0.17;
   }
 
   for (const card of cards) {
@@ -307,6 +355,10 @@ function findNearestSlot(worldPoint, maxDistance = 1.25) {
   let closestDist = Infinity;
 
   for (const slot of boardSlots) {
+    if (slot.side !== PLAYER_SIDE) {
+      continue;
+    }
+
     if (slot.card && slot.card !== state.activeCard) {
       continue;
     }
@@ -342,6 +394,11 @@ function updateDragPoseFromPointer(event) {
   state.dropSlotIndex = slot?.index ?? null;
 
   for (const boardSlot of boardSlots) {
+    if (boardSlot.side !== PLAYER_SIDE) {
+      boardSlot.mesh.material.opacity = 0.17;
+      continue;
+    }
+
     boardSlot.mesh.material.opacity = boardSlot.index === state.dropSlotIndex ? 0.55 : 0.2;
   }
 }
@@ -370,9 +427,9 @@ async function loadCardState() {
     }
     const payload = await response.json();
     const known = payload.cards?.length ?? 0;
-    setStatus(`Ready. Hold a card for zoom/orbit or drag it to snap into board slots. Server knows ${known} cards.`);
+    setStatus(`Ready. Each side has 3 board slots. You can only play into your side. Server knows ${known} cards.`);
   } catch (error) {
-    setStatus(`Ready. Hold a card for zoom/orbit or drag it to snap into board slots. Server sync unavailable (${error.message}).`);
+    setStatus(`Ready. Each side has 3 board slots. You can only play into your side. Server sync unavailable (${error.message}).`);
   }
 }
 
@@ -420,6 +477,7 @@ function resetDemo() {
 
     card.userData.zone = cfg.zone;
     card.userData.slotIndex = cfg.slotIndex ?? null;
+    card.userData.owner = cfg.owner ?? 'player';
     card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
 
     if (cfg.zone === 'board' && Number.isInteger(cfg.slotIndex)) {
@@ -436,7 +494,7 @@ function resetDemo() {
 
   relayoutBoardAndHand();
   picker.setCards(cards);
-  setStatus('Demo reset. Hold for zoom preview, drag to place cards onto board slots, release to commit.');
+  setStatus('Demo reset. Each player can place up to 3 cards on their side of the board.');
 }
 
 async function handlePointerDown(event) {
@@ -460,6 +518,16 @@ async function handlePointerDown(event) {
       canvasContainer.releasePointerCapture(event.pointerId);
     }
     setStatus('No card selected.');
+    return;
+  }
+
+  if (card.userData.zone === 'board' && card.userData.owner !== PLAYER_SIDE) {
+    state.activePointerId = null;
+    state.pendingCard = null;
+    if (canvasContainer.hasPointerCapture(event.pointerId)) {
+      canvasContainer.releasePointerCapture(event.pointerId);
+    }
+    setStatus('Opponent cards are locked to their side. Drag one of your cards instead.');
     return;
   }
 
@@ -533,6 +601,7 @@ async function endPointerInteraction(event, { commitDrop = true } = {}) {
     card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
 
     await sendCardEvent(card.userData.cardId, 'putdown', { zone: 'board', slotIndex: slot.index });
+    card.userData.owner = PLAYER_SIDE;
     setStatus(`Placed ${card.userData.cardId} into board slot ${slot.index + 1}.`);
   } else if (card) {
     if (prevOrigin?.zone === 'board' && Number.isInteger(prevOrigin.slotIndex)) {
