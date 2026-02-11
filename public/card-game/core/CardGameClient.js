@@ -3,6 +3,7 @@ import { CardMeshFactory } from '../render/CardMeshFactory.js';
 import { CardPicker } from '../render/CardPicker.js';
 import { CardGameHttpClient } from '../net/httpClient.js';
 import { SINGLE_CARD_TEMPLATE } from '../templates/singleCardTemplate.js';
+import { CARD_ZONE_TYPES, isKnownZone, validateZoneTemplate } from './zoneFramework.js';
 
 const CAMERA_BASE_FOV = 45;
 const CAMERA_BASE_Y = 8.2;
@@ -32,6 +33,8 @@ export class CardGameClient {
     this.statusEl = statusElement;
     this.resetBtn = resetButton;
     this.template = template;
+    this.zoneFramework = this.template.zoneFramework;
+    validateZoneTemplate(this.template, this.zoneFramework);
     this.options = options;
     this.net = new CardGameHttpClient(options.net || {});
 
@@ -172,7 +175,7 @@ export class CardGameClient {
       });
       deck.position.set(slot.x, 0.17, slot.z);
       deck.rotation.set(-Math.PI / 2, 0, 0);
-      deck.userData.zone = 'deck';
+      deck.userData.zone = CARD_ZONE_TYPES.DECK;
       deck.userData.owner = slot.side;
       deck.userData.locked = true;
       this.scene.add(deck);
@@ -226,13 +229,13 @@ export class CardGameClient {
       if (!slot.card) return;
       const card = slot.card;
       if (card === this.state.activeCard && (this.state.mode === 'drag' || this.state.mode === 'preview')) return;
-      card.userData.zone = 'board';
+      card.userData.zone = CARD_ZONE_TYPES.BOARD;
       card.userData.slotIndex = slot.index;
       card.position.set(slot.x, 0, slot.z);
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
     });
 
-    const handCards = this.cards.filter((card) => card.userData.zone === 'hand');
+    const handCards = this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.HAND);
     handCards.forEach((card, index) => {
       if (card === this.state.activeCard && (this.state.mode === 'drag' || this.state.mode === 'preview')) return;
       const pos = this.cardWorldPositionForHand(index, handCards.length);
@@ -344,9 +347,9 @@ export class CardGameClient {
     try {
       const payload = await this.net.listCards();
       const known = payload.cards?.length ?? 0;
-      this.setStatus(`Ready. Each side has 3 board slots plus a reserved deck slot. You can only play into your side. Server knows ${known} cards.`);
+      this.setStatus(`Ready. Zone framework active (hand/board/deck/discard/exile/staging/stack/resolving). Each side has exactly 3 board slots and 1 deck slot. Server knows ${known} cards.`);
     } catch (error) {
-      this.setStatus(`Ready. Each side has 3 board slots plus a reserved deck slot. You can only play into your side. Server sync unavailable (${error.message}).`);
+      this.setStatus(`Ready. Zone framework active (hand/board/deck/discard/exile/staging/stack/resolving). Each side has exactly 3 board slots and 1 deck slot. Server sync unavailable (${error.message}).`);
     }
   }
 
@@ -372,11 +375,11 @@ export class CardGameClient {
 
     for (const cfg of this.template.initialCards) {
       const card = CardMeshFactory.createCard({ id: cfg.id, width: 1.8, height: 2.5, thickness: 0.08, cornerRadius: 0.15, color: cfg.color });
-      card.userData.zone = cfg.zone;
+      card.userData.zone = isKnownZone(cfg.zone, this.zoneFramework) ? cfg.zone : CARD_ZONE_TYPES.HAND;
       card.userData.slotIndex = cfg.slotIndex ?? null;
       card.userData.owner = cfg.owner ?? this.template.playerSide;
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
-      if (cfg.zone === 'board' && Number.isInteger(cfg.slotIndex)) {
+      if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(cfg.slotIndex)) {
         const slot = this.boardSlots[cfg.slotIndex];
         if (slot) {
           slot.card = card;
@@ -389,7 +392,7 @@ export class CardGameClient {
 
     this.relayoutBoardAndHand();
     this.picker.setCards(this.cards);
-    this.setStatus('Demo reset. Each player can place up to 3 cards on their side; deck slots are reserved for future draw flows.');
+    this.setStatus('Demo reset. Zone framework enabled with mirrored player/opponent zones; board remains capped at 3 slots per side and 1 deck slot per side.');
   }
 
   async handlePointerDown(event) {
@@ -411,7 +414,7 @@ export class CardGameClient {
       return;
     }
 
-    if (card.userData.zone === 'board' && card.userData.owner !== this.template.playerSide) {
+    if (card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner !== this.template.playerSide) {
       this.state.activePointerId = null;
       this.state.pendingCard = null;
       if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
@@ -423,7 +426,7 @@ export class CardGameClient {
     this.clearHighlights();
     this.state.dragOrigin = { zone: card.userData.zone, slotIndex: card.userData.slotIndex };
 
-    if (card.userData.zone === 'board' && Number.isInteger(card.userData.slotIndex)) this.boardSlots[card.userData.slotIndex].card = null;
+    if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(card.userData.slotIndex)) this.boardSlots[card.userData.slotIndex].card = null;
     await this.sendCardEvent(card.userData.cardId, 'pickup', { zone: this.state.dragOrigin.zone });
 
     this.state.holdTimer = window.setTimeout(() => {
@@ -463,22 +466,22 @@ export class CardGameClient {
     if (card && commitDrop && this.state.mode === 'drag' && this.state.dropSlotIndex != null) {
       const slot = this.boardSlots[this.state.dropSlotIndex];
       slot.card = card;
-      card.userData.zone = 'board';
+      card.userData.zone = CARD_ZONE_TYPES.BOARD;
       card.userData.slotIndex = slot.index;
       card.position.set(slot.x, 0, slot.z);
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
-      await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: 'board', slotIndex: slot.index });
+      await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: CARD_ZONE_TYPES.BOARD, slotIndex: slot.index });
       card.userData.owner = this.template.playerSide;
       this.setStatus(`Placed ${card.userData.cardId} into board slot ${slot.index + 1}.`);
     } else if (card) {
-      if (prevOrigin?.zone === 'board' && Number.isInteger(prevOrigin.slotIndex)) {
+      if (prevOrigin?.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(prevOrigin.slotIndex)) {
         const slot = this.boardSlots[prevOrigin.slotIndex];
         slot.card = card;
-        card.userData.zone = 'board';
+        card.userData.zone = CARD_ZONE_TYPES.BOARD;
         card.userData.slotIndex = slot.index;
         card.position.set(slot.x, 0, slot.z);
       } else {
-        card.userData.zone = 'hand';
+        card.userData.zone = CARD_ZONE_TYPES.HAND;
         card.userData.slotIndex = null;
       }
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
