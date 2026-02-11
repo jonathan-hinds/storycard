@@ -4,9 +4,15 @@ import { CardMeshFactory } from '/public/card-game/render/CardMeshFactory.js';
 const GRID_COLUMNS = 5;
 const GRID_X_SPACING = 2.4;
 const GRID_Y_SPACING = 3.4;
+const GRID_LEFT_PADDING = 1.2;
+const GRID_TOP_PADDING = 1.1;
+const GRID_BOTTOM_PADDING = 1.1;
 const CARD_WIDTH = 1.8;
 const CARD_HEIGHT = 2.5;
 const CARD_THICKNESS = 0.08;
+const ROW_HEIGHT_PX = 250;
+const GRID_VERTICAL_PADDING_PX = 96;
+const TARGET_VISIBLE_ROWS = 2;
 const HOLD_DELAY_MS = 250;
 const HOLD_SCALE = 1.52;
 const HOLD_Z_OFFSET = 2.2;
@@ -192,8 +198,11 @@ export class CardLibraryScene {
     this.cards.forEach((card, index) => {
       const row = Math.floor(index / GRID_COLUMNS);
       const column = index % GRID_COLUMNS;
-      const xOffset = (GRID_COLUMNS - 1) * GRID_X_SPACING * 0.5;
-      const basePosition = new THREE.Vector3(column * GRID_X_SPACING - xOffset, -row * GRID_Y_SPACING, 0);
+      const basePosition = new THREE.Vector3(
+        GRID_LEFT_PADDING + CARD_WIDTH * 0.5 + column * GRID_X_SPACING,
+        -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + row * GRID_Y_SPACING),
+        0,
+      );
 
       const root = CardMeshFactory.createCard({
         id: card.id,
@@ -278,18 +287,31 @@ export class CardLibraryScene {
   onResize() {
     const width = this.scrollContainer.clientWidth;
     const rows = Math.max(Math.ceil(this.cards.length / GRID_COLUMNS), 1);
-    const desiredHeight = Math.max(this.scrollContainer.clientHeight, rows * 250 + 80);
+    const desiredHeight = Math.max(
+      this.scrollContainer.clientHeight,
+      rows * ROW_HEIGHT_PX + GRID_VERTICAL_PADDING_PX,
+    );
+    const viewportHeight = Math.max(this.scrollContainer.clientHeight, ROW_HEIGHT_PX);
 
     this.canvas.style.height = `${desiredHeight}px`;
     this.renderer.setSize(width, desiredHeight, false);
 
     this.camera.aspect = width / desiredHeight;
 
-    const totalWidth = (GRID_COLUMNS - 1) * GRID_X_SPACING + CARD_WIDTH;
+    const totalWidth = GRID_LEFT_PADDING * 2 + (GRID_COLUMNS - 1) * GRID_X_SPACING + CARD_WIDTH;
+    const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
+    const visibleHeight =
+      GRID_TOP_PADDING + GRID_BOTTOM_PADDING + CARD_HEIGHT + (visibleRows - 1) * GRID_Y_SPACING;
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
-    const fitDistance = totalWidth / (2 * Math.tan(fov / 2) * this.camera.aspect);
-    this.camera.position.set(0, -((rows - 1) * GRID_Y_SPACING) * 0.5, fitDistance + 3.4);
-    this.camera.lookAt(0, this.camera.position.y, 0);
+    const viewportAspect = width / viewportHeight;
+    const fitDistanceX = totalWidth / (2 * Math.tan(fov / 2) * viewportAspect);
+    const fitDistanceY = visibleHeight / (2 * Math.tan(fov / 2));
+    const fitDistance = Math.max(fitDistanceX, fitDistanceY);
+    const cameraX = totalWidth * 0.5;
+    const cameraY = -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + ((visibleRows - 1) * GRID_Y_SPACING) * 0.5);
+
+    this.camera.position.set(cameraX, cameraY, fitDistance + 3.2);
+    this.camera.lookAt(cameraX, cameraY, 0);
     this.camera.updateProjectionMatrix();
   }
 
