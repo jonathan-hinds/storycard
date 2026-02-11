@@ -637,7 +637,7 @@ export class CardGameClient {
       }));
   }
 
-  playCommitPhaseAnimations(attackPlan = [], { onDone } = {}) {
+  playCommitPhaseAnimations(attackPlan = [], { onDone, interAttackDelayMs = 720 } = {}) {
     if (!Array.isArray(attackPlan) || !attackPlan.length) {
       onDone?.();
       return;
@@ -676,7 +676,7 @@ export class CardGameClient {
         attackerCard: attackerSlot.card,
         originPosition: new THREE.Vector3(attackerSlot.x, 0, attackerSlot.z),
         defenderPosition: new THREE.Vector3(defenderSlot.x, 0, defenderSlot.z),
-        startAtMs: now + index * 230,
+        startAtMs: now + index * interAttackDelayMs,
         durationMs: 620,
         defenderCard: defenderSlot.card,
         didHit: false,
