@@ -6,6 +6,7 @@ const { randomUUID } = require('crypto');
 const DiceEngine = require('./shared/dieEngine');
 const { DieRollerServer } = require('./shared/die-roller');
 const { CardGameServer } = require('./shared/card-game');
+const { PhaseManagerServer } = require('./shared/phase-manager');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -19,17 +20,7 @@ const MIME_TYPES = {
 
 const diceStore = new Map();
 const dieRollerServer = new DieRollerServer();
-const phaseQueue = [];
-const phaseMatchmakingState = new Map();
-const phaseMatches = new Map();
-const PHASE_DECK_SIZE_PER_PLAYER = 10;
-const PHASE_STARTING_HAND_SIZE = 3;
-const PHASE_MAX_HAND_SIZE = 7;
-const PHASE_BOARD_SLOTS_PER_SIDE = 3;
-const PHASE_COMMIT_INTER_ATTACK_DELAY_MS = 740;
-const PHASE_COMMIT_ATTACK_ANIMATION_DURATION_MS = 760;
-const PHASE_COMMIT_SETTLE_BUFFER_MS = 80;
-
+const phaseManagerServer = new PhaseManagerServer();
 const cardGameServer = new CardGameServer({
   cards: [
     { id: 'card-alpha', held: false, updatedAt: null, zone: 'board', slotIndex: 0 },
@@ -96,352 +87,6 @@ function rollDie(die, options = {}) {
   }
 
   return roll;
-}
-
-function getQueuePosition(playerId) {
-  const index = phaseQueue.indexOf(playerId);
-  return index === -1 ? null : index + 1;
-}
-
-function removeFromQueue(playerId) {
-  const index = phaseQueue.indexOf(playerId);
-  if (index !== -1) {
-    phaseQueue.splice(index, 1);
-  }
-}
-
-function clearPlayerMatchmakingState(playerId) {
-  removeFromQueue(playerId);
-  const current = phaseMatchmakingState.get(playerId);
-  if (!current) {
-    return;
-  }
-
-  if (current.status === 'matched' && current.matchId) {
-    const match = phaseMatches.get(current.matchId);
-    if (match) {
-      phaseMatches.delete(current.matchId);
-      const otherPlayerId = match.players.find((id) => id !== playerId);
-      if (otherPlayerId) {
-        phaseMatchmakingState.set(otherPlayerId, { status: 'idle' });
-      }
-    }
-  }
-
-  phaseMatchmakingState.set(playerId, { status: 'idle' });
-}
-
-function randomCardColor() {
-  const colorPool = [0x5f8dff, 0x8f6cff, 0x2dc6ad, 0xf28a65, 0xf1c965, 0xe76fb9, 0x4ecdc4, 0xff6b6b, 0xc7f464, 0xffa94d];
-  return colorPool[Math.floor(Math.random() * colorPool.length)];
-}
-
-function serializeMatchForPlayer(match, playerId) {
-  const opponentId = match.players.find((id) => id !== playerId) || null;
-  const playerState = match.cardsByPlayer.get(playerId);
-  const opponentState = opponentId ? match.cardsByPlayer.get(opponentId) : null;
-
-  if (!playerState || !opponentState || !opponentId) {
-    return null;
-  }
-
-  const serializeBoard = (boardCards) => boardCards.map((card) => ({
-    ...card,
-    canAttack: Number.isInteger(card.summonedTurn) && card.summonedTurn < match.turnNumber,
-  }));
-
-  const commitAttacks = [];
-  for (const attackerId of match.players) {
-    const attackerSide = attackerId === playerId ? 'player' : 'opponent';
-    const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
-    for (const attack of attacks) {
-      commitAttacks.push({
-        ...attack,
-        attackerId,
-        attackerSide,
-      });
-    }
-  }
-
-  return {
-    id: match.id,
-    turnNumber: match.turnNumber,
-    phase: match.phase,
-    youAreReady: match.readyPlayers.has(playerId),
-    opponentIsReady: opponentId ? match.readyPlayers.has(opponentId) : false,
-    players: {
-      player: {
-        hand: [...playerState.hand],
-        board: serializeBoard(playerState.board),
-        deckCount: playerState.deck.length,
-      },
-      opponent: {
-        hand: [...opponentState.hand],
-        board: serializeBoard(opponentState.board),
-        deckCount: opponentState.deck.length,
-      },
-    },
-    meta: {
-      drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
-      phaseStartedAt: match.phaseStartedAt,
-      commitAttacks,
-    },
-  };
-}
-
-function drawCardAtStartOfDecisionPhase(playerState) {
-  if (!playerState || !playerState.deck.length || playerState.hand.length >= PHASE_MAX_HAND_SIZE) {
-    return [];
-  }
-
-  const drawnCard = playerState.deck.shift();
-  playerState.hand.push(drawnCard);
-  return [drawnCard.id];
-}
-
-function applyDecisionPhaseStartDraw(match) {
-  const drawnCardsByPlayer = new Map();
-
-  match.players.forEach((playerId) => {
-    const playerState = match.cardsByPlayer.get(playerId);
-    const drawnCardIds = drawCardAtStartOfDecisionPhase(playerState);
-    drawnCardsByPlayer.set(playerId, drawnCardIds);
-  });
-
-  match.lastDrawnCardsByPlayer = drawnCardsByPlayer;
-}
-
-function advanceMatchToDecisionPhase(match) {
-  match.turnNumber += 1;
-  match.phase = 1;
-  match.phaseStartedAt = Date.now();
-  match.phaseEndsAt = null;
-  match.readyPlayers.clear();
-  match.pendingCommitAttacksByPlayer = new Map();
-  match.players.forEach((playerId) => {
-    const playerState = match.cardsByPlayer.get(playerId);
-    if (!playerState) return;
-    playerState.board = playerState.board.map((card) => ({
-      ...card,
-      attackCommitted: false,
-      targetSlotIndex: null,
-    }));
-  });
-  applyDecisionPhaseStartDraw(match);
-}
-
-function resolveCommitPhase(match) {
-  match.phase = 2;
-  match.phaseStartedAt = Date.now();
-  const pendingAttacks = new Map();
-  match.players.forEach((playerId) => {
-    const playerState = match.cardsByPlayer.get(playerId);
-    const attacks = playerState?.board
-      ?.filter((card) => card.attackCommitted === true && Number.isInteger(card.slotIndex) && Number.isInteger(card.targetSlotIndex))
-      .map((card) => ({
-        attackerSlotIndex: card.slotIndex,
-        targetSlotIndex: card.targetSlotIndex,
-      })) || [];
-    pendingAttacks.set(playerId, attacks);
-  });
-  match.pendingCommitAttacksByPlayer = pendingAttacks;
-  match.phaseEndsAt = match.phaseStartedAt + getCommitPhaseDurationMs(match);
-}
-
-function getCommitPhaseDurationMs(match) {
-  const commitAttackCount = Array
-    .from(match.pendingCommitAttacksByPlayer.values())
-    .reduce((sum, attacks) => sum + (Array.isArray(attacks) ? attacks.length : 0), 0);
-
-  if (commitAttackCount <= 0) {
-    return PHASE_COMMIT_SETTLE_BUFFER_MS;
-  }
-
-  return ((commitAttackCount - 1) * PHASE_COMMIT_INTER_ATTACK_DELAY_MS)
-    + PHASE_COMMIT_ATTACK_ANIMATION_DURATION_MS
-    + PHASE_COMMIT_SETTLE_BUFFER_MS;
-}
-
-function readyPlayerInMatch(match, playerId) {
-  match.readyPlayers.add(playerId);
-
-  const allPlayersReady = match.players.every((id) => match.readyPlayers.has(id));
-  if (!allPlayersReady) return;
-
-  resolveCommitPhase(match);
-}
-
-function validatePhaseTurnPayload(payload, playerState, currentTurnNumber) {
-  const hand = Array.isArray(payload.hand) ? payload.hand : [];
-  const board = Array.isArray(payload.board) ? payload.board : [];
-
-  if (board.length > PHASE_BOARD_SLOTS_PER_SIDE) {
-    return { error: `board is limited to ${PHASE_BOARD_SLOTS_PER_SIDE} cards` };
-  }
-
-  if (hand.length > PHASE_MAX_HAND_SIZE) {
-    return { error: `hand is limited to ${PHASE_MAX_HAND_SIZE} cards` };
-  }
-
-  const visibleCards = [...playerState.hand, ...playerState.board];
-  const knownCards = new Map(visibleCards.map((card) => [card.id, card]));
-  const merged = [...hand, ...board];
-  const uniqueIds = new Set(merged.map((card) => card.id));
-  if (merged.length !== uniqueIds.size) {
-    return { error: 'hand and board must not contain duplicate cards' };
-  }
-
-
-  if (uniqueIds.size !== knownCards.size) {
-    return { error: `expected exactly ${knownCards.size} cards between hand and board` };
-  }
-  for (const cardId of uniqueIds) {
-    if (!knownCards.has(cardId)) {
-      return { error: `unknown card submitted: ${cardId}` };
-    }
-  }
-
-  const previousBoardIds = new Set(playerState.board.map((card) => card.id));
-  const usedBoardSlots = new Set();
-  const normalizedBoard = [];
-  for (const boardCard of board) {
-    if (!Number.isInteger(boardCard.slotIndex)) {
-      return { error: 'board card entries must include an integer slotIndex' };
-    }
-    if (boardCard.slotIndex < 0 || boardCard.slotIndex >= PHASE_BOARD_SLOTS_PER_SIDE) {
-      return { error: `board slotIndex must be between 0 and ${PHASE_BOARD_SLOTS_PER_SIDE - 1}` };
-    }
-    if (usedBoardSlots.has(boardCard.slotIndex)) {
-      return { error: 'board card slotIndex values must be unique' };
-    }
-    usedBoardSlots.add(boardCard.slotIndex);
-    const knownCard = knownCards.get(boardCard.id);
-    const cardWasAlreadyOnBoard = previousBoardIds.has(boardCard.id);
-    normalizedBoard.push({
-      ...knownCard,
-      slotIndex: boardCard.slotIndex,
-      summonedTurn: cardWasAlreadyOnBoard ? knownCard.summonedTurn : currentTurnNumber,
-      attackCommitted: false,
-      targetSlotIndex: null,
-    });
-  }
-
-  const attacks = Array.isArray(payload.attacks) ? payload.attacks : [];
-  const seenAttackerSlots = new Set();
-  for (const attack of attacks) {
-    if (!Number.isInteger(attack.attackerSlotIndex) || !Number.isInteger(attack.targetSlotIndex)) {
-      return { error: 'attacks must include integer attackerSlotIndex and targetSlotIndex' };
-    }
-    if (attack.attackerSlotIndex < 0 || attack.attackerSlotIndex >= PHASE_BOARD_SLOTS_PER_SIDE) {
-      return { error: `attackerSlotIndex must be between 0 and ${PHASE_BOARD_SLOTS_PER_SIDE - 1}` };
-    }
-    if (attack.targetSlotIndex < 0 || attack.targetSlotIndex >= PHASE_BOARD_SLOTS_PER_SIDE) {
-      return { error: `targetSlotIndex must be between 0 and ${PHASE_BOARD_SLOTS_PER_SIDE - 1}` };
-    }
-    if (seenAttackerSlots.has(attack.attackerSlotIndex)) {
-      return { error: 'a board slot may only commit one attack per turn' };
-    }
-    const attackerCard = normalizedBoard.find((card) => card.slotIndex === attack.attackerSlotIndex);
-    if (!attackerCard) {
-      return { error: `no attacker card found in slot ${attack.attackerSlotIndex}` };
-    }
-    if (!Number.isInteger(attackerCard.summonedTurn) || attackerCard.summonedTurn >= currentTurnNumber) {
-      return { error: `card in slot ${attack.attackerSlotIndex} has summoning sickness` };
-    }
-    attackerCard.attackCommitted = true;
-    attackerCard.targetSlotIndex = attack.targetSlotIndex;
-    seenAttackerSlots.add(attack.attackerSlotIndex);
-  }
-
-  return {
-    hand: hand.map((card) => knownCards.get(card.id)),
-    board: normalizedBoard,
-  };
-}
-
-function getPlayerPhaseStatus(playerId) {
-  const status = phaseMatchmakingState.get(playerId) || { status: 'idle' };
-  if (status.status === 'searching') {
-    return {
-      status: 'searching',
-      queueCount: phaseQueue.length,
-      queuePosition: getQueuePosition(playerId),
-    };
-  }
-
-  if (status.status === 'matched' && status.matchId) {
-    const match = phaseMatches.get(status.matchId);
-    if (!match) {
-      phaseMatchmakingState.set(playerId, { status: 'idle' });
-      return { status: 'idle', queueCount: phaseQueue.length };
-    }
-    if (match.phase === 2 && Date.now() >= (match.phaseEndsAt || match.phaseStartedAt || 0)) {
-      advanceMatchToDecisionPhase(match);
-    }
-
-    const opponentId = match.players.find((id) => id !== playerId) || null;
-    return {
-      status: 'matched',
-      matchId: match.id,
-      opponentId,
-      queueCount: phaseQueue.length,
-      matchState: serializeMatchForPlayer(match, playerId),
-    };
-  }
-
-  return { status: 'idle', queueCount: phaseQueue.length };
-}
-
-function findPhaseMatch(playerId) {
-  const existing = getPlayerPhaseStatus(playerId);
-  if (existing.status === 'matched' || existing.status === 'searching') {
-    return existing;
-  }
-
-  const opponentId = phaseQueue.shift();
-  if (opponentId && opponentId !== playerId) {
-    const matchId = `match-${randomUUID().slice(0, 8)}`;
-    const players = [opponentId, playerId];
-    const cardsByPlayer = new Map();
-
-    players.forEach((id) => {
-      const cards = Array.from({ length: PHASE_DECK_SIZE_PER_PLAYER }, (_, index) => ({
-        id: `${id}-card-${index + 1}`,
-        color: randomCardColor(),
-        summonedTurn: null,
-        attackCommitted: false,
-        targetSlotIndex: null,
-      }));
-      cardsByPlayer.set(id, {
-        allCards: cards,
-        hand: cards.slice(0, PHASE_STARTING_HAND_SIZE),
-        board: [],
-        deck: cards.slice(PHASE_STARTING_HAND_SIZE),
-      });
-    });
-
-    const match = {
-      id: matchId,
-      players,
-      cardsByPlayer,
-      turnNumber: 1,
-      phase: 1,
-      phaseStartedAt: Date.now(),
-      phaseEndsAt: null,
-      readyPlayers: new Set(),
-      lastDrawnCardsByPlayer: new Map(),
-      pendingCommitAttacksByPlayer: new Map(),
-      createdAt: Date.now(),
-    };
-    phaseMatches.set(matchId, match);
-    phaseMatchmakingState.set(opponentId, { status: 'matched', matchId });
-    phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
-    return getPlayerPhaseStatus(playerId);
-  }
-
-  phaseQueue.push(playerId);
-  phaseMatchmakingState.set(playerId, { status: 'searching' });
-  return getPlayerPhaseStatus(playerId);
 }
 
 async function handleApi(req, res, pathname) {
@@ -554,7 +199,7 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    sendJson(res, 200, getPlayerPhaseStatus(playerId));
+    sendJson(res, 200, phaseManagerServer.getPlayerPhaseStatus(playerId));
     return true;
   }
 
@@ -571,7 +216,7 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    sendJson(res, 200, findPhaseMatch(body.playerId));
+    sendJson(res, 200, phaseManagerServer.findMatch(body.playerId));
     return true;
   }
 
@@ -588,8 +233,7 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    clearPlayerMatchmakingState(body.playerId);
-    sendJson(res, 200, { status: 'idle', queueCount: phaseQueue.length });
+    sendJson(res, 200, phaseManagerServer.reset(body.playerId));
     return true;
   }
 
@@ -606,45 +250,13 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    const status = phaseMatchmakingState.get(body.playerId);
-    if (!status || status.status !== 'matched' || !status.matchId) {
-      sendJson(res, 409, { error: 'player is not in an active match' });
+    const result = phaseManagerServer.readyUp(body);
+    if (result.error) {
+      sendJson(res, result.statusCode || 400, { error: result.error });
       return true;
     }
 
-    const match = phaseMatches.get(status.matchId);
-    if (!match) {
-      sendJson(res, 409, { error: 'active match not found' });
-      return true;
-    }
-
-    if (match.phase !== 1) {
-      sendJson(res, 409, { error: 'cannot ready up outside decision phase' });
-      return true;
-    }
-
-    if (match.readyPlayers.has(body.playerId)) {
-      sendJson(res, 409, { error: 'player is already readied up for this phase' });
-      return true;
-    }
-
-    const playerState = match.cardsByPlayer.get(body.playerId);
-    if (!playerState) {
-      sendJson(res, 409, { error: 'player state not found in active match' });
-      return true;
-    }
-
-    const validated = validatePhaseTurnPayload(body, playerState, match.turnNumber);
-    if (validated.error) {
-      sendJson(res, 400, { error: validated.error });
-      return true;
-    }
-
-    playerState.hand = validated.hand;
-    playerState.board = validated.board;
-    readyPlayerInMatch(match, body.playerId);
-
-    sendJson(res, 200, getPlayerPhaseStatus(body.playerId));
+    sendJson(res, result.statusCode || 200, result.payload);
     return true;
   }
 
@@ -661,44 +273,13 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    const status = phaseMatchmakingState.get(body.playerId);
-    if (!status || status.status !== 'matched' || !status.matchId) {
-      sendJson(res, 409, { error: 'player is not in an active match' });
+    const result = phaseManagerServer.syncState(body);
+    if (result.error) {
+      sendJson(res, result.statusCode || 400, { error: result.error });
       return true;
     }
 
-    const match = phaseMatches.get(status.matchId);
-    if (!match) {
-      sendJson(res, 409, { error: 'active match not found' });
-      return true;
-    }
-
-    if (match.phase !== 1) {
-      sendJson(res, 409, { error: 'cannot sync state outside decision phase' });
-      return true;
-    }
-
-    if (match.readyPlayers.has(body.playerId)) {
-      sendJson(res, 409, { error: 'cannot sync state after you are readied up' });
-      return true;
-    }
-
-    const playerState = match.cardsByPlayer.get(body.playerId);
-    if (!playerState) {
-      sendJson(res, 409, { error: 'player state not found in active match' });
-      return true;
-    }
-
-    const validated = validatePhaseTurnPayload(body, playerState, match.turnNumber);
-    if (validated.error) {
-      sendJson(res, 400, { error: validated.error });
-      return true;
-    }
-
-    playerState.hand = validated.hand;
-    playerState.board = validated.board;
-
-    sendJson(res, 200, getPlayerPhaseStatus(body.playerId));
+    sendJson(res, result.statusCode || 200, result.payload);
     return true;
   }
 
