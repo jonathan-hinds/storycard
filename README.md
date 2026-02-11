@@ -84,3 +84,9 @@ const cards = new CardGameServer({
 cards.listCards();
 cards.applyCardAction('card-alpha', 'pickup');
 ```
+
+
+## Phase manager project
+
+A dedicated, isolated phase-manager sandbox is available at `/public/projects/phase-manager/index.html`.
+This project intentionally composes the existing card module (`/public/card-game`) without changing the single-card demo.
