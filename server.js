@@ -169,7 +169,16 @@ function serializeMatchForPlayer(match, playerId) {
     meta: {
       drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
       phaseStartedAt: match.phaseStartedAt,
-      commitAttacks: [...(match.pendingCommitAttacksByPlayer.get(playerId) || [])],
+      commitAttacks: [
+        ...(match.pendingCommitAttacksByPlayer.get(playerId) || []).map((attack) => ({
+          ...attack,
+          attackerSide: 'player',
+        })),
+        ...(match.pendingCommitAttacksByPlayer.get(opponentId) || []).map((attack) => ({
+          ...attack,
+          attackerSide: 'opponent',
+        })),
+      ],
     },
   };
 }
