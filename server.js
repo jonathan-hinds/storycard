@@ -22,7 +22,9 @@ const dieRollerServer = new DieRollerServer();
 const phaseQueue = [];
 const phaseMatchmakingState = new Map();
 const phaseMatches = new Map();
-const PHASE_CARDS_PER_PLAYER = 3;
+const PHASE_DECK_SIZE_PER_PLAYER = 10;
+const PHASE_STARTING_HAND_SIZE = 3;
+const PHASE_MAX_HAND_SIZE = 7;
 const PHASE_BOARD_SLOTS_PER_SIDE = 3;
 
 const cardGameServer = new CardGameServer({
@@ -150,19 +152,47 @@ function serializeMatchForPlayer(match, playerId) {
       player: {
         hand: [...playerState.hand],
         board: [...playerState.board],
+        deckCount: playerState.deck.length,
       },
       opponent: {
         hand: [...opponentState.hand],
         board: [...opponentState.board],
+        deckCount: opponentState.deck.length,
       },
     },
+    meta: {
+      drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
+    },
   };
+}
+
+function drawCardAtStartOfDecisionPhase(playerState) {
+  if (!playerState || !playerState.deck.length || playerState.hand.length >= PHASE_MAX_HAND_SIZE) {
+    return [];
+  }
+
+  const drawnCard = playerState.deck.shift();
+  playerState.hand.push(drawnCard);
+  return [drawnCard.id];
+}
+
+function applyDecisionPhaseStartDraw(match) {
+  const drawnCardsByPlayer = new Map();
+
+  match.players.forEach((playerId) => {
+    const playerState = match.cardsByPlayer.get(playerId);
+    const drawnCardIds = drawCardAtStartOfDecisionPhase(playerState);
+    drawnCardsByPlayer.set(playerId, drawnCardIds);
+  });
+
+  match.lastDrawnCardsByPlayer = drawnCardsByPlayer;
 }
 
 function advanceMatchToDecisionPhase(match) {
   match.turnNumber += 1;
   match.phase = 1;
   match.readyPlayers.clear();
+  applyDecisionPhaseStartDraw(match);
 }
 
 function resolveCommitPhase(match) {
@@ -181,7 +211,7 @@ function readyPlayerInMatch(match, playerId) {
   resolveCommitPhase(match);
 }
 
-function validatePhaseTurnPayload(payload, allCards) {
+function validatePhaseTurnPayload(payload, playerState) {
   const hand = Array.isArray(payload.hand) ? payload.hand : [];
   const board = Array.isArray(payload.board) ? payload.board : [];
 
@@ -189,17 +219,22 @@ function validatePhaseTurnPayload(payload, allCards) {
     return { error: `board is limited to ${PHASE_BOARD_SLOTS_PER_SIDE} cards` };
   }
 
-  const knownCards = new Map(allCards.map((card) => [card.id, card]));
+  if (hand.length > PHASE_MAX_HAND_SIZE) {
+    return { error: `hand is limited to ${PHASE_MAX_HAND_SIZE} cards` };
+  }
+
+  const visibleCards = [...playerState.hand, ...playerState.board];
+  const knownCards = new Map(visibleCards.map((card) => [card.id, card]));
   const merged = [...hand, ...board];
   const uniqueIds = new Set(merged.map((card) => card.id));
   if (merged.length !== uniqueIds.size) {
     return { error: 'hand and board must not contain duplicate cards' };
   }
 
+
   if (uniqueIds.size !== knownCards.size) {
     return { error: `expected exactly ${knownCards.size} cards between hand and board` };
   }
-
   for (const cardId of uniqueIds) {
     if (!knownCards.has(cardId)) {
       return { error: `unknown card submitted: ${cardId}` };
@@ -254,14 +289,15 @@ function findPhaseMatch(playerId) {
     const cardsByPlayer = new Map();
 
     players.forEach((id) => {
-      const cards = Array.from({ length: PHASE_CARDS_PER_PLAYER }, (_, index) => ({
+      const cards = Array.from({ length: PHASE_DECK_SIZE_PER_PLAYER }, (_, index) => ({
         id: `${id}-card-${index + 1}`,
         color: randomCardColor(),
       }));
       cardsByPlayer.set(id, {
         allCards: cards,
-        hand: cards,
+        hand: cards.slice(0, PHASE_STARTING_HAND_SIZE),
         board: [],
+        deck: cards.slice(PHASE_STARTING_HAND_SIZE),
       });
     });
 
@@ -272,6 +308,7 @@ function findPhaseMatch(playerId) {
       turnNumber: 1,
       phase: 1,
       readyPlayers: new Set(),
+      lastDrawnCardsByPlayer: new Map(),
       createdAt: Date.now(),
     };
     phaseMatches.set(matchId, match);
@@ -475,7 +512,7 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    const validated = validatePhaseTurnPayload(body, playerState.allCards);
+    const validated = validatePhaseTurnPayload(body, playerState);
     if (validated.error) {
       sendJson(res, 400, { error: validated.error });
       return true;
@@ -530,7 +567,7 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    const validated = validatePhaseTurnPayload(body, playerState.allCards);
+    const validated = validatePhaseTurnPayload(body, playerState);
     if (validated.error) {
       sendJson(res, 400, { error: validated.error });
       return true;

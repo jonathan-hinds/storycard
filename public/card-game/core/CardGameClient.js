@@ -404,6 +404,7 @@ export class CardGameClient {
       card.userData.slotIndex = cfg.slotIndex ?? null;
       card.userData.owner = cfg.owner ?? this.template.playerSide;
       card.userData.dealOrder = cfg.dealOrder ?? null;
+      card.userData.shouldDealAnimate = cfg.shouldDealAnimate === true;
       card.userData.locked = false;
       card.userData.isAnimating = false;
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
