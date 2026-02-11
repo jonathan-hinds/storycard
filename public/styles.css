@@ -355,10 +355,10 @@ button {
 }
 
 .cards-list-wrap {
-  padding: 1rem;
+  padding: 0;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 0.65rem;
+  gap: 0;
 }
 
 .cards-library-caption {
@@ -370,8 +370,6 @@ button {
   min-height: 500px;
   height: clamp(500px, calc(100vh - 190px), 680px);
   overflow-y: auto;
-  border-radius: 0.75rem;
-  border: 1px solid #2f3b55;
   background: #0f1320;
 }
 
