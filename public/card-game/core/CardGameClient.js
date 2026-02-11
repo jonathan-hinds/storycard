@@ -637,29 +637,23 @@ export class CardGameClient {
       }));
   }
 
-  playCommitPhaseAnimations(attackPlan = [], { onDone, commitStartedAtMs = null } = {}) {
+  playCommitPhaseAnimations(attackPlan = [], { onDone } = {}) {
     if (!Array.isArray(attackPlan) || !attackPlan.length) {
       onDone?.();
       return;
     }
 
     const now = performance.now();
-    const elapsedSinceCommitStart = Number.isFinite(commitStartedAtMs)
-      ? Math.max(0, Date.now() - commitStartedAtMs)
-      : 0;
     const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
     attackPlan.forEach((step, index) => {
-      const attackerSide = step.attackerSide === 'opponent' ? 'opponent' : 'player';
-      const attackerOffset = attackerSide === 'player' ? boardSlotsPerSide : 0;
-      const defenderOffset = attackerSide === 'player' ? 0 : boardSlotsPerSide;
-      const attackerSlot = this.boardSlots[attackerOffset + step.attackerSlotIndex];
-      const defenderSlot = this.boardSlots[defenderOffset + step.targetSlotIndex];
+      const attackerSlot = this.boardSlots[boardSlotsPerSide + step.attackerSlotIndex];
+      const defenderSlot = this.boardSlots[step.targetSlotIndex];
       if (!attackerSlot?.card || !defenderSlot) return;
       this.combatAnimations.push({
         attackerCard: attackerSlot.card,
         originPosition: new THREE.Vector3(attackerSlot.x, 0, attackerSlot.z),
         defenderPosition: new THREE.Vector3(defenderSlot.x, 0, defenderSlot.z),
-        startAtMs: now + index * 230 - elapsedSinceCommitStart,
+        startAtMs: now + index * 230,
         durationMs: 620,
         defenderCard: defenderSlot.card,
         didHit: false,
