@@ -9,6 +9,7 @@ const overlayEl = document.getElementById('phase-manager-turn-overlay');
 const matchLabelEl = document.getElementById('phase-manager-match-label');
 const playerSummaryEl = document.getElementById('phase-manager-player-summary');
 const opponentSummaryEl = document.getElementById('phase-manager-opponent-summary');
+const queueSummaryEl = document.getElementById('phase-manager-queue-summary');
 
 const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
@@ -17,6 +18,44 @@ const BOARD_SLOTS_PER_SIDE = 3;
 let client = null;
 let match = null;
 let opponentTurnTimer = 0;
+let matchmakingPollTimer = 0;
+
+const SESSION_PLAYER_ID_KEY = 'phase-manager-player-id';
+
+function getSessionPlayerId() {
+  const existing = window.sessionStorage.getItem(SESSION_PLAYER_ID_KEY);
+  if (existing) {
+    return existing;
+  }
+  const nextId = `player-${Math.random().toString(36).slice(2, 10)}`;
+  window.sessionStorage.setItem(SESSION_PLAYER_ID_KEY, nextId);
+  return nextId;
+}
+
+const playerId = getSessionPlayerId();
+
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || 'Request failed');
+  }
+  return payload;
+}
+
+async function getJson(url) {
+  const response = await fetch(url);
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || 'Request failed');
+  }
+  return payload;
+}
 
 const colorPool = [0x5f8dff, 0x8f6cff, 0x2dc6ad, 0xf28a65, 0xf1c965, 0xe76fb9, 0x4ecdc4, 0xff6b6b, 0xc7f464, 0xffa94d];
 
@@ -26,10 +65,10 @@ function randomCard(prefix, index) {
   return { id, color };
 }
 
-function createNewMatch() {
+function createNewMatch({ matchId, isYourTurn }) {
   return {
-    id: `match-${Math.random().toString(36).slice(2, 8)}`,
-    turn: PLAYER_SIDE,
+    id: matchId,
+    turn: isYourTurn ? PLAYER_SIDE : OPPONENT_SIDE,
     players: {
       [PLAYER_SIDE]: {
         hand: Array.from({ length: 3 }, (_, index) => randomCard('p', index)),
@@ -41,6 +80,13 @@ function createNewMatch() {
       },
     },
   };
+}
+
+function stopMatchmakingPolling() {
+  if (matchmakingPollTimer) {
+    window.clearInterval(matchmakingPollTimer);
+    matchmakingPollTimer = 0;
+  }
 }
 
 function getBoardSlotLayout() {
@@ -149,6 +195,10 @@ function setTurnLockState() {
 
 function updateSummaryPanels() {
   if (!match) {
+    queueSummaryEl.textContent = 'Queue: idle';
+  }
+
+  if (!match) {
     matchLabelEl.textContent = 'No active match';
     playerSummaryEl.textContent = 'Player: waiting for matchmaking';
     opponentSummaryEl.textContent = 'Opponent: waiting for matchmaking';
@@ -160,6 +210,26 @@ function updateSummaryPanels() {
   matchLabelEl.textContent = `${match.id} • ${match.turn === PLAYER_SIDE ? 'Your turn' : 'Opponent turn'}`;
   playerSummaryEl.textContent = `Player — hand: ${player.hand.length}, board: ${player.board.length}`;
   opponentSummaryEl.textContent = `Opponent — hand: ${opponent.hand.length}, board: ${opponent.board.length}`;
+}
+
+function updateQueueSummary(status) {
+  if (!status) {
+    queueSummaryEl.textContent = 'Queue: idle';
+    return;
+  }
+
+  if (status.status === 'searching') {
+    const positionText = status.queuePosition ? ` (you are #${status.queuePosition})` : '';
+    queueSummaryEl.textContent = `Queue: ${status.queueCount} waiting${positionText}`;
+    return;
+  }
+
+  if (status.status === 'matched') {
+    queueSummaryEl.textContent = `Queue: matched in ${status.matchId}`;
+    return;
+  }
+
+  queueSummaryEl.textContent = `Queue: ${status.queueCount ?? 0} waiting`;
 }
 
 function renderMatch() {
@@ -190,6 +260,46 @@ function renderMatch() {
   updateSummaryPanels();
 }
 
+function applyMatchmakingStatus(status) {
+  updateQueueSummary(status);
+
+  if (status.status === 'matched') {
+    stopMatchmakingPolling();
+    matchmakingBtn.disabled = true;
+    matchmakingBtn.textContent = 'Match Found';
+
+    if (!match || match.id !== status.matchId) {
+      window.clearTimeout(opponentTurnTimer);
+      match = createNewMatch({ matchId: status.matchId, isYourTurn: Boolean(status.isYourTurn) });
+      renderMatch();
+      if (!status.isYourTurn) {
+        opponentTurnTimer = window.setTimeout(runOpponentTurn, 900);
+      }
+    }
+    return;
+  }
+
+  if (status.status === 'searching') {
+    statusEl.textContent = 'Looking for match... Waiting for another player to queue.';
+    matchmakingBtn.disabled = true;
+    matchmakingBtn.textContent = 'Searching...';
+    setTurnLockState();
+    return;
+  }
+
+  matchmakingBtn.disabled = false;
+  matchmakingBtn.textContent = 'Find Match';
+}
+
+async function pollMatchmakingStatus() {
+  try {
+    const status = await getJson(`/api/phase-manager/matchmaking/status?playerId=${encodeURIComponent(playerId)}`);
+    applyMatchmakingStatus(status);
+  } catch (error) {
+    statusEl.textContent = `Matchmaking status error: ${error.message}`;
+  }
+}
+
 function runOpponentTurn() {
   if (!match || match.turn !== OPPONENT_SIDE) return;
 
@@ -204,9 +314,23 @@ function runOpponentTurn() {
 }
 
 function beginMatchmaking() {
+  if (match) return;
+
+  stopMatchmakingPolling();
   window.clearTimeout(opponentTurnTimer);
-  match = createNewMatch();
-  renderMatch();
+
+  postJson('/api/phase-manager/matchmaking/find', { playerId })
+    .then((status) => {
+      applyMatchmakingStatus(status);
+      if (status.status !== 'matched') {
+        matchmakingPollTimer = window.setInterval(pollMatchmakingStatus, 1200);
+      }
+    })
+    .catch((error) => {
+      statusEl.textContent = `Matchmaking failed: ${error.message}`;
+      matchmakingBtn.disabled = false;
+      matchmakingBtn.textContent = 'Find Match';
+    });
 }
 
 function endTurn() {
@@ -220,12 +344,25 @@ function endTurn() {
 }
 
 function resetMatch() {
+  stopMatchmakingPolling();
   window.clearTimeout(opponentTurnTimer);
+
   match = null;
   if (client) {
     client.destroy();
     client = null;
   }
+
+  postJson('/api/phase-manager/matchmaking/reset', { playerId })
+    .then((status) => {
+      updateQueueSummary(status);
+      matchmakingBtn.disabled = false;
+      matchmakingBtn.textContent = 'Find Match';
+    })
+    .catch((error) => {
+      statusEl.textContent = `Reset error: ${error.message}`;
+    });
+
   renderMatch();
 }
 
@@ -234,3 +371,4 @@ endTurnBtn.addEventListener('click', endTurn);
 resetBtn.addEventListener('click', resetMatch);
 
 renderMatch();
+pollMatchmakingStatus();

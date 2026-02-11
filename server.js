@@ -19,6 +19,9 @@ const MIME_TYPES = {
 
 const diceStore = new Map();
 const dieRollerServer = new DieRollerServer();
+const phaseQueue = [];
+const phaseMatchmakingState = new Map();
+const phaseMatches = new Map();
 
 const cardGameServer = new CardGameServer({
   cards: [
@@ -86,6 +89,94 @@ function rollDie(die, options = {}) {
   }
 
   return roll;
+}
+
+function getQueuePosition(playerId) {
+  const index = phaseQueue.indexOf(playerId);
+  return index === -1 ? null : index + 1;
+}
+
+function removeFromQueue(playerId) {
+  const index = phaseQueue.indexOf(playerId);
+  if (index !== -1) {
+    phaseQueue.splice(index, 1);
+  }
+}
+
+function clearPlayerMatchmakingState(playerId) {
+  removeFromQueue(playerId);
+  const current = phaseMatchmakingState.get(playerId);
+  if (!current) {
+    return;
+  }
+
+  if (current.status === 'matched' && current.matchId) {
+    const match = phaseMatches.get(current.matchId);
+    if (match) {
+      phaseMatches.delete(current.matchId);
+      const otherPlayerId = match.players.find((id) => id !== playerId);
+      if (otherPlayerId) {
+        phaseMatchmakingState.set(otherPlayerId, { status: 'idle' });
+      }
+    }
+  }
+
+  phaseMatchmakingState.set(playerId, { status: 'idle' });
+}
+
+function getPlayerPhaseStatus(playerId) {
+  const status = phaseMatchmakingState.get(playerId) || { status: 'idle' };
+  if (status.status === 'searching') {
+    return {
+      status: 'searching',
+      queueCount: phaseQueue.length,
+      queuePosition: getQueuePosition(playerId),
+    };
+  }
+
+  if (status.status === 'matched' && status.matchId) {
+    const match = phaseMatches.get(status.matchId);
+    if (!match) {
+      phaseMatchmakingState.set(playerId, { status: 'idle' });
+      return { status: 'idle', queueCount: phaseQueue.length };
+    }
+    const opponentId = match.players.find((id) => id !== playerId) || null;
+    return {
+      status: 'matched',
+      matchId: match.id,
+      opponentId,
+      isYourTurn: match.turnPlayerId === playerId,
+      queueCount: phaseQueue.length,
+    };
+  }
+
+  return { status: 'idle', queueCount: phaseQueue.length };
+}
+
+function findPhaseMatch(playerId) {
+  const existing = getPlayerPhaseStatus(playerId);
+  if (existing.status === 'matched' || existing.status === 'searching') {
+    return existing;
+  }
+
+  const opponentId = phaseQueue.shift();
+  if (opponentId && opponentId !== playerId) {
+    const matchId = `match-${randomUUID().slice(0, 8)}`;
+    const match = {
+      id: matchId,
+      players: [opponentId, playerId],
+      turnPlayerId: opponentId,
+      createdAt: Date.now(),
+    };
+    phaseMatches.set(matchId, match);
+    phaseMatchmakingState.set(opponentId, { status: 'matched', matchId });
+    phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
+    return getPlayerPhaseStatus(playerId);
+  }
+
+  phaseQueue.push(playerId);
+  phaseMatchmakingState.set(playerId, { status: 'searching' });
+  return getPlayerPhaseStatus(playerId);
 }
 
 async function handleApi(req, res, pathname) {
@@ -187,6 +278,53 @@ async function handleApi(req, res, pathname) {
       areaSize: die.areaSize,
       history: die.history,
     });
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/phase-manager/matchmaking/status') {
+    const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+    const playerId = requestUrl.searchParams.get('playerId');
+    if (!playerId) {
+      sendJson(res, 400, { error: 'playerId is required' });
+      return true;
+    }
+
+    sendJson(res, 200, getPlayerPhaseStatus(playerId));
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/phase-manager/matchmaking/find') {
+    let body = {};
+    try {
+      body = await readRequestJson(req);
+    } catch (error) {
+      body = {};
+    }
+
+    if (!body.playerId || typeof body.playerId !== 'string') {
+      sendJson(res, 400, { error: 'playerId is required' });
+      return true;
+    }
+
+    sendJson(res, 200, findPhaseMatch(body.playerId));
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/phase-manager/matchmaking/reset') {
+    let body = {};
+    try {
+      body = await readRequestJson(req);
+    } catch (error) {
+      body = {};
+    }
+
+    if (!body.playerId || typeof body.playerId !== 'string') {
+      sendJson(res, 400, { error: 'playerId is required' });
+      return true;
+    }
+
+    clearPlayerMatchmakingState(body.playerId);
+    sendJson(res, 200, { status: 'idle', queueCount: phaseQueue.length });
     return true;
   }
 
