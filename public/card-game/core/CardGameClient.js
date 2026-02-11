@@ -21,6 +21,8 @@ const HAND_PORTRAIT_CLOSENESS = 0.35;
 
 const PREVIEW_HOLD_DELAY_MS = 230;
 const DRAG_START_DISTANCE_PX = 10;
+const PREVIEW_TRANSITION_IN_MS = 230;
+const PREVIEW_TRANSITION_OUT_MS = 210;
 const CARD_FACE_ROTATION_X = -Math.PI / 2;
 const HAND_CARD_BASE_Y = 0.1;
 const HAND_CARD_ARC_LIFT = 0.06;
@@ -82,6 +84,7 @@ export class CardGameClient {
       lastPointer: { x: 0, y: 0 },
       pressPointer: { x: 0, y: 0 },
       previewStartedAt: 0,
+      activeTransitionToken: 0,
       dragOrigin: null,
       dropSlotIndex: null,
       dropTargetSlotIndex: null,
@@ -303,16 +306,26 @@ export class CardGameClient {
     card.userData.mesh.material.emissive.setHex(0x111111);
     card.userData.tiltPivot.rotation.set(0, 0, 0);
     if (mode === 'preview') {
-      this.setActiveCardPose(
-        new THREE.Vector3(
-          PREVIEW_BASE_POSITION.x,
-          PREVIEW_BASE_POSITION.y,
-          PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
-        ),
-        this.previewTuning.rotationX,
-        0,
-        0,
+      const previewPosition = new THREE.Vector3(
+        PREVIEW_BASE_POSITION.x,
+        PREVIEW_BASE_POSITION.y,
+        PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
       );
+      const previewRotation = new THREE.Euler(this.previewTuning.rotationX, 0, 0);
+      this.setActiveCardPose(previewPosition, this.previewTuning.rotationX, 0, 0);
+
+      this.state.mode = 'preview-transition-in';
+      this.animateCardTransform(card, {
+        fromPosition: card.position.clone(),
+        fromRotation: card.rotation.clone(),
+        toPosition: previewPosition,
+        toRotation: previewRotation,
+        durationMs: PREVIEW_TRANSITION_IN_MS,
+      }).then((completed) => {
+        if (!completed || this.state.activeCard !== card || this.state.mode !== 'preview-transition-in') return;
+        this.state.mode = 'preview';
+        this.state.previewStartedAt = performance.now();
+      });
     }
     else this.setActiveCardPose(card.position, CARD_FACE_ROTATION_X + 0.24, 0, 0);
     this.setStatus(mode === 'drag'
@@ -320,8 +333,79 @@ export class CardGameClient {
       : `Previewing ${card.userData.cardId}. Move to drag or release to return.`);
   }
 
+  easeMagicTransition(t) {
+    return t < 0.5
+      ? 4 * t * t * t
+      : 1 - ((-2 * t + 2) ** 3) / 2;
+  }
+
+  animateCardTransform(card, {
+    fromPosition,
+    fromRotation,
+    toPosition,
+    toRotation,
+    durationMs,
+  }) {
+    const token = this.state.activeTransitionToken + 1;
+    this.state.activeTransitionToken = token;
+    const startAt = performance.now();
+
+    return new Promise((resolve) => {
+      const step = (time) => {
+        if (this.state.activeTransitionToken !== token || this.state.activeCard !== card) {
+          resolve(false);
+          return;
+        }
+
+        const progress = THREE.MathUtils.clamp((time - startAt) / durationMs, 0, 1);
+        const eased = this.easeMagicTransition(progress);
+
+        card.position.lerpVectors(fromPosition, toPosition, eased);
+        card.rotation.set(
+          THREE.MathUtils.lerp(fromRotation.x, toRotation.x, eased),
+          THREE.MathUtils.lerp(fromRotation.y, toRotation.y, eased),
+          THREE.MathUtils.lerp(fromRotation.z, toRotation.z, eased),
+        );
+
+        if (progress >= 1) {
+          card.position.copy(toPosition);
+          card.rotation.copy(toRotation);
+          resolve(true);
+          return;
+        }
+
+        requestAnimationFrame(step);
+      };
+
+      requestAnimationFrame(step);
+    });
+  }
+
+  resolveReturnPoseForCard(card, origin = this.state.dragOrigin) {
+    if (origin?.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(origin.slotIndex)) {
+      const slot = this.boardSlots[origin.slotIndex];
+      if (slot) {
+        return {
+          position: new THREE.Vector3(slot.x, 0, slot.z),
+          rotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
+        };
+      }
+    }
+
+    const handCards = this.cards.filter((entry) => entry.userData.zone === CARD_ZONE_TYPES.HAND);
+    const handIndex = Math.max(handCards.indexOf(card), 0);
+    const handPosition = this.cardWorldPositionForHand(handIndex, handCards.length || 1);
+    const spread = Math.max(handCards.length - 1, 1);
+    const normalizedIndex = spread === 0 ? 0 : handIndex / spread - 0.5;
+    return {
+      position: handPosition,
+      rotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, -normalizedIndex * HAND_CARD_FAN_ROTATION_Z),
+    };
+  }
+
   clearActiveCard({ restore = true } = {}) {
     if (!this.state.activeCard) return;
+    this.state.activeTransitionToken += 1;
     const card = this.state.activeCard;
     card.renderOrder = 0;
     card.userData.mesh.material.emissive.setHex(0x000000);
@@ -420,6 +504,7 @@ export class CardGameClient {
 
   beginDrag(card) {
     if (!card) return;
+    this.state.activeTransitionToken += 1;
     if (this.state.mode === 'idle') this.setCardAsActive(card, 'drag');
     else {
       this.state.mode = 'drag';
@@ -588,7 +673,10 @@ export class CardGameClient {
       this.beginDrag(card);
     }
 
-    if (this.state.mode === 'preview' && this.state.pendingCardCanDrag && distance > DRAG_START_DISTANCE_PX && this.state.activeCard) this.beginDrag(this.state.activeCard);
+    if ((this.state.mode === 'preview' || this.state.mode === 'preview-transition-in')
+      && this.state.pendingCardCanDrag
+      && distance > DRAG_START_DISTANCE_PX
+      && this.state.activeCard) this.beginDrag(this.state.activeCard);
     if (this.state.mode === 'drag' && this.state.activeCard) {
       event.preventDefault();
       if (this.canCardAttack(this.state.activeCard)) this.updateAttackTargetPoseFromPointer(event);
@@ -622,6 +710,19 @@ export class CardGameClient {
       await this.notifyCardStateCommitted(card);
       this.setStatus(`Placed ${card.userData.cardId} into board slot ${slot.index + 1}.`);
     } else if (card) {
+      const wasPreviewMode = this.state.mode === 'preview' || this.state.mode === 'preview-transition-in';
+      if (wasPreviewMode) {
+        const returnPose = this.resolveReturnPoseForCard(card, prevOrigin);
+        this.state.mode = 'preview-transition-out';
+        await this.animateCardTransform(card, {
+          fromPosition: card.position.clone(),
+          fromRotation: card.rotation.clone(),
+          toPosition: returnPose.position,
+          toRotation: returnPose.rotation,
+          durationMs: PREVIEW_TRANSITION_OUT_MS,
+        });
+      }
+
       if (prevOrigin?.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(prevOrigin.slotIndex)) {
         const slot = this.boardSlots[prevOrigin.slotIndex];
         slot.card = card;
@@ -637,11 +738,11 @@ export class CardGameClient {
         await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: card.userData.zone, slotIndex: card.userData.slotIndex });
         await this.notifyCardStateCommitted(card);
       }
-      this.setStatus(this.state.mode === 'preview' ? `Preview closed for ${card.userData.cardId}.` : `Returned ${card.userData.cardId} to ${card.userData.zone}.`);
+      this.setStatus(wasPreviewMode ? `Preview closed for ${card.userData.cardId}.` : `Returned ${card.userData.cardId} to ${card.userData.zone}.`);
     }
 
     this.clearHighlights();
-    this.clearActiveCard({ restore: true });
+    this.clearActiveCard({ restore: this.state.mode !== 'preview-transition-out' });
     this.relayoutBoardAndHand();
 
     this.state.activePointerId = null;
