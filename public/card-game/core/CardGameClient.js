@@ -448,6 +448,8 @@ export class CardGameClient {
     this.state.activePointerId = null;
     this.boardSlots.forEach((slot) => { slot.card = null; });
     this.cardAnimations.length = 0;
+    this.combatAnimations.length = 0;
+    this.combatShakeEffects.length = 0;
 
     for (const card of this.cards) this.scene.remove(card);
     this.cards.length = 0;
@@ -637,24 +639,43 @@ export class CardGameClient {
       }));
   }
 
-  playCommitPhaseAnimations(attackPlan = [], { onDone } = {}) {
+  playCommitPhaseAnimations(attackPlan = [], { onDone, syncStartAtMs } = {}) {
+    const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
+    const resolveBoardSlotIndex = (side, slotIndex) => {
+      if (!Number.isInteger(slotIndex)) return null;
+      if (slotIndex < 0 || slotIndex >= boardSlotsPerSide) return null;
+      return side === this.template.playerSide ? boardSlotsPerSide + slotIndex : slotIndex;
+    };
+
     if (!Array.isArray(attackPlan) || !attackPlan.length) {
       onDone?.();
       return;
     }
 
     const now = performance.now();
-    const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
+    const synchronizedStartAtMs = Number.isFinite(syncStartAtMs)
+      ? now + (syncStartAtMs - Date.now())
+      : now;
+    const attackDurationMs = 620;
+    const attackGapMs = 140;
+    const attackStepMs = attackDurationMs + attackGapMs;
+
     attackPlan.forEach((step, index) => {
-      const attackerSlot = this.boardSlots[boardSlotsPerSide + step.attackerSlotIndex];
-      const defenderSlot = this.boardSlots[step.targetSlotIndex];
+      const attackerSide = step?.attackerSide === 'opponent' ? 'opponent' : 'player';
+      const targetSide = step?.targetSide === 'player' ? 'player' : 'opponent';
+      const attackerSlotIndex = resolveBoardSlotIndex(attackerSide, step.attackerSlotIndex);
+      const defenderSlotIndex = resolveBoardSlotIndex(targetSide, step.targetSlotIndex);
+      if (!Number.isInteger(attackerSlotIndex) || !Number.isInteger(defenderSlotIndex)) return;
+
+      const attackerSlot = this.boardSlots[attackerSlotIndex];
+      const defenderSlot = this.boardSlots[defenderSlotIndex];
       if (!attackerSlot?.card || !defenderSlot) return;
       this.combatAnimations.push({
         attackerCard: attackerSlot.card,
         originPosition: new THREE.Vector3(attackerSlot.x, 0, attackerSlot.z),
         defenderPosition: new THREE.Vector3(defenderSlot.x, 0, defenderSlot.z),
-        startAtMs: now + index * 230,
-        durationMs: 620,
+        startAtMs: synchronizedStartAtMs + index * attackStepMs,
+        durationMs: attackDurationMs,
         defenderCard: defenderSlot.card,
         didHit: false,
       });
@@ -796,6 +817,9 @@ export class CardGameClient {
     if (!this.cardAnimationHooks.length) return;
 
     const now = performance.now();
+    const synchronizedStartAtMs = Number.isFinite(syncStartAtMs)
+      ? now + (syncStartAtMs - Date.now())
+      : now;
     const animationContext = {
       ...context,
       template: this.template,
