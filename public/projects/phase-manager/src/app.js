@@ -20,6 +20,7 @@ let match = null;
 let matchmakingPollTimer = 0;
 let stateSyncInFlight = false;
 let lastAnimatedMatchId = null;
+let lastAnimatedTurnKey = null;
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -229,7 +230,8 @@ function renderMatch() {
 
   const template = buildTemplateFromMatch(match);
   const shouldAnimateInitialDeal = match.id !== lastAnimatedMatchId;
-  const shouldAnimateTurnDraw = Boolean(match.meta?.animatedDrawCardIds?.length);
+  const turnAnimationKey = `${match.id}:${match.turnNumber}`;
+  const shouldAnimateTurnDraw = Boolean(match.meta?.animatedDrawCardIds?.length) && turnAnimationKey !== lastAnimatedTurnKey;
   template.meta = {
     animateInitialDeal: shouldAnimateInitialDeal,
     animateTurnDraw: shouldAnimateTurnDraw,
@@ -263,6 +265,7 @@ function renderMatch() {
   }
 
   if (shouldAnimateInitialDeal) lastAnimatedMatchId = match.id;
+  if (shouldAnimateTurnDraw) lastAnimatedTurnKey = turnAnimationKey;
 
   statusEl.textContent = match.phase === 1
     ? (match.youAreReady
@@ -304,9 +307,12 @@ function applyMatchmakingStatus(status) {
     if (nextMatch && match) {
       const isNewTurn = nextMatch.turnNumber > match.turnNumber && nextMatch.phase === 1;
       const drawnCardIds = Array.isArray(nextMatch.meta?.drawnCardIds) ? nextMatch.meta.drawnCardIds : [];
+      const previousAnimatedDrawCardIds = Array.isArray(match.meta?.animatedDrawCardIds)
+        ? match.meta.animatedDrawCardIds
+        : [];
       nextMatch.meta = {
         ...nextMatch.meta,
-        animatedDrawCardIds: isNewTurn ? drawnCardIds : [],
+        animatedDrawCardIds: isNewTurn ? drawnCardIds : previousAnimatedDrawCardIds,
       };
     }
 
@@ -331,6 +337,7 @@ function applyMatchmakingStatus(status) {
 
   match = null;
   lastAnimatedMatchId = null;
+  lastAnimatedTurnKey = null;
   if (client) {
     client.destroy();
     client = null;
@@ -401,6 +408,7 @@ function resetMatch() {
 
   match = null;
   lastAnimatedMatchId = null;
+  lastAnimatedTurnKey = null;
   if (client) {
     client.destroy();
     client = null;
