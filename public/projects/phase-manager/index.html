@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Single Card Project Demo</title>
+    <title>Phase Manager Project</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="single-card-project">
+  <body data-page="phase-manager-project">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -36,28 +36,28 @@
 
     <main class="layout single-card-layout">
       <section class="controls">
-        <h1>Single Card Sub Project</h1>
+        <h1>Phase Manager Project</h1>
         <p>
-          Demo scaffold for card interaction. Includes a two-sided board with 3 card slots plus a dedicated deck slot per side, a hand row,
-          hold-to-zoom preview, and drag-to-snap placement.
+          This is a new, isolated project space for turn flow and phase logic development. The card module below is loaded
+          as a dependency so game-loop behavior can be prototyped without changing the existing single-card sandbox.
         </p>
 
         <div class="card">
-          <h2>Interaction</h2>
+          <h2>Current Setup</h2>
           <p>
-            Hold your board/hand cards for an animated close-up, or drag and release to snap them into one of
-            your three side card slots. Deck slots are reserved for future draw animations and networked game flow.
+            For now this page mirrors the card interaction demo so phase-manager logic can be layered on top in later iterations.
+            Card-module behavior remains unchanged and reusable across both projects.
           </p>
-          <button id="single-card-reset" type="button" class="secondary-action">Reset demo</button>
-          <p id="single-card-status" class="debug-pill">Loading…</p>
+          <button id="phase-manager-reset" type="button" class="secondary-action">Reset demo</button>
+          <p id="phase-manager-status" class="debug-pill">Loading…</p>
         </div>
       </section>
 
       <section class="single-card-stage-wrap">
-        <canvas id="single-card-canvas" class="single-card-canvas" aria-label="Single card interaction canvas"></canvas>
+        <canvas id="phase-manager-canvas" class="single-card-canvas" aria-label="Phase manager card interaction canvas"></canvas>
       </section>
     </main>
 
-    <script type="module" src="/public/card/single-card/src/app.js"></script>
+    <script type="module" src="/public/projects/phase-manager/src/app.js"></script>
   </body>
 </html>
