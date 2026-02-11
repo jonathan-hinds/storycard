@@ -9,7 +9,7 @@ export function createDeckToHandDealHook({
   shouldAnimate = () => true,
 } = {}) {
   return (card, context = {}) => {
-    if (!shouldAnimate(context)) return null;
+    if (!shouldAnimate(card, context)) return null;
     if (card.userData.zone !== CARD_ZONE_TYPES.HAND) return null;
     if (owner && card.userData.owner !== owner) return null;
 

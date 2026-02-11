@@ -91,6 +91,7 @@ function getHiddenZoneLayout() {
 }
 
 function buildTemplateFromMatch(currentMatch) {
+  const animatedDrawCardIds = new Set(currentMatch.meta?.animatedDrawCardIds || []);
   const initialCards = [];
 
   currentMatch.players[OPPONENT_SIDE].board.forEach((card, index) => {
@@ -119,7 +120,8 @@ function buildTemplateFromMatch(currentMatch) {
       color: card.color,
       owner: PLAYER_SIDE,
       zone: CARD_ZONE_TYPES.HAND,
-      dealOrder: handIndex,
+      dealOrder: animatedDrawCardIds.has(card.id) ? handIndex : null,
+      shouldDealAnimate: animatedDrawCardIds.has(card.id),
     });
   });
 
@@ -193,8 +195,8 @@ function updateSummaryPanels() {
   const player = match.players[PLAYER_SIDE];
   const opponent = match.players[OPPONENT_SIDE];
   matchLabelEl.textContent = `${match.id} • Turn ${match.turnNumber} • Phase ${match.phase} (${getPhaseLabel(match.phase)})`;
-  playerSummaryEl.textContent = `Player — hand: ${player.hand.length}, board: ${player.board.length}`;
-  opponentSummaryEl.textContent = `Opponent — hand: ${opponent.hand.length}, board: ${opponent.board.length}${match.phase === 1 ? `, ready: ${match.opponentIsReady ? 'yes' : 'no'}` : ''}`;
+  playerSummaryEl.textContent = `Player — hand: ${player.hand.length}, board: ${player.board.length}, deck: ${player.deckCount}`;
+  opponentSummaryEl.textContent = `Opponent — hand: ${opponent.hand.length}, board: ${opponent.board.length}, deck: ${opponent.deckCount}${match.phase === 1 ? `, ready: ${match.opponentIsReady ? 'yes' : 'no'}` : ''}`;
 }
 
 function updateQueueSummary(status) {
@@ -227,8 +229,10 @@ function renderMatch() {
 
   const template = buildTemplateFromMatch(match);
   const shouldAnimateInitialDeal = match.id !== lastAnimatedMatchId;
+  const shouldAnimateTurnDraw = Boolean(match.meta?.animatedDrawCardIds?.length);
   template.meta = {
     animateInitialDeal: shouldAnimateInitialDeal,
+    animateTurnDraw: shouldAnimateTurnDraw,
   };
   if (!client) {
     client = new CardGameClient({
@@ -240,7 +244,11 @@ function renderMatch() {
         cardAnimationHooks: [
           createDeckToHandDealHook({
             owner: PLAYER_SIDE,
-            shouldAnimate: (context) => context.template?.meta?.animateInitialDeal === true,
+            shouldAnimate: (card, context) => {
+              if (context.template?.meta?.animateInitialDeal === true) return true;
+              if (context.template?.meta?.animateTurnDraw === true) return card.userData.shouldDealAnimate === true;
+              return false;
+            },
             durationMs: 980,
             staggerMs: 105,
             arcHeight: 0.95,
@@ -293,6 +301,22 @@ function applyMatchmakingStatus(status) {
     matchmakingBtn.textContent = 'Match Found';
 
     const nextMatch = status.matchState || null;
+    if (nextMatch && match) {
+      const isNewTurn = nextMatch.turnNumber > match.turnNumber && nextMatch.phase === 1;
+      const drawnCardIds = Array.isArray(nextMatch.meta?.drawnCardIds) ? nextMatch.meta.drawnCardIds : [];
+      nextMatch.meta = {
+        ...nextMatch.meta,
+        animatedDrawCardIds: isNewTurn ? drawnCardIds : [],
+      };
+    }
+
+    if (nextMatch && !match) {
+      nextMatch.meta = {
+        ...nextMatch.meta,
+        animatedDrawCardIds: [],
+      };
+    }
+
     const nextSerialized = JSON.stringify(nextMatch);
     const currentSerialized = JSON.stringify(match);
     if (nextSerialized !== currentSerialized) {
