@@ -38,14 +38,13 @@
       <section class="controls">
         <h1>Phase Manager Project</h1>
         <p>
-          This sandbox now focuses on a lightweight multiplayer turn loop: start matchmaking, deal 3 cards to each player,
-          play cards only on your turn, and pass with End Turn.
+          This sandbox now focuses on a lightweight multiplayer phase loop: start matchmaking, deal 3 cards to each player, make decisions simultaneously in phase 1, then resolve automatically in phase 2.
         </p>
 
         <div class="card">
-          <h2>Turn Flow Sandbox</h2>
+          <h2>Phase Flow Sandbox</h2>
           <button id="phase-manager-matchmaking" type="button">Find Match</button>
-          <button id="phase-manager-end-turn" type="button" class="secondary-action" disabled>End Turn</button>
+          <button id="phase-manager-ready" type="button" class="secondary-action" disabled>Ready Up</button>
           <button id="phase-manager-reset" type="button" class="secondary-action">Reset Match</button>
           <p id="phase-manager-match-label" class="debug-pill">No active match</p>
           <p id="phase-manager-queue-summary" class="debug-pill">Queue: idle</p>
