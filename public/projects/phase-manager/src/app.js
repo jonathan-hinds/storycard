@@ -20,19 +20,14 @@ let match = null;
 let opponentTurnTimer = 0;
 let matchmakingPollTimer = 0;
 
-const SESSION_PLAYER_ID_KEY = 'phase-manager-player-id';
-
-function getSessionPlayerId() {
-  const existing = window.sessionStorage.getItem(SESSION_PLAYER_ID_KEY);
-  if (existing) {
-    return existing;
+function createTabPlayerId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return `player-${window.crypto.randomUUID().slice(0, 8)}`;
   }
-  const nextId = `player-${Math.random().toString(36).slice(2, 10)}`;
-  window.sessionStorage.setItem(SESSION_PLAYER_ID_KEY, nextId);
-  return nextId;
+  return `player-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-const playerId = getSessionPlayerId();
+const playerId = createTabPlayerId();
 
 async function postJson(url, body) {
   const response = await fetch(url, {
