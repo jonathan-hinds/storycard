@@ -3,7 +3,7 @@ import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHa
 const canvas = document.getElementById('phase-manager-canvas');
 const statusEl = document.getElementById('phase-manager-status');
 const matchmakingBtn = document.getElementById('phase-manager-matchmaking');
-const endTurnBtn = document.getElementById('phase-manager-end-turn');
+const readyBtn = document.getElementById('phase-manager-ready');
 const resetBtn = document.getElementById('phase-manager-reset');
 const overlayEl = document.getElementById('phase-manager-turn-overlay');
 const matchLabelEl = document.getElementById('phase-manager-match-label');
@@ -29,6 +29,10 @@ function createTabPlayerId() {
 }
 
 const playerId = createTabPlayerId();
+
+function getPhaseLabel(phase) {
+  return phase === 1 ? 'Decision' : 'Commit';
+}
 
 async function postJson(url, body) {
   const response = await fetch(url, {
@@ -153,10 +157,13 @@ function syncPlayerStateFromClient() {
   return { hand, board };
 }
 
-function setTurnLockState() {
-  const isPlayerTurn = Boolean(match) && match.turn === PLAYER_SIDE;
-  endTurnBtn.disabled = !match || !isPlayerTurn;
-  canvas.style.pointerEvents = isPlayerTurn ? 'auto' : 'none';
+function setReadyLockState() {
+  const isDecisionPhase = Boolean(match) && match.phase === 1;
+  const playerIsReady = Boolean(match) && match.youAreReady;
+  const canInteract = isDecisionPhase && !playerIsReady;
+
+  readyBtn.disabled = !match || !canInteract;
+  canvas.style.pointerEvents = canInteract ? 'auto' : 'none';
 
   if (!match) {
     overlayEl.hidden = false;
@@ -164,8 +171,14 @@ function setTurnLockState() {
     return;
   }
 
-  overlayEl.hidden = isPlayerTurn;
-  overlayEl.textContent = isPlayerTurn ? '' : 'Opponent turn in progress…';
+  if (match.phase === 2) {
+    overlayEl.hidden = false;
+    overlayEl.textContent = 'Commit phase resolving…';
+    return;
+  }
+
+  overlayEl.hidden = !playerIsReady;
+  overlayEl.textContent = playerIsReady ? 'Locked in. Waiting for opponent to ready up…' : '';
 }
 
 function updateSummaryPanels() {
@@ -179,9 +192,9 @@ function updateSummaryPanels() {
 
   const player = match.players[PLAYER_SIDE];
   const opponent = match.players[OPPONENT_SIDE];
-  matchLabelEl.textContent = `${match.id} • ${match.turn === PLAYER_SIDE ? 'Your turn' : 'Opponent turn'}`;
+  matchLabelEl.textContent = `${match.id} • Turn ${match.turnNumber} • Phase ${match.phase} (${getPhaseLabel(match.phase)})`;
   playerSummaryEl.textContent = `Player — hand: ${player.hand.length}, board: ${player.board.length}`;
-  opponentSummaryEl.textContent = `Opponent — hand: ${opponent.hand.length}, board: ${opponent.board.length}`;
+  opponentSummaryEl.textContent = `Opponent — hand: ${opponent.hand.length}, board: ${opponent.board.length}${match.phase === 1 ? `, ready: ${match.opponentIsReady ? 'yes' : 'no'}` : ''}`;
 }
 
 function updateQueueSummary(status) {
@@ -206,8 +219,8 @@ function updateQueueSummary(status) {
 
 function renderMatch() {
   if (!match) {
-    statusEl.textContent = 'Click matchmaking to create a 1v1 turn test.';
-    setTurnLockState();
+    statusEl.textContent = 'Click matchmaking to create a 1v1 phase test.';
+    setReadyLockState();
     updateSummaryPanels();
     return;
   }
@@ -243,16 +256,18 @@ function renderMatch() {
 
   if (shouldAnimateInitialDeal) lastAnimatedMatchId = match.id;
 
-  statusEl.textContent = match.turn === PLAYER_SIDE
-    ? 'Your turn. Drag cards from your hand to your board, then click End Turn.'
-    : 'Opponent turn. Waiting for remote action…';
+  statusEl.textContent = match.phase === 1
+    ? (match.youAreReady
+      ? 'You are readied up. Waiting for opponent to ready…'
+      : 'Decision phase: drag cards from hand to board, then click Ready Up.')
+    : 'Commit phase resolving automatically…';
 
-  setTurnLockState();
+  setReadyLockState();
   updateSummaryPanels();
 }
 
 async function syncMatchStateAfterCardCommit() {
-  if (!match || match.turn !== PLAYER_SIDE || stateSyncInFlight) return;
+  if (!match || match.phase !== 1 || match.youAreReady || stateSyncInFlight) return;
 
   const nextState = syncPlayerStateFromClient();
   stateSyncInFlight = true;
@@ -284,7 +299,7 @@ function applyMatchmakingStatus(status) {
       match = nextMatch;
       renderMatch();
     } else {
-      setTurnLockState();
+      setReadyLockState();
       updateSummaryPanels();
     }
     return;
@@ -301,7 +316,7 @@ function applyMatchmakingStatus(status) {
     statusEl.textContent = 'Looking for match... Waiting for another player to queue.';
     matchmakingBtn.disabled = true;
     matchmakingBtn.textContent = 'Searching...';
-    setTurnLockState();
+    setReadyLockState();
     updateSummaryPanels();
     return;
   }
@@ -337,13 +352,13 @@ function beginMatchmaking() {
     });
 }
 
-function endTurn() {
-  if (!match || match.turn !== PLAYER_SIDE) return;
+function readyUp() {
+  if (!match || match.phase !== 1 || match.youAreReady) return;
 
   const nextState = syncPlayerStateFromClient();
-  endTurnBtn.disabled = true;
+  readyBtn.disabled = true;
 
-  postJson('/api/phase-manager/match/end-turn', {
+  postJson('/api/phase-manager/match/ready', {
     playerId,
     hand: nextState.hand,
     board: nextState.board,
@@ -352,8 +367,8 @@ function endTurn() {
       applyMatchmakingStatus(status);
     })
     .catch((error) => {
-      statusEl.textContent = `End turn error: ${error.message}`;
-      setTurnLockState();
+      statusEl.textContent = `Ready up error: ${error.message}`;
+      setReadyLockState();
     });
 }
 
@@ -382,7 +397,7 @@ function resetMatch() {
 }
 
 matchmakingBtn.addEventListener('click', beginMatchmaking);
-endTurnBtn.addEventListener('click', endTurn);
+readyBtn.addEventListener('click', readyUp);
 resetBtn.addEventListener('click', resetMatch);
 
 renderMatch();

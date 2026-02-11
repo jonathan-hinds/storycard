@@ -142,7 +142,10 @@ function serializeMatchForPlayer(match, playerId) {
 
   return {
     id: match.id,
-    turn: match.turnPlayerId === playerId ? 'player' : 'opponent',
+    turnNumber: match.turnNumber,
+    phase: match.phase,
+    youAreReady: match.readyPlayers.has(playerId),
+    opponentIsReady: opponentId ? match.readyPlayers.has(opponentId) : false,
     players: {
       player: {
         hand: [...playerState.hand],
@@ -154,6 +157,28 @@ function serializeMatchForPlayer(match, playerId) {
       },
     },
   };
+}
+
+function advanceMatchToDecisionPhase(match) {
+  match.turnNumber += 1;
+  match.phase = 1;
+  match.readyPlayers.clear();
+}
+
+function resolveCommitPhase(match) {
+  match.phase = 2;
+  // Placeholder for future action resolution logic.
+  // For now the commit phase resolves immediately and starts the next turn.
+  advanceMatchToDecisionPhase(match);
+}
+
+function readyPlayerInMatch(match, playerId) {
+  match.readyPlayers.add(playerId);
+
+  const allPlayersReady = match.players.every((id) => match.readyPlayers.has(id));
+  if (!allPlayersReady) return;
+
+  resolveCommitPhase(match);
 }
 
 function validatePhaseTurnPayload(payload, allCards) {
@@ -208,7 +233,6 @@ function getPlayerPhaseStatus(playerId) {
       status: 'matched',
       matchId: match.id,
       opponentId,
-      isYourTurn: match.turnPlayerId === playerId,
       queueCount: phaseQueue.length,
       matchState: serializeMatchForPlayer(match, playerId),
     };
@@ -245,7 +269,9 @@ function findPhaseMatch(playerId) {
       id: matchId,
       players,
       cardsByPlayer,
-      turnPlayerId: opponentId,
+      turnNumber: 1,
+      phase: 1,
+      readyPlayers: new Set(),
       createdAt: Date.now(),
     };
     phaseMatches.set(matchId, match);
@@ -408,7 +434,7 @@ async function handleApi(req, res, pathname) {
     return true;
   }
 
-  if (req.method === 'POST' && pathname === '/api/phase-manager/match/end-turn') {
+  if (req.method === 'POST' && pathname === '/api/phase-manager/match/ready') {
     let body = {};
     try {
       body = await readRequestJson(req);
@@ -433,8 +459,13 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    if (match.turnPlayerId !== body.playerId) {
-      sendJson(res, 409, { error: 'cannot end turn when it is not your turn' });
+    if (match.phase !== 1) {
+      sendJson(res, 409, { error: 'cannot ready up outside decision phase' });
+      return true;
+    }
+
+    if (match.readyPlayers.has(body.playerId)) {
+      sendJson(res, 409, { error: 'player is already readied up for this phase' });
       return true;
     }
 
@@ -452,10 +483,7 @@ async function handleApi(req, res, pathname) {
 
     playerState.hand = validated.hand;
     playerState.board = validated.board;
-    const nextPlayerId = match.players.find((id) => id !== body.playerId);
-    if (nextPlayerId) {
-      match.turnPlayerId = nextPlayerId;
-    }
+    readyPlayerInMatch(match, body.playerId);
 
     sendJson(res, 200, getPlayerPhaseStatus(body.playerId));
     return true;
@@ -486,8 +514,13 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    if (match.turnPlayerId !== body.playerId) {
-      sendJson(res, 409, { error: 'cannot sync state when it is not your turn' });
+    if (match.phase !== 1) {
+      sendJson(res, 409, { error: 'cannot sync state outside decision phase' });
+      return true;
+    }
+
+    if (match.readyPlayers.has(body.playerId)) {
+      sendJson(res, 409, { error: 'cannot sync state after you are readied up' });
       return true;
     }
 

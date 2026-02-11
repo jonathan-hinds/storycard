@@ -5,7 +5,7 @@
 This project is an **isolated sandbox for game-flow logic** built on top of the card module.
 Use it to develop and test concepts such as:
 
-- turn order
+- turn cadence across multiple phases
 - upkeep and maintenance steps
 - phase sequencing
 - targeting and attack resolution
@@ -19,4 +19,4 @@ Use it to develop and test concepts such as:
 
 ## Current state
 
-The page currently boots the existing card interaction template through `CardGameClient` so phase and turn logic can be added incrementally in this project without coupling it to the original single-card page.
+The page currently boots the existing card interaction template through `CardGameClient` so multiplayer phase logic (decision and commit phases) can be added incrementally in this project without coupling it to the original single-card page.
