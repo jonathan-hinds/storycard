@@ -96,22 +96,24 @@ function buildTemplateFromMatch(currentMatch) {
   const initialCards = [];
 
   currentMatch.players[OPPONENT_SIDE].board.forEach((card, index) => {
+    const slotIndex = Number.isInteger(card.slotIndex) ? card.slotIndex : index;
     initialCards.push({
       id: card.id,
       color: card.color,
       owner: OPPONENT_SIDE,
       zone: CARD_ZONE_TYPES.BOARD,
-      slotIndex: index,
+      slotIndex,
     });
   });
 
   currentMatch.players[PLAYER_SIDE].board.forEach((card, index) => {
+    const relativeSlotIndex = Number.isInteger(card.slotIndex) ? card.slotIndex : index;
     initialCards.push({
       id: card.id,
       color: card.color,
       owner: PLAYER_SIDE,
       zone: CARD_ZONE_TYPES.BOARD,
-      slotIndex: BOARD_SLOTS_PER_SIDE + index,
+      slotIndex: BOARD_SLOTS_PER_SIDE + relativeSlotIndex,
     });
   });
 
@@ -155,7 +157,7 @@ function syncPlayerStateFromClient() {
   const board = allPlayerCards
     .filter((card) => card.zone === CARD_ZONE_TYPES.BOARD)
     .sort((a, b) => a.slotIndex - b.slotIndex)
-    .map(({ id, color }) => ({ id, color }));
+    .map(({ id, color, slotIndex }) => ({ id, color, slotIndex: slotIndex - BOARD_SLOTS_PER_SIDE }));
 
   return { hand, board };
 }

@@ -241,9 +241,28 @@ function validatePhaseTurnPayload(payload, playerState) {
     }
   }
 
+  const usedBoardSlots = new Set();
+  const normalizedBoard = [];
+  for (const boardCard of board) {
+    if (!Number.isInteger(boardCard.slotIndex)) {
+      return { error: 'board card entries must include an integer slotIndex' };
+    }
+    if (boardCard.slotIndex < 0 || boardCard.slotIndex >= PHASE_BOARD_SLOTS_PER_SIDE) {
+      return { error: `board slotIndex must be between 0 and ${PHASE_BOARD_SLOTS_PER_SIDE - 1}` };
+    }
+    if (usedBoardSlots.has(boardCard.slotIndex)) {
+      return { error: 'board card slotIndex values must be unique' };
+    }
+    usedBoardSlots.add(boardCard.slotIndex);
+    normalizedBoard.push({
+      ...knownCards.get(boardCard.id),
+      slotIndex: boardCard.slotIndex,
+    });
+  }
+
   return {
     hand: hand.map((card) => knownCards.get(card.id)),
-    board: board.map((card) => knownCards.get(card.id)),
+    board: normalizedBoard,
   };
 }
 
