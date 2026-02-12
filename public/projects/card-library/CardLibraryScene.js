@@ -319,14 +319,18 @@ export class CardLibraryScene {
       this.previewStartedAt = performance.now();
       this.previewOriginPose.position.copy(target.position);
       this.previewOriginPose.rotation.copy(target.rotation);
-      this.previewPose.position.set(
-        PREVIEW_BASE_POSITION.x,
-        PREVIEW_BASE_POSITION.y,
-        PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
-      );
+      this.previewPose.position.copy(this.getPreviewAnchorPosition());
       this.previewPose.rotation.set(this.previewTuning.rotationX, PREVIEW_ROTATION_Y, PREVIEW_ROTATION_Z);
       beginPreviewTransition(this, this.previewStartedAt);
     }, PREVIEW_HOLD_DELAY_MS);
+  }
+
+  getPreviewAnchorPosition() {
+    return new THREE.Vector3(
+      this.camera.position.x + PREVIEW_BASE_POSITION.x,
+      this.camera.position.y + PREVIEW_BASE_POSITION.y,
+      PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+    );
   }
 
   onPointerMove(event) {
@@ -450,6 +454,7 @@ export class CardLibraryScene {
       );
 
       if (root === this.previewCard) {
+        this.previewPose.position.copy(this.getPreviewAnchorPosition());
         const { position, rotation, transitionCompleted } = getPreviewPose({
           time: now,
           mode: this.previewTransition.direction === 'fromPreview' ? 'preview-return' : 'preview',
