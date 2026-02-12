@@ -63,24 +63,6 @@
       <section class="cards-list-wrap" aria-live="polite">
         <h2>Card Library</h2>
         <p class="cards-library-caption">Browse cards in the Card Library module (built on top of the core Card module) for game-building workflows.</p>
-        <div class="grid-tuning-controls" aria-label="Card grid tuning controls">
-          <h3>Grid Tuning Sliders</h3>
-
-          <label for="grid-cards-per-row">Cards per row <span data-grid-value="cardsPerRow"></span></label>
-          <input id="grid-cards-per-row" data-grid-slider="cardsPerRow" type="range" min="1" max="10" step="1" />
-
-          <label for="grid-card-size">Overall card size <span data-grid-value="cardScale"></span></label>
-          <input id="grid-card-size" data-grid-slider="cardScale" type="range" min="0.5" max="1.8" step="0.05" />
-
-          <label for="grid-row-padding">Row padding <span data-grid-value="rowPadding"></span></label>
-          <input id="grid-row-padding" data-grid-slider="rowPadding" type="range" min="0" max="2.5" step="0.05" />
-
-          <label for="grid-column-padding">Column padding <span data-grid-value="columnPadding"></span></label>
-          <input id="grid-column-padding" data-grid-slider="columnPadding" type="range" min="0" max="2.5" step="0.05" />
-
-          <label for="grid-margin">Grid margin <span data-grid-value="gridMargin"></span></label>
-          <input id="grid-margin" data-grid-slider="gridMargin" type="range" min="0" max="3" step="0.05" />
-        </div>
         <div id="card-list" class="cards-list">
           <div class="cards-library-stage-wrap">
             <canvas id="card-library-canvas" class="cards-library-canvas" aria-label="3D card library scene"></canvas>
