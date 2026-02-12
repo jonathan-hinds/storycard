@@ -315,36 +315,41 @@ function serveStatic(req, res, pathname) {
   const filePath = pathname === '/' ? '/index.html' : pathname;
   const safePath = path.normalize(filePath).replace(/^\.\.(\/|\\|$)/, '');
 
-  const fullPath = path.join(__dirname, safePath.startsWith('/') ? safePath.slice(1) : safePath);
-  const isInsideRoot = fullPath.startsWith(__dirname);
-  if (!isInsideRoot) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
-  }
+  const pathCandidates = [
+    path.join(__dirname, safePath.startsWith('/') ? safePath.slice(1) : safePath),
+    path.join(__dirname, safePath.startsWith('/') ? `${safePath.slice(1)}/index.html` : `${safePath}/index.html`),
+    path.join(PUBLIC_DIR, safePath.startsWith('/') ? safePath.slice(1) : safePath),
+    path.join(PUBLIC_DIR, safePath.startsWith('/') ? `${safePath.slice(1)}/index.html` : `${safePath}/index.html`),
+  ];
 
-  const ext = path.extname(fullPath);
-  const mimeType = MIME_TYPES[ext] || 'text/plain; charset=utf-8';
-
-  fs.readFile(fullPath, (error, content) => {
-    if (!error) {
-      res.writeHead(200, { 'Content-Type': mimeType });
-      res.end(content);
+  const tryReadCandidate = (index = 0) => {
+    const candidatePath = pathCandidates[index];
+    if (!candidatePath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
       return;
     }
 
-    const fallbackPath = path.join(PUBLIC_DIR, filePath === '/' ? 'index.html' : filePath);
-    fs.readFile(fallbackPath, (fallbackError, fallbackContent) => {
-      if (fallbackError) {
-        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Not found');
+    const isInsideRoot = candidatePath.startsWith(__dirname);
+    if (!isInsideRoot) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Forbidden');
+      return;
+    }
+
+    fs.readFile(candidatePath, (error, content) => {
+      if (error) {
+        tryReadCandidate(index + 1);
         return;
       }
-      const fallbackExt = path.extname(fallbackPath);
-      res.writeHead(200, { 'Content-Type': MIME_TYPES[fallbackExt] || 'text/plain; charset=utf-8' });
-      res.end(fallbackContent);
+
+      const ext = path.extname(candidatePath);
+      res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'text/plain; charset=utf-8' });
+      res.end(content);
     });
-  });
+  };
+
+  tryReadCandidate();
 }
 
 const server = http.createServer(async (req, res) => {
