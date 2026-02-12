@@ -6,8 +6,6 @@ const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
-const gridTuningFields = document.getElementById('cards-grid-tuning-fields');
-const gridTuningResetButton = document.getElementById('cards-grid-tuning-reset');
 
 const CARD_LIBRARY_PREVIEW_DEFAULTS = {
   position: {
@@ -18,30 +16,6 @@ const CARD_LIBRARY_PREVIEW_DEFAULTS = {
     x: 1.15,
   },
 };
-
-const GRID_TUNING_STORAGE_KEY = 'storycard.cards.gridTuning.v1';
-const GRID_TUNING_DEFAULTS = Object.freeze({
-  columns: 5,
-  cardScale: 1,
-  columnGap: 1,
-  rowGap: 1,
-  marginX: 0,
-  marginY: 0,
-  visibleRows: 2,
-  cameraDistanceOffset: 0,
-  animationIntensity: 1,
-});
-const GRID_TUNING_CONTROL_CONFIG = [
-  { key: 'columns', label: 'Cards per row', min: 1, max: 8, step: 1, format: (value) => `${value}` },
-  { key: 'cardScale', label: 'Card size', min: 0.65, max: 1.8, step: 0.01, format: (value) => `${value.toFixed(2)}x` },
-  { key: 'columnGap', label: 'Column spacing', min: 0.8, max: 2.2, step: 0.01, format: (value) => `${value.toFixed(2)}x` },
-  { key: 'rowGap', label: 'Row spacing', min: 0.8, max: 2.4, step: 0.01, format: (value) => `${value.toFixed(2)}x` },
-  { key: 'marginX', label: 'Grid side margin', min: -1.2, max: 4, step: 0.05, format: (value) => value.toFixed(2) },
-  { key: 'marginY', label: 'Grid top/bottom margin', min: -1.2, max: 4, step: 0.05, format: (value) => value.toFixed(2) },
-  { key: 'visibleRows', label: 'Visible rows', min: 1, max: 4, step: 1, format: (value) => `${value}` },
-  { key: 'cameraDistanceOffset', label: 'Camera distance', min: -3, max: 4, step: 0.05, format: (value) => value.toFixed(2) },
-  { key: 'animationIntensity', label: 'Card motion', min: 0, max: 1.6, step: 0.01, format: (value) => `${value.toFixed(2)}x` },
-];
 
 const CARD_LIBRARY_COMPACT_BREAKPOINT_PX = 900;
 const PREVIEW_Z_CAMERA_PADDING = 1.2;
@@ -61,80 +35,6 @@ const PREVIEW_CLOSENESS_BY_VIEWPORT = Object.freeze({
 });
 
 let cardLibraryScene;
-const gridTuningState = loadGridTuning();
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function sanitizeGridTuning(value = {}) {
-  const tuning = {};
-  GRID_TUNING_CONTROL_CONFIG.forEach((control) => {
-    const nextValue = Number(value[control.key]);
-    const fallback = GRID_TUNING_DEFAULTS[control.key];
-    const safe = Number.isFinite(nextValue) ? nextValue : fallback;
-    const snapped = control.step >= 1 ? Math.round(safe) : safe;
-    tuning[control.key] = clamp(snapped, control.min, control.max);
-  });
-  return tuning;
-}
-
-function loadGridTuning() {
-  try {
-    const raw = window.localStorage.getItem(GRID_TUNING_STORAGE_KEY);
-    if (!raw) return { ...GRID_TUNING_DEFAULTS };
-    return sanitizeGridTuning({ ...GRID_TUNING_DEFAULTS, ...JSON.parse(raw) });
-  } catch {
-    return { ...GRID_TUNING_DEFAULTS };
-  }
-}
-
-function saveGridTuning() {
-  window.localStorage.setItem(GRID_TUNING_STORAGE_KEY, JSON.stringify(gridTuningState));
-}
-
-function applyGridTuning() {
-  cardLibraryScene.setGridTuning(gridTuningState);
-}
-
-function updateGridControlOutput(controlKey) {
-  const control = GRID_TUNING_CONTROL_CONFIG.find((item) => item.key === controlKey);
-  if (!control) return;
-  const output = document.querySelector(`[data-grid-output="${controlKey}"]`);
-  if (!output) return;
-  output.textContent = control.format(gridTuningState[controlKey]);
-}
-
-function renderGridTuningControls() {
-  gridTuningFields.innerHTML = '';
-  GRID_TUNING_CONTROL_CONFIG.forEach((control) => {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'cards-grid-tuning-field';
-
-    const label = document.createElement('label');
-    label.setAttribute('for', `grid-tuning-${control.key}`);
-    label.innerHTML = `<span>${control.label}</span><output data-grid-output="${control.key}">${control.format(gridTuningState[control.key])}</output>`;
-
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.id = `grid-tuning-${control.key}`;
-    input.min = String(control.min);
-    input.max = String(control.max);
-    input.step = String(control.step);
-    input.value = String(gridTuningState[control.key]);
-
-    input.addEventListener('input', (event) => {
-      const value = Number(event.target.value);
-      gridTuningState[control.key] = control.step >= 1 ? Math.round(value) : value;
-      updateGridControlOutput(control.key);
-      applyGridTuning();
-      saveGridTuning();
-    });
-
-    wrapper.append(label, input);
-    gridTuningFields.append(wrapper);
-  });
-}
 
 function getDynamicPreviewZMax(baseMax) {
   const cameraDistance = cardLibraryScene?.camera?.position?.z;
@@ -178,7 +78,6 @@ cardLibraryScene = new CardLibraryScene({
   scrollContainer: cardList,
   previewRotationOffset: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
   previewPositionOffset: getResponsivePreviewPosition(),
-  gridTuning: gridTuningState,
 });
 
 function applyResponsivePreviewPosition() {
@@ -207,7 +106,6 @@ function renderCards(cards) {
   cardList.append(cardLibraryStageWrap);
   cardLibraryCanvas.hidden = false;
   cardLibraryScene.setCards(cards);
-  applyGridTuning();
 }
 
 function setStatus(message, isError = false) {
@@ -239,13 +137,6 @@ async function fetchCards() {
     setStatus(error.message, true);
   }
 }
-
-gridTuningResetButton.addEventListener('click', () => {
-  Object.assign(gridTuningState, GRID_TUNING_DEFAULTS);
-  renderGridTuningControls();
-  applyGridTuning();
-  saveGridTuning();
-});
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -280,7 +171,6 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-renderGridTuningControls();
 fetchCards();
 window.addEventListener('resize', onWindowResize);
 

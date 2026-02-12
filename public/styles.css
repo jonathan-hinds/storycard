@@ -371,40 +371,6 @@ button {
 }
 
 
-.cards-grid-tuning-caption {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #9fb0d3;
-}
-
-.cards-grid-tuning-fields {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.cards-grid-tuning-field {
-  display: grid;
-  gap: 0.2rem;
-}
-
-.cards-grid-tuning-field label {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  font-size: 0.8rem;
-}
-
-.cards-grid-tuning-field output {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #f0f5ff;
-}
-
-.cards-grid-tuning .secondary-action {
-  margin-top: 0.2rem;
-}
-
-
-
 
 .cards-list {
   min-height: 560px;
