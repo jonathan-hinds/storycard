@@ -10,6 +10,7 @@ const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
 const cardLibraryScene = new CardLibraryScene({
   canvas: cardLibraryCanvas,
   scrollContainer: cardList,
+  previewRotationOffset: { x: 1.08 },
 });
 
 function renderCards(cards) {

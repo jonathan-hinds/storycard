@@ -23,8 +23,11 @@ const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
 const HOLD_CANCEL_DISTANCE_PX = 10;
 const DRAG_START_DISTANCE_PX = 6;
-const PREVIEW_ROTATION_Y = 0;
-const PREVIEW_ROTATION_Z = 0;
+const DEFAULT_PREVIEW_ROTATION_OFFSET = Object.freeze({
+  x: 0,
+  y: 0,
+  z: 0,
+});
 
 const TYPE_COLORS = {
   assassin: 0x7f5af0,
@@ -115,7 +118,7 @@ function createCardLabelTexture(card) {
 }
 
 export class CardLibraryScene {
-  constructor({ canvas, scrollContainer }) {
+  constructor({ canvas, scrollContainer, previewRotationOffset = DEFAULT_PREVIEW_ROTATION_OFFSET }) {
     this.canvas = canvas;
     this.scrollContainer = scrollContainer;
 
@@ -144,6 +147,11 @@ export class CardLibraryScene {
     this.previewOriginPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
     this.previewTransition = { isActive: false, direction: 'toPreview', startedAt: 0, durationMs: 0 };
     this.previewStartedAt = 0;
+    this.previewRotationOffset = {
+      x: Number.isFinite(previewRotationOffset?.x) ? previewRotationOffset.x : DEFAULT_PREVIEW_ROTATION_OFFSET.x,
+      y: Number.isFinite(previewRotationOffset?.y) ? previewRotationOffset.y : DEFAULT_PREVIEW_ROTATION_OFFSET.y,
+      z: Number.isFinite(previewRotationOffset?.z) ? previewRotationOffset.z : DEFAULT_PREVIEW_ROTATION_OFFSET.z,
+    };
     this.isDraggingScroll = false;
     this.scrollY = 0;
     this.scrollTargetY = 0;
@@ -320,7 +328,11 @@ export class CardLibraryScene {
       this.previewOriginPose.position.copy(target.position);
       this.previewOriginPose.rotation.copy(target.rotation);
       this.previewPose.position.copy(this.getPreviewAnchorPosition());
-      this.previewPose.rotation.set(this.previewTuning.rotationX, PREVIEW_ROTATION_Y, PREVIEW_ROTATION_Z);
+      this.previewPose.rotation.set(
+        this.previewTuning.rotationX + this.previewRotationOffset.x,
+        this.previewRotationOffset.y,
+        this.previewRotationOffset.z,
+      );
       beginPreviewTransition(this, this.previewStartedAt);
     }, PREVIEW_HOLD_DELAY_MS);
   }
