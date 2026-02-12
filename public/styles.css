@@ -461,3 +461,49 @@ button {
     min-height: 320px;
   }
 }
+
+.tools-layout {
+  grid-template-columns: 360px 1fr;
+}
+
+.tools-controls {
+  overflow-y: auto;
+  max-height: calc(100vh - 60px);
+}
+
+.tools-slider-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tools-group h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.tools-slider-row {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: #d2dbf2;
+}
+
+.tools-slider-value {
+  font-size: 0.82rem;
+  color: #9ab0d8;
+}
+
+.tools-slider-row input[type='range'] {
+  width: 100%;
+  padding: 0;
+}
+
+@media (max-width: 900px) {
+  .tools-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tools-controls {
+    max-height: none;
+  }
+}
