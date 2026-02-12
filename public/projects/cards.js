@@ -6,19 +6,11 @@ const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
-const previewOffsetXInput = document.getElementById('preview-offset-x');
-const previewOffsetYInput = document.getElementById('preview-offset-y');
-const previewClosenessInput = document.getElementById('preview-closeness');
-const previewOffsetXValue = document.getElementById('preview-offset-x-value');
-const previewOffsetYValue = document.getElementById('preview-offset-y-value');
-const previewClosenessValue = document.getElementById('preview-closeness-value');
 
 const CARD_LIBRARY_PREVIEW_DEFAULTS = {
   position: {
     x: 0,
-    y: -1.35,
-    z: 4.3,
-    desktopZ: 3.75,
+    y: -1.65,
   },
   rotation: {
     x: 1.15,
@@ -37,7 +29,10 @@ const PREVIEW_CLOSENESS_RANGE = Object.freeze({
   max: 100,
 });
 
-let previewCloseness = Number.parseFloat(previewClosenessInput.value);
+const PREVIEW_CLOSENESS_BY_VIEWPORT = Object.freeze({
+  desktop: 28,
+  mobile: 100,
+});
 
 let cardLibraryScene;
 
@@ -57,15 +52,6 @@ function getPreviewZBounds() {
   };
 }
 
-function applyPreviewZBounds() {
-  const bounds = getPreviewZBounds();
-  previewCloseness = Math.min(PREVIEW_CLOSENESS_RANGE.max, Math.max(PREVIEW_CLOSENESS_RANGE.min, previewCloseness));
-  previewClosenessInput.min = String(PREVIEW_CLOSENESS_RANGE.min);
-  previewClosenessInput.max = String(PREVIEW_CLOSENESS_RANGE.max);
-  previewClosenessInput.value = String(previewCloseness);
-  return bounds;
-}
-
 function getPreviewOffsetZFromCloseness(closeness, bounds) {
   const span = bounds.max - bounds.min;
   if (span <= 0) return bounds.min;
@@ -76,12 +62,14 @@ function getPreviewOffsetZFromCloseness(closeness, bounds) {
 
 function getResponsivePreviewPosition() {
   const isCompactViewport = window.innerWidth <= CARD_LIBRARY_COMPACT_BREAKPOINT_PX;
+  const bounds = getPreviewZBounds();
+  const closeness = isCompactViewport
+    ? PREVIEW_CLOSENESS_BY_VIEWPORT.mobile
+    : PREVIEW_CLOSENESS_BY_VIEWPORT.desktop;
   return {
     x: CARD_LIBRARY_PREVIEW_DEFAULTS.position.x,
     y: CARD_LIBRARY_PREVIEW_DEFAULTS.position.y,
-    z: isCompactViewport
-      ? CARD_LIBRARY_PREVIEW_DEFAULTS.position.z
-      : CARD_LIBRARY_PREVIEW_DEFAULTS.position.desktopZ,
+    z: getPreviewOffsetZFromCloseness(closeness, bounds),
   };
 }
 
@@ -92,34 +80,8 @@ cardLibraryScene = new CardLibraryScene({
   previewPositionOffset: getResponsivePreviewPosition(),
 });
 
-function syncPreviewPositionUI(position) {
-  previewOffsetXInput.value = String(position.x);
-  previewOffsetYInput.value = String(position.y);
-  const bounds = getPreviewZBounds();
-  const normalizedDepth = (position.z - bounds.min) / Math.max(0.0001, bounds.max - bounds.min);
-  previewCloseness = Math.round(
-    PREVIEW_CLOSENESS_RANGE.min + (Math.min(1, Math.max(0, normalizedDepth))
-      * (PREVIEW_CLOSENESS_RANGE.max - PREVIEW_CLOSENESS_RANGE.min)),
-  );
-  previewClosenessInput.value = String(previewCloseness);
-  previewOffsetXValue.textContent = position.x.toFixed(2);
-  previewOffsetYValue.textContent = position.y.toFixed(2);
-  previewClosenessValue.textContent = `${previewCloseness.toFixed(0)}%`;
-}
-
-function applyPreviewPositionFromControls() {
-  previewCloseness = Number.parseFloat(previewClosenessInput.value);
-  previewClosenessValue.textContent = `${previewCloseness.toFixed(0)}%`;
-  const bounds = getPreviewZBounds();
-  const position = {
-    x: Number.parseFloat(previewOffsetXInput.value),
-    y: Number.parseFloat(previewOffsetYInput.value),
-    z: getPreviewOffsetZFromCloseness(previewCloseness, bounds),
-  };
-
-  previewOffsetXValue.textContent = position.x.toFixed(2);
-  previewOffsetYValue.textContent = position.y.toFixed(2);
-
+function applyResponsivePreviewPosition() {
+  const position = getResponsivePreviewPosition();
   cardLibraryScene.setPreviewDebugOffsets({
     position,
     rotation: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
@@ -127,16 +89,10 @@ function applyPreviewPositionFromControls() {
 }
 
 function onWindowResize() {
-  applyPreviewZBounds();
-  applyPreviewPositionFromControls();
+  applyResponsivePreviewPosition();
 }
 
-syncPreviewPositionUI(getResponsivePreviewPosition());
-applyPreviewZBounds();
-applyPreviewPositionFromControls();
-previewOffsetXInput.addEventListener('input', applyPreviewPositionFromControls);
-previewOffsetYInput.addEventListener('input', applyPreviewPositionFromControls);
-previewClosenessInput.addEventListener('input', applyPreviewPositionFromControls);
+applyResponsivePreviewPosition();
 
 function renderCards(cards) {
   if (!cards.length) {
@@ -219,9 +175,6 @@ fetchCards();
 window.addEventListener('resize', onWindowResize);
 
 window.addEventListener('beforeunload', () => {
-  previewOffsetXInput.removeEventListener('input', applyPreviewPositionFromControls);
-  previewOffsetYInput.removeEventListener('input', applyPreviewPositionFromControls);
-  previewClosenessInput.removeEventListener('input', applyPreviewPositionFromControls);
   window.removeEventListener('resize', onWindowResize);
   cardLibraryScene.destroy();
 });
