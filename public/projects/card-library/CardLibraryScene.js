@@ -17,6 +17,8 @@ const DEFAULT_COLUMN_PADDING = 0;
 const DEFAULT_ROW_PADDING = 0;
 const DEFAULT_GRID_MARGIN = 0;
 const DEFAULT_CARD_SCALE = 1;
+const CARD_SCALE_CONTROL_MIN = 0.5;
+const CARD_SCALE_CONTROL_MAX = 1.8;
 const MIN_ROW_HEIGHT_PX = 280;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
@@ -45,6 +47,16 @@ const DEFAULT_LAYOUT_TUNING = Object.freeze({
   gridMargin: DEFAULT_GRID_MARGIN,
   cardScale: DEFAULT_CARD_SCALE,
 });
+
+function getCardScaleFromControlValue(controlValue) {
+  const clampedValue = THREE.MathUtils.clamp(controlValue, CARD_SCALE_CONTROL_MIN, CARD_SCALE_CONTROL_MAX);
+  return CARD_SCALE_CONTROL_MIN + CARD_SCALE_CONTROL_MAX - clampedValue;
+}
+
+function getControlValueFromCardScale(cardScale) {
+  const clampedScale = THREE.MathUtils.clamp(cardScale, CARD_SCALE_CONTROL_MIN, CARD_SCALE_CONTROL_MAX);
+  return CARD_SCALE_CONTROL_MIN + CARD_SCALE_CONTROL_MAX - clampedScale;
+}
 
 const TYPE_COLORS = {
   assassin: 0x7f5af0,
@@ -232,7 +244,7 @@ export class CardLibraryScene {
       ? Math.max(0, layoutTuning.gridMargin)
       : DEFAULT_LAYOUT_TUNING.gridMargin;
     const cardScale = Number.isFinite(layoutTuning.cardScale)
-      ? THREE.MathUtils.clamp(layoutTuning.cardScale, 0.5, 1.8)
+      ? getCardScaleFromControlValue(layoutTuning.cardScale)
       : DEFAULT_LAYOUT_TUNING.cardScale;
 
     return {
@@ -260,7 +272,11 @@ export class CardLibraryScene {
   }
 
   setLayoutTuning(layoutTuning = {}) {
-    this.layout = this.normalizeLayoutTuning({ ...this.layout, ...layoutTuning });
+    const currentControlValues = {
+      ...this.layout,
+      cardScale: getControlValueFromCardScale(this.layout.cardScale),
+    };
+    this.layout = this.normalizeLayoutTuning({ ...currentControlValues, ...layoutTuning });
     this.reflowCardPositions();
     this.onResize();
   }
