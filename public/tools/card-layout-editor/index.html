@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cards API Docs</title>
+    <title>Card Layout Editor</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="cards-docs">
+  <body data-page="card-layout-editor">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -17,6 +17,7 @@
             <ul class="flyout">
               <li><a href="/public/dice/index.html">Dice</a></li>
               <li><a href="/public/projects/cards.html">Cards</a></li>
+              <li><a href="/public/card/single-card/index.html">Card / Single Card</a></li>
               <li><a href="/public/projects/phase-manager/index.html">Phase Manager</a></li>
             </ul>
           </li>
@@ -39,9 +40,18 @@
       </nav>
     </header>
 
-    <main class="placeholder-page">
-      <h1>Cards API Docs</h1>
-      <p>This page is intentionally blank for now.</p>
+    <main class="layout tools-layout">
+      <section class="controls tools-controls">
+        <h1>Card Layout Editor</h1>
+        <p>Tune the position and size of text elements on a default creature card.</p>
+        <div id="layout-controls" class="tools-slider-grid"></div>
+      </section>
+
+      <section id="card-layout-preview" class="cards-library-stage-wrap">
+        <canvas id="card-layout-editor-canvas" class="cards-library-canvas" aria-label="Card layout editor preview"></canvas>
+      </section>
     </main>
+
+    <script type="module" src="/public/tools/card-layout-editor/index.js"></script>
   </body>
 </html>

@@ -48,6 +48,14 @@ const DEFAULT_LAYOUT_TUNING = Object.freeze({
   cardScale: DEFAULT_CARD_SCALE,
 });
 const CARD_FACE_Z_EPSILON = 0.01;
+const CARD_LABEL_CANVAS_SIZE = 1024;
+export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
+  name: Object.freeze({ x: 512, y: 200, size: 74 }),
+  type: Object.freeze({ x: 512, y: 268, size: 40 }),
+  damage: Object.freeze({ x: 245, y: 757, size: 1 }),
+  health: Object.freeze({ x: 529, y: 757, size: 1 }),
+  speed: Object.freeze({ x: 813, y: 757, size: 1 }),
+});
 
 function getCardScaleFromControlValue(controlValue) {
   const clampedValue = THREE.MathUtils.clamp(controlValue, CARD_SCALE_CONTROL_MIN, CARD_SCALE_CONTROL_MAX);
@@ -87,13 +95,31 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
-function createCardLabelTexture(card) {
+function normalizeLabelElementLayout(layout, fallback) {
+  return {
+    x: Number.isFinite(layout?.x) ? layout.x : fallback.x,
+    y: Number.isFinite(layout?.y) ? layout.y : fallback.y,
+    size: Number.isFinite(layout?.size) ? Math.max(0.25, layout.size) : fallback.size,
+  };
+}
+
+function normalizeCardLabelLayout(cardLabelLayout = {}) {
+  return {
+    name: normalizeLabelElementLayout(cardLabelLayout.name, DEFAULT_CARD_LABEL_LAYOUT.name),
+    type: normalizeLabelElementLayout(cardLabelLayout.type, DEFAULT_CARD_LABEL_LAYOUT.type),
+    damage: normalizeLabelElementLayout(cardLabelLayout.damage, DEFAULT_CARD_LABEL_LAYOUT.damage),
+    health: normalizeLabelElementLayout(cardLabelLayout.health, DEFAULT_CARD_LABEL_LAYOUT.health),
+    speed: normalizeLabelElementLayout(cardLabelLayout.speed, DEFAULT_CARD_LABEL_LAYOUT.speed),
+  };
+}
+
+function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOUT) {
   const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 1024;
+  canvas.width = CARD_LABEL_CANVAS_SIZE;
+  canvas.height = CARD_LABEL_CANVAS_SIZE;
   const ctx = canvas.getContext('2d');
 
-  const gradient = ctx.createLinearGradient(0, 0, 1024, 1024);
+  const gradient = ctx.createLinearGradient(0, 0, CARD_LABEL_CANVAS_SIZE, CARD_LABEL_CANVAS_SIZE);
   gradient.addColorStop(0, '#1f2a44');
   gradient.addColorStop(1, '#0d1321');
   ctx.fillStyle = gradient;
@@ -107,37 +133,37 @@ function createCardLabelTexture(card) {
 
   ctx.fillStyle = '#dfe8ff';
   ctx.textAlign = 'center';
-  ctx.font = 'bold 74px Inter, system-ui, sans-serif';
-  ctx.fillText(card.name || 'Unnamed Card', 512, 200, 820);
+  ctx.font = `bold ${Math.round(cardLabelLayout.name.size)}px Inter, system-ui, sans-serif`;
+  ctx.fillText(card.name || 'Unnamed Card', cardLabelLayout.name.x, cardLabelLayout.name.y, 820);
 
   ctx.fillStyle = '#9ab0d8';
-  ctx.font = '600 40px Inter, system-ui, sans-serif';
-  ctx.fillText(card.type || 'unknown', 512, 268, 720);
+  ctx.font = `600 ${Math.round(cardLabelLayout.type.size)}px Inter, system-ui, sans-serif`;
+  ctx.fillText(card.type || 'unknown', cardLabelLayout.type.x, cardLabelLayout.type.y, 720);
 
   const stats = [
-    ['DMG', card.damage],
-    ['HP', card.health],
-    ['SPD', card.speed],
+    { key: 'damage', label: 'DMG', value: card.damage },
+    { key: 'health', label: 'HP', value: card.health },
+    { key: 'speed', label: 'SPD', value: card.speed },
   ];
 
-  stats.forEach(([label, value], index) => {
-    const width = 250;
-    const height = 250;
-    const gap = 34;
-    const left = 120 + (width + gap) * index;
-    const top = 632;
+  stats.forEach(({ key, label, value }) => {
+    const elementLayout = cardLabelLayout[key];
+    const width = 250 * elementLayout.size;
+    const height = 250 * elementLayout.size;
+    const left = elementLayout.x - width / 2;
+    const top = elementLayout.y - height / 2;
 
     ctx.fillStyle = 'rgba(18, 24, 40, 0.82)';
     drawRoundedRect(ctx, left, top, width, height, 24);
     ctx.fill();
 
     ctx.fillStyle = '#8ea4cf';
-    ctx.font = '600 36px Inter, system-ui, sans-serif';
-    ctx.fillText(label, left + width / 2, top + 88);
+    ctx.font = `600 ${Math.round(36 * elementLayout.size)}px Inter, system-ui, sans-serif`;
+    ctx.fillText(label, left + width / 2, top + (88 * elementLayout.size));
 
     ctx.fillStyle = '#f1f5ff';
-    ctx.font = '700 78px Inter, system-ui, sans-serif';
-    ctx.fillText(String(value ?? '-'), left + width / 2, top + 188);
+    ctx.font = `700 ${Math.round(78 * elementLayout.size)}px Inter, system-ui, sans-serif`;
+    ctx.fillText(String(value ?? '-'), left + width / 2, top + (188 * elementLayout.size));
   });
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -154,6 +180,7 @@ export class CardLibraryScene {
     previewRotationOffset = DEFAULT_PREVIEW_ROTATION_OFFSET,
     previewPositionOffset = DEFAULT_PREVIEW_POSITION_OFFSET,
     layoutTuning = DEFAULT_LAYOUT_TUNING,
+    cardLabelLayout = DEFAULT_CARD_LABEL_LAYOUT,
   }) {
     this.canvas = canvas;
     this.scrollContainer = scrollContainer;
@@ -201,6 +228,7 @@ export class CardLibraryScene {
     this.viewportWidth = 0;
     this.viewportHeight = 0;
     this.layout = this.normalizeLayoutTuning(layoutTuning);
+    this.cardLabelLayout = normalizeCardLabelLayout(cardLabelLayout);
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
@@ -229,6 +257,19 @@ export class CardLibraryScene {
 
     this.onResize();
     this.renderer.setAnimationLoop(() => this.render());
+  }
+
+  setCardLabelLayout(cardLabelLayout = {}) {
+    this.cardLabelLayout = normalizeCardLabelLayout({ ...this.cardLabelLayout, ...cardLabelLayout });
+    this.cardRoots.forEach((root) => {
+      const face = root.userData.face;
+      const card = root.userData.catalogCard;
+      if (!face || !card) return;
+      const previousTexture = face.material.map;
+      face.material.map = createCardLabelTexture(card, this.cardLabelLayout);
+      face.material.needsUpdate = true;
+      previousTexture?.dispose?.();
+    });
   }
 
   normalizeLayoutTuning(layoutTuning = {}) {
@@ -364,7 +405,7 @@ export class CardLibraryScene {
         color: colorForType(card.type),
       });
 
-      const texture = createCardLabelTexture(card);
+      const texture = createCardLabelTexture(card, this.cardLabelLayout);
       const face = new THREE.Mesh(
         new THREE.PlaneGeometry(cardWidth * 0.92, cardHeight * 0.92),
         new THREE.MeshStandardMaterial({
