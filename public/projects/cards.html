@@ -63,6 +63,17 @@
       <section class="cards-list-wrap" aria-live="polite">
         <h2>Card Library</h2>
         <p class="cards-library-caption">Browse cards in the Card Library module (built on top of the core Card module) for game-building workflows.</p>
+        <div class="preview-tuning-controls" aria-label="Card preview position tuning controls">
+          <h3>Preview position tuning</h3>
+          <label for="preview-offset-x">Left / right (<output id="preview-offset-x-value" for="preview-offset-x">0.00</output>)</label>
+          <input id="preview-offset-x" name="preview-offset-x" type="range" min="-3" max="3" step="0.05" value="0" />
+
+          <label for="preview-offset-y">Up / down (<output id="preview-offset-y-value" for="preview-offset-y">-1.35</output>)</label>
+          <input id="preview-offset-y" name="preview-offset-y" type="range" min="-4" max="2" step="0.05" value="-1.35" />
+
+          <label for="preview-offset-z">Forward / backward (<output id="preview-offset-z-value" for="preview-offset-z">3.75</output>)</label>
+          <input id="preview-offset-z" name="preview-offset-z" type="range" min="1.5" max="6" step="0.05" value="3.75" />
+        </div>
         <div id="card-list" class="cards-list">
           <div class="cards-library-stage-wrap">
             <canvas id="card-library-canvas" class="cards-library-canvas" aria-label="3D card library scene"></canvas>

@@ -357,13 +357,17 @@ button {
 .cards-list-wrap {
   padding: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(560px, 1fr);
+  grid-template-rows: auto auto auto minmax(560px, 1fr);
   gap: 0;
 }
 
 .cards-library-caption {
   margin: 0;
   color: #c6d0e7;
+}
+
+.cards-list-wrap .preview-tuning-controls {
+  margin: 0.75rem 1rem 0;
 }
 
 
@@ -450,7 +454,7 @@ button {
   }
 
   .cards-list-wrap {
-    grid-template-rows: auto auto minmax(320px, 1fr);
+    grid-template-rows: auto auto auto minmax(320px, 1fr);
   }
 
   .cards-library-canvas {

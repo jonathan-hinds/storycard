@@ -6,6 +6,12 @@ const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
+const previewOffsetXInput = document.getElementById('preview-offset-x');
+const previewOffsetYInput = document.getElementById('preview-offset-y');
+const previewOffsetZInput = document.getElementById('preview-offset-z');
+const previewOffsetXValue = document.getElementById('preview-offset-x-value');
+const previewOffsetYValue = document.getElementById('preview-offset-y-value');
+const previewOffsetZValue = document.getElementById('preview-offset-z-value');
 
 const CARD_LIBRARY_PREVIEW_DEFAULTS = {
   position: {
@@ -39,15 +45,37 @@ const cardLibraryScene = new CardLibraryScene({
   previewPositionOffset: getResponsivePreviewPosition(),
 });
 
-function syncResponsivePreviewOffsets() {
+function syncPreviewPositionUI(position) {
+  previewOffsetXInput.value = String(position.x);
+  previewOffsetYInput.value = String(position.y);
+  previewOffsetZInput.value = String(position.z);
+  previewOffsetXValue.textContent = position.x.toFixed(2);
+  previewOffsetYValue.textContent = position.y.toFixed(2);
+  previewOffsetZValue.textContent = position.z.toFixed(2);
+}
+
+function applyPreviewPositionFromControls() {
+  const position = {
+    x: Number.parseFloat(previewOffsetXInput.value),
+    y: Number.parseFloat(previewOffsetYInput.value),
+    z: Number.parseFloat(previewOffsetZInput.value),
+  };
+
+  previewOffsetXValue.textContent = position.x.toFixed(2);
+  previewOffsetYValue.textContent = position.y.toFixed(2);
+  previewOffsetZValue.textContent = position.z.toFixed(2);
+
   cardLibraryScene.setPreviewDebugOffsets({
-    position: getResponsivePreviewPosition(),
+    position,
     rotation: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
   });
 }
 
-syncResponsivePreviewOffsets();
-window.addEventListener('resize', syncResponsivePreviewOffsets);
+syncPreviewPositionUI(getResponsivePreviewPosition());
+applyPreviewPositionFromControls();
+previewOffsetXInput.addEventListener('input', applyPreviewPositionFromControls);
+previewOffsetYInput.addEventListener('input', applyPreviewPositionFromControls);
+previewOffsetZInput.addEventListener('input', applyPreviewPositionFromControls);
 
 function renderCards(cards) {
   if (!cards.length) {
@@ -129,6 +157,8 @@ form.addEventListener('submit', async (event) => {
 fetchCards();
 
 window.addEventListener('beforeunload', () => {
-  window.removeEventListener('resize', syncResponsivePreviewOffsets);
+  previewOffsetXInput.removeEventListener('input', applyPreviewPositionFromControls);
+  previewOffsetYInput.removeEventListener('input', applyPreviewPositionFromControls);
+  previewOffsetZInput.removeEventListener('input', applyPreviewPositionFromControls);
   cardLibraryScene.destroy();
 });
