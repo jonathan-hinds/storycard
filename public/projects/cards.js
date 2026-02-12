@@ -26,15 +26,29 @@ const CARD_LIBRARY_PREVIEW_DEFAULTS = {
 };
 
 const CARD_LIBRARY_COMPACT_BREAKPOINT_PX = 900;
+const PREVIEW_Z_CAMERA_PADDING = 1.2;
+const PREVIEW_Z_MAX_CAP = 14;
 const PREVIEW_Z_RANGE = Object.freeze({
   desktop: { min: 1.5, max: 6 },
   mobile: { min: -2, max: 6 },
 });
 
+let cardLibraryScene;
+
+function getDynamicPreviewZMax(baseMax) {
+  const cameraDistance = cardLibraryScene?.camera?.position?.z;
+  if (!Number.isFinite(cameraDistance)) return baseMax;
+  return Math.min(PREVIEW_Z_MAX_CAP, Math.max(baseMax, cameraDistance - PREVIEW_Z_CAMERA_PADDING));
+}
+
 function getPreviewZBounds() {
-  return window.innerWidth <= CARD_LIBRARY_COMPACT_BREAKPOINT_PX
+  const baseBounds = window.innerWidth <= CARD_LIBRARY_COMPACT_BREAKPOINT_PX
     ? PREVIEW_Z_RANGE.mobile
     : PREVIEW_Z_RANGE.desktop;
+  return {
+    ...baseBounds,
+    max: getDynamicPreviewZMax(baseBounds.max),
+  };
 }
 
 function applyPreviewZBounds() {
@@ -58,7 +72,7 @@ function getResponsivePreviewPosition() {
   };
 }
 
-const cardLibraryScene = new CardLibraryScene({
+cardLibraryScene = new CardLibraryScene({
   canvas: cardLibraryCanvas,
   scrollContainer: cardList,
   previewRotationOffset: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
