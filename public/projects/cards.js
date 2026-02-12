@@ -5,6 +5,7 @@ const status = document.getElementById('create-card-status');
 const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
+const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
 
 const cardLibraryScene = new CardLibraryScene({
   canvas: cardLibraryCanvas,
@@ -19,7 +20,8 @@ function renderCards(cards) {
   }
 
   cardList.innerHTML = '';
-  cardList.append(cardLibraryCanvas);
+  cardLibraryStageWrap.append(cardLibraryCanvas);
+  cardList.append(cardLibraryStageWrap);
   cardLibraryCanvas.hidden = false;
   cardLibraryScene.setCards(cards);
 }

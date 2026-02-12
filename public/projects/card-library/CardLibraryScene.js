@@ -15,6 +15,7 @@ const GRID_VERTICAL_PADDING_PX = 0;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
 const HOLD_DELAY_MS = 250;
+const HOLD_CANCEL_DISTANCE_PX = 10;
 const HOLD_SCALE = 1.52;
 const HOLD_Z_OFFSET = 2.2;
 
@@ -125,6 +126,8 @@ export class CardLibraryScene {
     this.cardRoots = [];
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
+    this.activePointerId = null;
+    this.pressPointer = { x: 0, y: 0 };
     this.pointerCard = null;
     this.holdTimeoutId = null;
     this.heldCard = null;
@@ -132,7 +135,7 @@ export class CardLibraryScene {
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
-    this.onPointerLeave = this.onPointerLeave.bind(this);
+    this.onPointerMove = this.onPointerMove.bind(this);
     this.onResize = this.onResize.bind(this);
 
     const hemiLight = new THREE.HemisphereLight(0xdce8ff, 0x1a1f2c, 1.1);
@@ -149,10 +152,10 @@ export class CardLibraryScene {
     fillLight.position.set(-5, -6, 4);
     this.scene.add(fillLight);
 
-    this.canvas.addEventListener('pointerdown', this.onPointerDown);
-    this.canvas.addEventListener('pointerup', this.onPointerUp);
-    this.canvas.addEventListener('pointercancel', this.onPointerUp);
-    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    this.scrollContainer.addEventListener('pointerdown', this.onPointerDown);
+    this.scrollContainer.addEventListener('pointermove', this.onPointerMove);
+    this.scrollContainer.addEventListener('pointerup', this.onPointerUp);
+    this.scrollContainer.addEventListener('pointercancel', this.onPointerUp);
     window.addEventListener('resize', this.onResize);
 
     this.onResize();
@@ -161,10 +164,10 @@ export class CardLibraryScene {
 
   destroy() {
     this.renderer.setAnimationLoop(null);
-    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
-    this.canvas.removeEventListener('pointerup', this.onPointerUp);
-    this.canvas.removeEventListener('pointercancel', this.onPointerUp);
-    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    this.scrollContainer.removeEventListener('pointerdown', this.onPointerDown);
+    this.scrollContainer.removeEventListener('pointermove', this.onPointerMove);
+    this.scrollContainer.removeEventListener('pointerup', this.onPointerUp);
+    this.scrollContainer.removeEventListener('pointercancel', this.onPointerUp);
     window.removeEventListener('resize', this.onResize);
     this.clearCards();
     this.renderer.dispose();
@@ -189,6 +192,7 @@ export class CardLibraryScene {
     this.cards.length = 0;
     this.cardRoots.length = 0;
     this.pointerCard = null;
+    this.activePointerId = null;
     this.heldCard = null;
   }
 
@@ -257,32 +261,68 @@ export class CardLibraryScene {
     while (node && !this.cardRoots.includes(node)) node = node.parent;
     return node;
   }
+  getPointerDistance(event) {
+    const dx = event.clientX - this.pressPointer.x;
+    const dy = event.clientY - this.pressPointer.y;
+    return Math.hypot(dx, dy);
+  }
+
+  clearHoldTimer() {
+    if (!this.holdTimeoutId) return;
+    window.clearTimeout(this.holdTimeoutId);
+    this.holdTimeoutId = null;
+  }
+
+  releasePointerCapture() {
+    if (this.activePointerId == null) return;
+    if (!this.scrollContainer.hasPointerCapture(this.activePointerId)) return;
+    this.scrollContainer.releasePointerCapture(this.activePointerId);
+  }
+
 
   onPointerDown(event) {
     if (event.button !== 0) return;
+    if (this.activePointerId != null) return;
+
+    this.activePointerId = event.pointerId;
+    this.pressPointer.x = event.clientX;
+    this.pressPointer.y = event.clientY;
+
     const target = this.pickCard(event);
     this.pointerCard = target;
     if (!target) return;
 
     this.holdTimeoutId = window.setTimeout(() => {
+      if (this.activePointerId !== event.pointerId || this.pointerCard !== target) return;
       this.heldCard = target;
       this.heldStartTime = performance.now();
       target.userData.targetHoldProgress = 1;
+      this.scrollContainer.setPointerCapture(event.pointerId);
     }, HOLD_DELAY_MS);
   }
 
-  onPointerUp() {
-    if (this.holdTimeoutId) {
-      clearTimeout(this.holdTimeoutId);
-      this.holdTimeoutId = null;
+  onPointerMove(event) {
+    if (this.activePointerId !== event.pointerId) return;
+
+    if (!this.heldCard && this.pointerCard && this.getPointerDistance(event) > HOLD_CANCEL_DISTANCE_PX) {
+      this.clearHoldTimer();
+      this.pointerCard = null;
     }
 
-    if (this.heldCard) this.heldCard.userData.targetHoldProgress = 0;
-    this.pointerCard = null;
+    if (this.heldCard) event.preventDefault();
   }
 
-  onPointerLeave() {
-    this.onPointerUp();
+  onPointerUp(event) {
+    if (this.activePointerId !== event.pointerId) return;
+
+    this.clearHoldTimer();
+
+    if (this.heldCard) this.heldCard.userData.targetHoldProgress = 0;
+    this.releasePointerCapture();
+
+    this.activePointerId = null;
+    this.pointerCard = null;
+    this.heldCard = null;
   }
 
   onResize() {
