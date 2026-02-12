@@ -371,6 +371,33 @@ button {
 }
 
 
+.grid-tuning-controls {
+  margin: 0.75rem 1rem 0;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.65rem;
+  border: 1px solid #3a465f;
+  border-radius: 0.55rem;
+  background: #1a2130;
+}
+
+.grid-tuning-controls h3 {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+}
+
+.grid-tuning-controls label {
+  font-size: 0.82rem;
+  color: #d2dbf2;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.grid-tuning-controls input[type='range'] {
+  width: 100%;
+  padding: 0;
+}
 
 .cards-list {
   min-height: 560px;

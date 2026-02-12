@@ -9,15 +9,14 @@ import {
   loadPreviewTuning,
 } from '/public/card-game/index.js';
 
-const GRID_COLUMNS = 5;
-const CARD_WIDTH = 1.8;
-const CARD_HEIGHT = 2.5;
+const DEFAULT_GRID_COLUMNS = 5;
+const BASE_CARD_WIDTH = 1.8;
+const BASE_CARD_HEIGHT = 2.5;
 const CARD_THICKNESS = 0.08;
-const GRID_X_SPACING = CARD_WIDTH;
-const GRID_Y_SPACING = CARD_HEIGHT;
-const GRID_LEFT_PADDING = 0;
-const GRID_TOP_PADDING = 0;
-const GRID_BOTTOM_PADDING = 0;
+const DEFAULT_COLUMN_PADDING = 0;
+const DEFAULT_ROW_PADDING = 0;
+const DEFAULT_GRID_MARGIN = 0;
+const DEFAULT_CARD_SCALE = 1;
 const MIN_ROW_HEIGHT_PX = 280;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
@@ -37,6 +36,14 @@ const DEFAULT_PREVIEW_POSITION_OFFSET = Object.freeze({
   x: 0,
   y: 0,
   z: 0,
+});
+
+const DEFAULT_LAYOUT_TUNING = Object.freeze({
+  cardsPerRow: DEFAULT_GRID_COLUMNS,
+  columnPadding: DEFAULT_COLUMN_PADDING,
+  rowPadding: DEFAULT_ROW_PADDING,
+  gridMargin: DEFAULT_GRID_MARGIN,
+  cardScale: DEFAULT_CARD_SCALE,
 });
 
 const TYPE_COLORS = {
@@ -133,6 +140,7 @@ export class CardLibraryScene {
     scrollContainer,
     previewRotationOffset = DEFAULT_PREVIEW_ROTATION_OFFSET,
     previewPositionOffset = DEFAULT_PREVIEW_POSITION_OFFSET,
+    layoutTuning = DEFAULT_LAYOUT_TUNING,
   }) {
     this.canvas = canvas;
     this.scrollContainer = scrollContainer;
@@ -179,6 +187,7 @@ export class CardLibraryScene {
     this.visibleRows = 1;
     this.viewportWidth = 0;
     this.viewportHeight = 0;
+    this.layout = this.normalizeLayoutTuning(layoutTuning);
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
@@ -207,6 +216,77 @@ export class CardLibraryScene {
 
     this.onResize();
     this.renderer.setAnimationLoop(() => this.render());
+  }
+
+  normalizeLayoutTuning(layoutTuning = {}) {
+    const cardsPerRow = Number.isFinite(layoutTuning.cardsPerRow)
+      ? Math.max(1, Math.round(layoutTuning.cardsPerRow))
+      : DEFAULT_LAYOUT_TUNING.cardsPerRow;
+    const columnPadding = Number.isFinite(layoutTuning.columnPadding)
+      ? Math.max(0, layoutTuning.columnPadding)
+      : DEFAULT_LAYOUT_TUNING.columnPadding;
+    const rowPadding = Number.isFinite(layoutTuning.rowPadding)
+      ? Math.max(0, layoutTuning.rowPadding)
+      : DEFAULT_LAYOUT_TUNING.rowPadding;
+    const gridMargin = Number.isFinite(layoutTuning.gridMargin)
+      ? Math.max(0, layoutTuning.gridMargin)
+      : DEFAULT_LAYOUT_TUNING.gridMargin;
+    const cardScale = Number.isFinite(layoutTuning.cardScale)
+      ? THREE.MathUtils.clamp(layoutTuning.cardScale, 0.5, 1.8)
+      : DEFAULT_LAYOUT_TUNING.cardScale;
+
+    return {
+      cardsPerRow,
+      columnPadding,
+      rowPadding,
+      gridMargin,
+      cardScale,
+    };
+  }
+
+  getLayoutMetrics() {
+    const cardWidth = BASE_CARD_WIDTH * this.layout.cardScale;
+    const cardHeight = BASE_CARD_HEIGHT * this.layout.cardScale;
+    return {
+      cardsPerRow: this.layout.cardsPerRow,
+      cardWidth,
+      cardHeight,
+      gridXSpacing: cardWidth + this.layout.columnPadding,
+      gridYSpacing: cardHeight + this.layout.rowPadding,
+      gridLeftPadding: this.layout.gridMargin,
+      gridTopPadding: this.layout.gridMargin,
+      gridBottomPadding: this.layout.gridMargin,
+    };
+  }
+
+  setLayoutTuning(layoutTuning = {}) {
+    this.layout = this.normalizeLayoutTuning({ ...this.layout, ...layoutTuning });
+    this.reflowCardPositions();
+    this.onResize();
+  }
+
+  reflowCardPositions() {
+    const {
+      cardsPerRow,
+      cardWidth,
+      cardHeight,
+      gridXSpacing,
+      gridYSpacing,
+      gridLeftPadding,
+      gridTopPadding,
+    } = this.getLayoutMetrics();
+
+    this.cardRoots.forEach((root, index) => {
+      const row = Math.floor(index / cardsPerRow);
+      const column = index % cardsPerRow;
+      const basePosition = new THREE.Vector3(
+        gridLeftPadding + cardWidth * 0.5 + column * gridXSpacing,
+        -(gridTopPadding + cardHeight * 0.5 + row * gridYSpacing),
+        0,
+      );
+      root.userData.basePosition = basePosition;
+      if (root !== this.previewCard) root.position.copy(basePosition);
+    });
   }
 
   destroy() {
@@ -247,20 +327,21 @@ export class CardLibraryScene {
   setCards(cards) {
     this.clearCards();
     this.cards = cards.slice();
+    const { cardsPerRow, cardWidth, cardHeight, gridXSpacing, gridYSpacing, gridLeftPadding, gridTopPadding } = this.getLayoutMetrics();
 
     this.cards.forEach((card, index) => {
-      const row = Math.floor(index / GRID_COLUMNS);
-      const column = index % GRID_COLUMNS;
+      const row = Math.floor(index / cardsPerRow);
+      const column = index % cardsPerRow;
       const basePosition = new THREE.Vector3(
-        GRID_LEFT_PADDING + CARD_WIDTH * 0.5 + column * GRID_X_SPACING,
-        -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + row * GRID_Y_SPACING),
+        gridLeftPadding + cardWidth * 0.5 + column * gridXSpacing,
+        -(gridTopPadding + cardHeight * 0.5 + row * gridYSpacing),
         0,
       );
 
       const root = CardMeshFactory.createCard({
         id: card.id,
-        width: CARD_WIDTH,
-        height: CARD_HEIGHT,
+        width: cardWidth,
+        height: cardHeight,
         thickness: CARD_THICKNESS,
         cornerRadius: 0.15,
         color: colorForType(card.type),
@@ -268,7 +349,7 @@ export class CardLibraryScene {
 
       const texture = createCardLabelTexture(card);
       const face = new THREE.Mesh(
-        new THREE.PlaneGeometry(CARD_WIDTH * 0.92, CARD_HEIGHT * 0.92),
+        new THREE.PlaneGeometry(cardWidth * 0.92, cardHeight * 0.92),
         new THREE.MeshStandardMaterial({ map: texture, roughness: 0.75, metalness: 0.04 }),
       );
       face.position.set(0, 0, CARD_THICKNESS * 0.51);
@@ -418,8 +499,9 @@ export class CardLibraryScene {
   }
 
   pixelsToWorldY(pixelDelta) {
+    const { cardHeight, gridYSpacing } = this.getLayoutMetrics();
     const viewportHeightPx = Math.max(this.viewportHeight, MIN_ROW_HEIGHT_PX);
-    const worldVisibleHeight = CARD_HEIGHT + (this.visibleRows - 1) * GRID_Y_SPACING + CAMERA_VERTICAL_OVERSCAN * 2;
+    const worldVisibleHeight = cardHeight + (this.visibleRows - 1) * gridYSpacing + CAMERA_VERTICAL_OVERSCAN * 2;
     return (pixelDelta / viewportHeightPx) * worldVisibleHeight;
   }
 
@@ -433,8 +515,18 @@ export class CardLibraryScene {
   }
 
   onResize() {
+    const {
+      cardsPerRow,
+      cardWidth,
+      cardHeight,
+      gridXSpacing,
+      gridYSpacing,
+      gridLeftPadding,
+      gridTopPadding,
+      gridBottomPadding,
+    } = this.getLayoutMetrics();
     const { width, height } = this.getViewportSize();
-    const rows = Math.max(Math.ceil(this.cards.length / GRID_COLUMNS), 1);
+    const rows = Math.max(Math.ceil(this.cards.length / cardsPerRow), 1);
     const viewportHeight = height;
     const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
     this.visibleRows = visibleRows;
@@ -449,17 +541,17 @@ export class CardLibraryScene {
 
     this.camera.aspect = width / desiredHeight;
 
-    const totalWidth = GRID_LEFT_PADDING * 2 + (GRID_COLUMNS - 1) * GRID_X_SPACING + CARD_WIDTH;
-    const visibleHeight = GRID_TOP_PADDING + GRID_BOTTOM_PADDING + CARD_HEIGHT + (visibleRows - 1) * GRID_Y_SPACING + CAMERA_VERTICAL_OVERSCAN * 2;
+    const totalWidth = gridLeftPadding * 2 + (cardsPerRow - 1) * gridXSpacing + cardWidth;
+    const visibleHeight = gridTopPadding + gridBottomPadding + cardHeight + (visibleRows - 1) * gridYSpacing + CAMERA_VERTICAL_OVERSCAN * 2;
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
     const viewportAspect = width / viewportHeight;
     const fitDistanceX = totalWidth / (2 * Math.tan(fov / 2) * viewportAspect);
     const fitDistanceY = visibleHeight / (2 * Math.tan(fov / 2));
     const fitDistance = Math.max(fitDistanceX, fitDistanceY);
     const cameraX = totalWidth * 0.5;
-    const cameraBaseY = -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + ((visibleRows - 1) * GRID_Y_SPACING) * 0.5);
-    const totalRowsHeight = CARD_HEIGHT + (rows - 1) * GRID_Y_SPACING;
-    const maxVisibleRowsHeight = CARD_HEIGHT + (visibleRows - 1) * GRID_Y_SPACING;
+    const cameraBaseY = -(gridTopPadding + cardHeight * 0.5 + ((visibleRows - 1) * gridYSpacing) * 0.5);
+    const totalRowsHeight = cardHeight + (rows - 1) * gridYSpacing;
+    const maxVisibleRowsHeight = cardHeight + (visibleRows - 1) * gridYSpacing;
     this.maxScrollY = Math.max(totalRowsHeight - maxVisibleRowsHeight, 0);
     this.scrollY = THREE.MathUtils.clamp(this.scrollY, 0, this.maxScrollY);
     this.scrollTargetY = THREE.MathUtils.clamp(this.scrollTargetY, 0, this.maxScrollY);
@@ -477,8 +569,9 @@ export class CardLibraryScene {
 
     this.scrollY = THREE.MathUtils.damp(this.scrollY, this.scrollTargetY, 14, 1 / 60);
 
+    const { cardHeight, gridYSpacing, gridTopPadding } = this.getLayoutMetrics();
     const cameraX = this.camera.position.x;
-    const cameraBaseY = -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + ((this.visibleRows - 1) * GRID_Y_SPACING) * 0.5);
+    const cameraBaseY = -(gridTopPadding + cardHeight * 0.5 + ((this.visibleRows - 1) * gridYSpacing) * 0.5);
     const cameraY = cameraBaseY - this.scrollY;
     if (Math.abs(this.camera.position.y - cameraY) > 0.0001) {
       this.camera.position.y = cameraY;
