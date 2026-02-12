@@ -366,6 +366,32 @@ button {
   color: #c6d0e7;
 }
 
+
+.card-preview-debug-controls {
+  margin: 0 1rem 0.75rem;
+  gap: 0.35rem;
+}
+
+.card-preview-debug-controls h3 {
+  margin: 0 0 0.15rem;
+  font-size: 1rem;
+}
+
+.card-preview-debug-controls label {
+  color: #c6d0e7;
+  font-size: 0.88rem;
+}
+
+.card-preview-debug-controls output {
+  color: #eef2ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.card-preview-debug-controls input[type='range'] {
+  width: 100%;
+  padding: 0;
+}
+
 .cards-list {
   min-height: 560px;
   overflow: hidden;

@@ -63,6 +63,20 @@
       <section class="cards-list-wrap" aria-live="polite">
         <h2>Card Library</h2>
         <p class="cards-library-caption">Browse cards in the Card Library module (built on top of the core Card module) for game-building workflows.</p>
+        <div class="card card-preview-debug-controls" aria-label="Card preview debug controls">
+          <h3>Preview Debug Sliders</h3>
+          <label for="preview-offset-x">Left / Right: <output id="preview-offset-x-value" for="preview-offset-x">0.00</output></label>
+          <input id="preview-offset-x" type="range" min="-4" max="4" step="0.05" value="0" data-debug-control="preview-offset-x" />
+
+          <label for="preview-offset-y">Up / Down: <output id="preview-offset-y-value" for="preview-offset-y">0.00</output></label>
+          <input id="preview-offset-y" type="range" min="-4" max="4" step="0.05" value="0" data-debug-control="preview-offset-y" />
+
+          <label for="preview-offset-z">Near / Far: <output id="preview-offset-z-value" for="preview-offset-z">0.00</output></label>
+          <input id="preview-offset-z" type="range" min="-8" max="8" step="0.05" value="0" data-debug-control="preview-offset-z" />
+
+          <label for="preview-tilt-x">Forward / Backward Tilt: <output id="preview-tilt-x-value" for="preview-tilt-x">1.08</output></label>
+          <input id="preview-tilt-x" type="range" min="-1.57" max="1.57" step="0.01" value="1.08" data-debug-control="preview-tilt-x" />
+        </div>
         <div id="card-list" class="cards-list">
           <div class="cards-library-stage-wrap">
             <canvas id="card-library-canvas" class="cards-library-canvas" aria-label="3D card library scene"></canvas>

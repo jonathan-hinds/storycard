@@ -29,6 +29,12 @@ const DEFAULT_PREVIEW_ROTATION_OFFSET = Object.freeze({
   z: 0,
 });
 
+const DEFAULT_PREVIEW_POSITION_OFFSET = Object.freeze({
+  x: 0,
+  y: 0,
+  z: 0,
+});
+
 const TYPE_COLORS = {
   assassin: 0x7f5af0,
   tank: 0x2cb67d,
@@ -118,7 +124,12 @@ function createCardLabelTexture(card) {
 }
 
 export class CardLibraryScene {
-  constructor({ canvas, scrollContainer, previewRotationOffset = DEFAULT_PREVIEW_ROTATION_OFFSET }) {
+  constructor({
+    canvas,
+    scrollContainer,
+    previewRotationOffset = DEFAULT_PREVIEW_ROTATION_OFFSET,
+    previewPositionOffset = DEFAULT_PREVIEW_POSITION_OFFSET,
+  }) {
     this.canvas = canvas;
     this.scrollContainer = scrollContainer;
 
@@ -151,6 +162,11 @@ export class CardLibraryScene {
       x: Number.isFinite(previewRotationOffset?.x) ? previewRotationOffset.x : DEFAULT_PREVIEW_ROTATION_OFFSET.x,
       y: Number.isFinite(previewRotationOffset?.y) ? previewRotationOffset.y : DEFAULT_PREVIEW_ROTATION_OFFSET.y,
       z: Number.isFinite(previewRotationOffset?.z) ? previewRotationOffset.z : DEFAULT_PREVIEW_ROTATION_OFFSET.z,
+    };
+    this.previewPositionOffset = {
+      x: Number.isFinite(previewPositionOffset?.x) ? previewPositionOffset.x : DEFAULT_PREVIEW_POSITION_OFFSET.x,
+      y: Number.isFinite(previewPositionOffset?.y) ? previewPositionOffset.y : DEFAULT_PREVIEW_POSITION_OFFSET.y,
+      z: Number.isFinite(previewPositionOffset?.z) ? previewPositionOffset.z : DEFAULT_PREVIEW_POSITION_OFFSET.z,
     };
     this.isDraggingScroll = false;
     this.scrollY = 0;
@@ -339,10 +355,19 @@ export class CardLibraryScene {
 
   getPreviewAnchorPosition() {
     return new THREE.Vector3(
-      this.camera.position.x + PREVIEW_BASE_POSITION.x,
-      this.camera.position.y + PREVIEW_BASE_POSITION.y,
-      PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+      this.camera.position.x + PREVIEW_BASE_POSITION.x + this.previewPositionOffset.x,
+      this.camera.position.y + PREVIEW_BASE_POSITION.y + this.previewPositionOffset.y,
+      PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset + this.previewPositionOffset.z,
     );
+  }
+
+  setPreviewDebugOffsets({ position = {}, rotation = {} } = {}) {
+    if (Number.isFinite(position.x)) this.previewPositionOffset.x = position.x;
+    if (Number.isFinite(position.y)) this.previewPositionOffset.y = position.y;
+    if (Number.isFinite(position.z)) this.previewPositionOffset.z = position.z;
+    if (Number.isFinite(rotation.x)) this.previewRotationOffset.x = rotation.x;
+    if (Number.isFinite(rotation.y)) this.previewRotationOffset.y = rotation.y;
+    if (Number.isFinite(rotation.z)) this.previewRotationOffset.z = rotation.z;
   }
 
   onPointerMove(event) {
