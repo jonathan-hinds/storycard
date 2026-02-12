@@ -8,10 +8,10 @@ const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
 const previewOffsetXInput = document.getElementById('preview-offset-x');
 const previewOffsetYInput = document.getElementById('preview-offset-y');
-const previewOffsetZInput = document.getElementById('preview-offset-z');
+const previewClosenessInput = document.getElementById('preview-closeness');
 const previewOffsetXValue = document.getElementById('preview-offset-x-value');
 const previewOffsetYValue = document.getElementById('preview-offset-y-value');
-const previewOffsetZValue = document.getElementById('preview-offset-z-value');
+const previewClosenessValue = document.getElementById('preview-closeness-value');
 
 const CARD_LIBRARY_PREVIEW_DEFAULTS = {
   position: {
@@ -32,6 +32,12 @@ const PREVIEW_Z_RANGE = Object.freeze({
   desktop: { min: 1.5, max: 6 },
   mobile: { min: -2, max: 6 },
 });
+const PREVIEW_CLOSENESS_RANGE = Object.freeze({
+  min: 0,
+  max: 100,
+});
+
+let previewCloseness = Number.parseFloat(previewClosenessInput.value);
 
 let cardLibraryScene;
 
@@ -53,12 +59,19 @@ function getPreviewZBounds() {
 
 function applyPreviewZBounds() {
   const bounds = getPreviewZBounds();
-  previewOffsetZInput.min = String(bounds.min);
-  previewOffsetZInput.max = String(bounds.max);
+  previewCloseness = Math.min(PREVIEW_CLOSENESS_RANGE.max, Math.max(PREVIEW_CLOSENESS_RANGE.min, previewCloseness));
+  previewClosenessInput.min = String(PREVIEW_CLOSENESS_RANGE.min);
+  previewClosenessInput.max = String(PREVIEW_CLOSENESS_RANGE.max);
+  previewClosenessInput.value = String(previewCloseness);
+  return bounds;
+}
 
-  const zValue = Number.parseFloat(previewOffsetZInput.value);
-  const clampedZ = Math.min(bounds.max, Math.max(bounds.min, zValue));
-  if (clampedZ !== zValue) previewOffsetZInput.value = String(clampedZ);
+function getPreviewOffsetZFromCloseness(closeness, bounds) {
+  const span = bounds.max - bounds.min;
+  if (span <= 0) return bounds.min;
+  const normalizedCloseness = (closeness - PREVIEW_CLOSENESS_RANGE.min)
+    / (PREVIEW_CLOSENESS_RANGE.max - PREVIEW_CLOSENESS_RANGE.min);
+  return bounds.min + (normalizedCloseness * span);
 }
 
 function getResponsivePreviewPosition() {
@@ -82,22 +95,30 @@ cardLibraryScene = new CardLibraryScene({
 function syncPreviewPositionUI(position) {
   previewOffsetXInput.value = String(position.x);
   previewOffsetYInput.value = String(position.y);
-  previewOffsetZInput.value = String(position.z);
+  const bounds = getPreviewZBounds();
+  const normalizedDepth = (position.z - bounds.min) / Math.max(0.0001, bounds.max - bounds.min);
+  previewCloseness = Math.round(
+    PREVIEW_CLOSENESS_RANGE.min + (Math.min(1, Math.max(0, normalizedDepth))
+      * (PREVIEW_CLOSENESS_RANGE.max - PREVIEW_CLOSENESS_RANGE.min)),
+  );
+  previewClosenessInput.value = String(previewCloseness);
   previewOffsetXValue.textContent = position.x.toFixed(2);
   previewOffsetYValue.textContent = position.y.toFixed(2);
-  previewOffsetZValue.textContent = position.z.toFixed(2);
+  previewClosenessValue.textContent = `${previewCloseness.toFixed(0)}%`;
 }
 
 function applyPreviewPositionFromControls() {
+  previewCloseness = Number.parseFloat(previewClosenessInput.value);
+  previewClosenessValue.textContent = `${previewCloseness.toFixed(0)}%`;
+  const bounds = getPreviewZBounds();
   const position = {
     x: Number.parseFloat(previewOffsetXInput.value),
     y: Number.parseFloat(previewOffsetYInput.value),
-    z: Number.parseFloat(previewOffsetZInput.value),
+    z: getPreviewOffsetZFromCloseness(previewCloseness, bounds),
   };
 
   previewOffsetXValue.textContent = position.x.toFixed(2);
   previewOffsetYValue.textContent = position.y.toFixed(2);
-  previewOffsetZValue.textContent = position.z.toFixed(2);
 
   cardLibraryScene.setPreviewDebugOffsets({
     position,
@@ -115,7 +136,7 @@ applyPreviewZBounds();
 applyPreviewPositionFromControls();
 previewOffsetXInput.addEventListener('input', applyPreviewPositionFromControls);
 previewOffsetYInput.addEventListener('input', applyPreviewPositionFromControls);
-previewOffsetZInput.addEventListener('input', applyPreviewPositionFromControls);
+previewClosenessInput.addEventListener('input', applyPreviewPositionFromControls);
 
 function renderCards(cards) {
   if (!cards.length) {
@@ -200,7 +221,7 @@ window.addEventListener('resize', onWindowResize);
 window.addEventListener('beforeunload', () => {
   previewOffsetXInput.removeEventListener('input', applyPreviewPositionFromControls);
   previewOffsetYInput.removeEventListener('input', applyPreviewPositionFromControls);
-  previewOffsetZInput.removeEventListener('input', applyPreviewPositionFromControls);
+  previewClosenessInput.removeEventListener('input', applyPreviewPositionFromControls);
   window.removeEventListener('resize', onWindowResize);
   cardLibraryScene.destroy();
 });
