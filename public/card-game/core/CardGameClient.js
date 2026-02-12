@@ -5,6 +5,7 @@ import { CardGameHttpClient } from '../net/httpClient.js';
 import { SINGLE_CARD_TEMPLATE } from '../templates/singleCardTemplate.js';
 import { CARD_ZONE_TYPES, isKnownZone, validateZoneTemplate } from './zoneFramework.js';
 import { DEFAULT_PREVIEW_TUNING, sanitizePreviewTuning } from './previewTuning.js';
+import { PREVIEW_HOLD_DELAY_MS, PREVIEW_TRANSITION_IN_MS, PREVIEW_BASE_POSITION, beginPreviewTransition, beginPreviewReturnTransition, getPreviewPose } from './previewMotion.js';
 
 const CAMERA_BASE_FOV = 45;
 const CAMERA_BASE_Y = 8.2;
@@ -19,10 +20,7 @@ const HAND_BASE_Z = 3.2;
 const HAND_CAMERA_CLOSENESS = 0.45;
 const HAND_PORTRAIT_CLOSENESS = 0.35;
 
-const PREVIEW_HOLD_DELAY_MS = 230;
 const DRAG_START_DISTANCE_PX = 10;
-const PREVIEW_TRANSITION_IN_MS = 260;
-const PREVIEW_TRANSITION_OUT_MS = 210;
 const CARD_FACE_ROTATION_X = -Math.PI / 2;
 const HAND_CARD_BASE_Y = 0.1;
 const HAND_CARD_ARC_LIFT = 0.06;
@@ -32,7 +30,6 @@ const PLACED_CARD_SWIRL_AMPLITUDE = 0.024;
 const PLACED_CARD_VERTICAL_SWAY_AMPLITUDE = 0.028;
 const PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE = 0.032;
 const ATTACK_TARGET_SCALE = 1.12;
-const PREVIEW_BASE_POSITION = Object.freeze({ x: 0, y: 1.52, z: 1.08 });
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -317,10 +314,7 @@ export class CardGameClient {
     if (mode === 'preview') {
       this.state.previewOriginPose.position.copy(card.position);
       this.state.previewOriginPose.rotation.copy(card.rotation);
-      this.state.previewTransition.isActive = true;
-      this.state.previewTransition.direction = 'toPreview';
-      this.state.previewTransition.startedAt = this.state.previewStartedAt;
-      this.state.previewTransition.durationMs = PREVIEW_TRANSITION_IN_MS;
+      beginPreviewTransition(this.state, this.state.previewStartedAt);
       this.setActiveCardPose(
         new THREE.Vector3(
           PREVIEW_BASE_POSITION.x,
@@ -356,10 +350,7 @@ export class CardGameClient {
     if (!card || this.state.mode !== 'preview') return false;
     this.state.mode = 'preview-return';
     this.state.previewStartedAt = performance.now();
-    this.state.previewTransition.isActive = true;
-    this.state.previewTransition.direction = 'fromPreview';
-    this.state.previewTransition.startedAt = this.state.previewStartedAt;
-    this.state.previewTransition.durationMs = PREVIEW_TRANSITION_OUT_MS;
+    beginPreviewReturnTransition(this.state, this.state.previewStartedAt);
     this.setStatus(`Preview closing for ${card.userData.cardId}.`);
     return true;
   }
@@ -883,55 +874,27 @@ export class CardGameClient {
     const card = this.state.activeCard;
     if (!card || (this.state.mode !== 'preview' && this.state.mode !== 'drag' && this.state.mode !== 'preview-return')) return;
 
-    const elapsed = (time - this.state.previewStartedAt) * 0.001;
-    const transition = this.state.previewTransition;
-    const shouldTransition = transition.isActive && (this.state.mode === 'preview' || this.state.mode === 'preview-return');
-    const basePos = this.state.activePose.position.clone();
-    const baseRot = this.state.activePose.rotation.clone();
+    const { position, rotation, transitionCompleted } = getPreviewPose({
+      time,
+      mode: this.state.mode,
+      previewStartedAt: this.state.previewStartedAt,
+      previewOriginPose: this.state.previewOriginPose,
+      activePose: this.state.activePose,
+      previewTransition: this.state.previewTransition,
+    });
 
-    if (shouldTransition) {
-      const transitionElapsed = time - transition.startedAt;
-      const rawProgress = THREE.MathUtils.clamp(transitionElapsed / transition.durationMs, 0, 1);
-      const eased = THREE.MathUtils.smootherstep(rawProgress, 0, 1);
-      const blend = transition.direction === 'toPreview' ? eased : (1 - eased);
+    card.position.copy(position);
+    card.rotation.copy(rotation);
 
-      basePos.lerpVectors(this.state.previewOriginPose.position, this.state.activePose.position, blend);
-      baseRot.set(
-        THREE.MathUtils.lerp(this.state.previewOriginPose.rotation.x, this.state.activePose.rotation.x, blend),
-        THREE.MathUtils.lerp(this.state.previewOriginPose.rotation.y, this.state.activePose.rotation.y, blend),
-        THREE.MathUtils.lerp(this.state.previewOriginPose.rotation.z, this.state.activePose.rotation.z, blend),
-      );
-
-      if (rawProgress >= 1) {
-        transition.isActive = false;
-        if (this.state.mode === 'preview-return') {
-          this.clearHighlights();
-          this.clearActiveCard({ restore: true });
-          this.relayoutBoardAndHand();
-          this.setStatus(`Preview closed for ${card.userData.cardId}.`);
-          return;
-        }
+    if (transitionCompleted) {
+      this.state.previewTransition.isActive = false;
+      if (this.state.mode === 'preview-return') {
+        this.clearHighlights();
+        this.clearActiveCard({ restore: true });
+        this.relayoutBoardAndHand();
+        this.setStatus(`Preview closed for ${card.userData.cardId}.`);
       }
     }
-
-    const swayPosition = this.state.mode === 'preview'
-      ? new THREE.Vector3(Math.sin(elapsed * 1.8) * 0.22, Math.sin(elapsed * 2.4) * 0.07, Math.cos(elapsed * 1.6) * 0.16)
-      : new THREE.Vector3(Math.sin(elapsed * 3.6) * 0.05, Math.sin(elapsed * 5.2) * 0.03, Math.cos(elapsed * 4.1) * 0.04);
-
-    const swayMultiplier = this.state.mode === 'preview-return' ? 0.45 : 1;
-
-    card.position.set(
-      basePos.x + swayPosition.x * swayMultiplier,
-      basePos.y + swayPosition.y * swayMultiplier,
-      basePos.z + swayPosition.z * swayMultiplier,
-    );
-
-    const swayAmount = this.state.mode === 'preview' ? 1 : 0.8;
-    card.rotation.set(
-      baseRot.x + Math.sin(elapsed * 2.2) * 0.04 * swayAmount,
-      baseRot.y + Math.sin(elapsed * 1.5) * 0.18 * swayAmount,
-      baseRot.z + Math.cos(elapsed * 1.8) * 0.03 * swayAmount,
-    );
   }
 
   applyPlacedCardAmbientSway(time) {

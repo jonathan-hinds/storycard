@@ -1,5 +1,13 @@
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 import { CardMeshFactory } from '/public/card-game/render/CardMeshFactory.js';
+import {
+  PREVIEW_HOLD_DELAY_MS,
+  PREVIEW_BASE_POSITION,
+  beginPreviewTransition,
+  beginPreviewReturnTransition,
+  getPreviewPose,
+  loadPreviewTuning,
+} from '/public/card-game/index.js';
 
 const GRID_COLUMNS = 5;
 const CARD_WIDTH = 1.8;
@@ -13,11 +21,10 @@ const GRID_BOTTOM_PADDING = 0;
 const MIN_ROW_HEIGHT_PX = 280;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
-const HOLD_DELAY_MS = 250;
 const HOLD_CANCEL_DISTANCE_PX = 10;
-const HOLD_SCALE = 1.52;
-const HOLD_Z_OFFSET = 2.2;
 const DRAG_START_DISTANCE_PX = 6;
+const PREVIEW_ROTATION_Y = 0;
+const PREVIEW_ROTATION_Z = 0;
 
 const TYPE_COLORS = {
   assassin: 0x7f5af0,
@@ -131,8 +138,12 @@ export class CardLibraryScene {
     this.lastPointerY = 0;
     this.pointerCard = null;
     this.holdTimeoutId = null;
-    this.heldCard = null;
-    this.heldStartTime = 0;
+    this.previewCard = null;
+    this.previewTuning = loadPreviewTuning();
+    this.previewPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
+    this.previewOriginPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
+    this.previewTransition = { isActive: false, direction: 'toPreview', startedAt: 0, durationMs: 0 };
+    this.previewStartedAt = 0;
     this.isDraggingScroll = false;
     this.scrollY = 0;
     this.scrollTargetY = 0;
@@ -201,7 +212,8 @@ export class CardLibraryScene {
     this.cardRoots.length = 0;
     this.pointerCard = null;
     this.activePointerId = null;
-    this.heldCard = null;
+    this.previewCard = null;
+    this.previewTransition.isActive = false;
   }
 
   setCards(cards) {
@@ -236,10 +248,7 @@ export class CardLibraryScene {
       root.userData.face = face;
 
       root.userData.basePosition = basePosition;
-      root.userData.baseScale = 1;
       root.userData.phase = index * 0.63;
-      root.userData.holdProgress = 0;
-      root.userData.targetHoldProgress = 0;
       root.userData.catalogCard = card;
 
       root.position.copy(basePosition);
@@ -269,6 +278,7 @@ export class CardLibraryScene {
     while (node && !this.cardRoots.includes(node)) node = node.parent;
     return node;
   }
+
   getPointerDistance(event) {
     const dx = event.clientX - this.pressPointer.x;
     const dy = event.clientY - this.pressPointer.y;
@@ -286,7 +296,6 @@ export class CardLibraryScene {
     if (!this.scrollContainer.hasPointerCapture(this.activePointerId)) return;
     this.scrollContainer.releasePointerCapture(this.activePointerId);
   }
-
 
   onPointerDown(event) {
     if (event.button !== 0) return;
@@ -306,10 +315,18 @@ export class CardLibraryScene {
 
     this.holdTimeoutId = window.setTimeout(() => {
       if (this.activePointerId !== event.pointerId || this.pointerCard !== target) return;
-      this.heldCard = target;
-      this.heldStartTime = performance.now();
-      target.userData.targetHoldProgress = 1;
-    }, HOLD_DELAY_MS);
+      this.previewCard = target;
+      this.previewStartedAt = performance.now();
+      this.previewOriginPose.position.copy(target.position);
+      this.previewOriginPose.rotation.copy(target.rotation);
+      this.previewPose.position.set(
+        PREVIEW_BASE_POSITION.x,
+        PREVIEW_BASE_POSITION.y,
+        PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+      );
+      this.previewPose.rotation.set(this.previewTuning.rotationX, PREVIEW_ROTATION_Y, PREVIEW_ROTATION_Z);
+      beginPreviewTransition(this, this.previewStartedAt);
+    }, PREVIEW_HOLD_DELAY_MS);
   }
 
   onPointerMove(event) {
@@ -317,13 +334,13 @@ export class CardLibraryScene {
 
     const pointerDistance = this.getPointerDistance(event);
 
-    if (!this.heldCard && !this.isDraggingScroll && pointerDistance > DRAG_START_DISTANCE_PX) {
+    if (!this.previewCard && !this.isDraggingScroll && pointerDistance > DRAG_START_DISTANCE_PX) {
       this.isDraggingScroll = true;
       this.pointerCard = null;
       this.clearHoldTimer();
     }
 
-    if (this.isDraggingScroll && !this.heldCard) {
+    if (this.isDraggingScroll && !this.previewCard) {
       const deltaY = event.clientY - this.lastPointerY;
       this.scrollTargetY = THREE.MathUtils.clamp(this.scrollTargetY - this.pixelsToWorldY(deltaY), 0, this.maxScrollY);
       event.preventDefault();
@@ -331,12 +348,12 @@ export class CardLibraryScene {
 
     this.lastPointerY = event.clientY;
 
-    if (!this.heldCard && this.pointerCard && pointerDistance > HOLD_CANCEL_DISTANCE_PX) {
+    if (!this.previewCard && this.pointerCard && pointerDistance > HOLD_CANCEL_DISTANCE_PX) {
       this.clearHoldTimer();
       this.pointerCard = null;
     }
 
-    if (this.heldCard) event.preventDefault();
+    if (this.previewCard) event.preventDefault();
   }
 
   onPointerUp(event) {
@@ -344,12 +361,14 @@ export class CardLibraryScene {
 
     this.clearHoldTimer();
 
-    if (this.heldCard) this.heldCard.userData.targetHoldProgress = 0;
-    this.releasePointerCapture();
+    if (this.previewCard) {
+      this.previewStartedAt = performance.now();
+      beginPreviewReturnTransition(this, this.previewStartedAt);
+    }
 
+    this.releasePointerCapture();
     this.activePointerId = null;
     this.pointerCard = null;
-    this.heldCard = null;
     this.isDraggingScroll = false;
   }
 
@@ -380,12 +399,7 @@ export class CardLibraryScene {
     this.camera.aspect = width / desiredHeight;
 
     const totalWidth = GRID_LEFT_PADDING * 2 + (GRID_COLUMNS - 1) * GRID_X_SPACING + CARD_WIDTH;
-    const visibleHeight =
-      GRID_TOP_PADDING +
-      GRID_BOTTOM_PADDING +
-      CARD_HEIGHT +
-      (visibleRows - 1) * GRID_Y_SPACING +
-      CAMERA_VERTICAL_OVERSCAN * 2;
+    const visibleHeight = GRID_TOP_PADDING + GRID_BOTTOM_PADDING + CARD_HEIGHT + (visibleRows - 1) * GRID_Y_SPACING + CAMERA_VERTICAL_OVERSCAN * 2;
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
     const viewportAspect = width / viewportHeight;
     const fitDistanceX = totalWidth / (2 * Math.tan(fov / 2) * viewportAspect);
@@ -420,6 +434,8 @@ export class CardLibraryScene {
       this.camera.lookAt(cameraX, cameraY, 0);
     }
 
+    const now = performance.now();
+
     this.cardRoots.forEach((root) => {
       const { basePosition, phase } = root.userData;
       const swirlX = Math.sin(elapsed * 1.8 + phase) * 0.09;
@@ -433,20 +449,27 @@ export class CardLibraryScene {
         Math.cos(elapsed * 1.8 + phase) * 0.03,
       );
 
-      root.userData.holdProgress = THREE.MathUtils.damp(
-        root.userData.holdProgress,
-        root.userData.targetHoldProgress,
-        8,
-        1 / 60,
-      );
+      if (root === this.previewCard) {
+        const { position, rotation, transitionCompleted } = getPreviewPose({
+          time: now,
+          mode: this.previewTransition.direction === 'fromPreview' ? 'preview-return' : 'preview',
+          previewStartedAt: this.previewStartedAt,
+          previewOriginPose: this.previewOriginPose,
+          activePose: this.previewPose,
+          previewTransition: this.previewTransition,
+        });
 
-      const holdProgress = root.userData.holdProgress;
-      const holdScale = 1 + (HOLD_SCALE - 1) * holdProgress;
-      root.scale.setScalar(holdScale);
-      root.position.z += HOLD_Z_OFFSET * holdProgress;
+        root.position.copy(position);
+        root.rotation.copy(rotation);
+        root.renderOrder = 20;
 
-      if (holdProgress < 0.02 && this.heldCard === root && root.userData.targetHoldProgress === 0) {
-        this.heldCard = null;
+        if (transitionCompleted) {
+          this.previewTransition.isActive = false;
+          if (this.previewTransition.direction === 'fromPreview') this.previewCard = null;
+        }
+      } else {
+        root.scale.setScalar(1);
+        root.renderOrder = 0;
       }
     });
 
