@@ -12,18 +12,42 @@ const CARD_LIBRARY_PREVIEW_DEFAULTS = {
     x: 0,
     y: -1.35,
     z: 4.3,
+    desktopZ: 3.75,
   },
   rotation: {
     x: 1.15,
   },
 };
 
+const CARD_LIBRARY_COMPACT_BREAKPOINT_PX = 900;
+
+function getResponsivePreviewPosition() {
+  const isCompactViewport = window.innerWidth <= CARD_LIBRARY_COMPACT_BREAKPOINT_PX;
+  return {
+    x: CARD_LIBRARY_PREVIEW_DEFAULTS.position.x,
+    y: CARD_LIBRARY_PREVIEW_DEFAULTS.position.y,
+    z: isCompactViewport
+      ? CARD_LIBRARY_PREVIEW_DEFAULTS.position.z
+      : CARD_LIBRARY_PREVIEW_DEFAULTS.position.desktopZ,
+  };
+}
+
 const cardLibraryScene = new CardLibraryScene({
   canvas: cardLibraryCanvas,
   scrollContainer: cardList,
   previewRotationOffset: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
-  previewPositionOffset: CARD_LIBRARY_PREVIEW_DEFAULTS.position,
+  previewPositionOffset: getResponsivePreviewPosition(),
 });
+
+function syncResponsivePreviewOffsets() {
+  cardLibraryScene.setPreviewDebugOffsets({
+    position: getResponsivePreviewPosition(),
+    rotation: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
+  });
+}
+
+syncResponsivePreviewOffsets();
+window.addEventListener('resize', syncResponsivePreviewOffsets);
 
 function renderCards(cards) {
   if (!cards.length) {
@@ -105,5 +129,6 @@ form.addEventListener('submit', async (event) => {
 fetchCards();
 
 window.addEventListener('beforeunload', () => {
+  window.removeEventListener('resize', syncResponsivePreviewOffsets);
   cardLibraryScene.destroy();
 });
