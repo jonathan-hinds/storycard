@@ -6,25 +6,12 @@ const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
-const gridSliders = Array.from(document.querySelectorAll('[data-grid-slider]'));
-const gridValueDisplays = new Map(
-  Array.from(document.querySelectorAll('[data-grid-value]')).map((node) => [node.dataset.gridValue, node]),
-);
-
 const GRID_LAYOUT_DEFAULTS = Object.freeze({
-  cardsPerRow: 5,
-  cardScale: 1,
-  rowPadding: 0,
-  columnPadding: 0,
+  cardsPerRow: 3,
+  cardScale: 0.5,
+  rowPadding: 1.8,
+  columnPadding: 1.45,
   gridMargin: 0,
-});
-
-const GRID_LAYOUT_FORMATTERS = Object.freeze({
-  cardsPerRow: (value) => `${Math.round(value)}`,
-  cardScale: (value) => value.toFixed(2),
-  rowPadding: (value) => value.toFixed(2),
-  columnPadding: (value) => value.toFixed(2),
-  gridMargin: (value) => value.toFixed(2),
 });
 
 const CARD_LIBRARY_PREVIEW_DEFAULTS = {
@@ -114,40 +101,6 @@ function onWindowResize() {
 }
 
 applyResponsivePreviewPosition();
-
-function updateGridDisplay(name, value) {
-  const display = gridValueDisplays.get(name);
-  if (!display) return;
-  const formatValue = GRID_LAYOUT_FORMATTERS[name] ?? ((nextValue) => `${nextValue}`);
-  display.textContent = formatValue(value);
-}
-
-function applyGridTuningFromSliders() {
-  const layoutTuning = gridSliders.reduce((accumulator, slider) => {
-    const key = slider.dataset.gridSlider;
-    const parsed = Number.parseFloat(slider.value);
-    accumulator[key] = key === 'cardsPerRow' ? Math.round(parsed) : parsed;
-    return accumulator;
-  }, {});
-
-  cardLibraryScene.setLayoutTuning(layoutTuning);
-  Object.entries(layoutTuning).forEach(([name, value]) => updateGridDisplay(name, value));
-}
-
-function initializeGridTuningSliders() {
-  gridSliders.forEach((slider) => {
-    const key = slider.dataset.gridSlider;
-    const defaultValue = GRID_LAYOUT_DEFAULTS[key];
-    if (!Number.isFinite(defaultValue)) return;
-    slider.value = `${defaultValue}`;
-    updateGridDisplay(key, defaultValue);
-    slider.addEventListener('input', applyGridTuningFromSliders);
-    slider.addEventListener('change', applyGridTuningFromSliders);
-  });
-  applyGridTuningFromSliders();
-}
-
-initializeGridTuningSliders();
 
 function renderCards(cards) {
   if (!cards.length) {
