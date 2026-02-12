@@ -7,53 +7,23 @@ const typeSelect = document.getElementById('card-type');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
 
-const previewDebugInputs = {
-  offsetX: document.getElementById('preview-offset-x'),
-  offsetY: document.getElementById('preview-offset-y'),
-  offsetZ: document.getElementById('preview-offset-z'),
-  tiltX: document.getElementById('preview-tilt-x'),
+const CARD_LIBRARY_PREVIEW_DEFAULTS = {
+  position: {
+    x: 0,
+    y: -1.35,
+    z: 4.3,
+  },
+  rotation: {
+    x: 1.15,
+  },
 };
-
-const previewDebugOutputs = {
-  offsetX: document.getElementById('preview-offset-x-value'),
-  offsetY: document.getElementById('preview-offset-y-value'),
-  offsetZ: document.getElementById('preview-offset-z-value'),
-  tiltX: document.getElementById('preview-tilt-x-value'),
-};
-
-function getPreviewDebugValues() {
-  return {
-    position: {
-      x: Number.parseFloat(previewDebugInputs.offsetX.value),
-      y: Number.parseFloat(previewDebugInputs.offsetY.value),
-      z: Number.parseFloat(previewDebugInputs.offsetZ.value),
-    },
-    rotation: {
-      x: Number.parseFloat(previewDebugInputs.tiltX.value),
-    },
-  };
-}
-
-function renderPreviewDebugValues() {
-  previewDebugOutputs.offsetX.textContent = Number.parseFloat(previewDebugInputs.offsetX.value).toFixed(2);
-  previewDebugOutputs.offsetY.textContent = Number.parseFloat(previewDebugInputs.offsetY.value).toFixed(2);
-  previewDebugOutputs.offsetZ.textContent = Number.parseFloat(previewDebugInputs.offsetZ.value).toFixed(2);
-  previewDebugOutputs.tiltX.textContent = Number.parseFloat(previewDebugInputs.tiltX.value).toFixed(2);
-}
-
-const initialPreviewDebugValues = getPreviewDebugValues();
 
 const cardLibraryScene = new CardLibraryScene({
   canvas: cardLibraryCanvas,
   scrollContainer: cardList,
-  previewRotationOffset: { x: initialPreviewDebugValues.rotation.x },
-  previewPositionOffset: initialPreviewDebugValues.position,
+  previewRotationOffset: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
+  previewPositionOffset: CARD_LIBRARY_PREVIEW_DEFAULTS.position,
 });
-
-function applyPreviewDebugValues() {
-  renderPreviewDebugValues();
-  cardLibraryScene.setPreviewDebugOffsets(getPreviewDebugValues());
-}
 
 function renderCards(cards) {
   if (!cards.length) {
@@ -132,11 +102,6 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-Object.values(previewDebugInputs).forEach((input) => {
-  input.addEventListener('input', applyPreviewDebugValues);
-});
-
-applyPreviewDebugValues();
 fetchCards();
 
 window.addEventListener('beforeunload', () => {
