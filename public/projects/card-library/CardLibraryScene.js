@@ -47,6 +47,7 @@ const DEFAULT_LAYOUT_TUNING = Object.freeze({
   gridMargin: DEFAULT_GRID_MARGIN,
   cardScale: DEFAULT_CARD_SCALE,
 });
+const CARD_FACE_Z_EPSILON = 0.01;
 
 function getCardScaleFromControlValue(controlValue) {
   const clampedValue = THREE.MathUtils.clamp(controlValue, CARD_SCALE_CONTROL_MIN, CARD_SCALE_CONTROL_MAX);
@@ -366,9 +367,16 @@ export class CardLibraryScene {
       const texture = createCardLabelTexture(card);
       const face = new THREE.Mesh(
         new THREE.PlaneGeometry(cardWidth * 0.92, cardHeight * 0.92),
-        new THREE.MeshStandardMaterial({ map: texture, roughness: 0.75, metalness: 0.04 }),
+        new THREE.MeshStandardMaterial({
+          map: texture,
+          roughness: 0.75,
+          metalness: 0.04,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
+        }),
       );
-      face.position.set(0, 0, CARD_THICKNESS * 0.51);
+      face.position.set(0, 0, (CARD_THICKNESS * 0.5) + CARD_FACE_Z_EPSILON);
       root.userData.tiltPivot.add(face);
       root.userData.face = face;
 
