@@ -10,7 +10,7 @@ const GRID_Y_SPACING = CARD_HEIGHT;
 const GRID_LEFT_PADDING = 0;
 const GRID_TOP_PADDING = 0;
 const GRID_BOTTOM_PADDING = 0;
-const ROW_HEIGHT_PX = 280;
+const MIN_ROW_HEIGHT_PX = 280;
 const GRID_VERTICAL_PADDING_PX = 0;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
@@ -328,11 +328,13 @@ export class CardLibraryScene {
   onResize() {
     const width = this.scrollContainer.clientWidth;
     const rows = Math.max(Math.ceil(this.cards.length / GRID_COLUMNS), 1);
+    const viewportHeight = Math.max(this.scrollContainer.clientHeight, MIN_ROW_HEIGHT_PX);
+    const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
+    const rowHeightPx = Math.max(MIN_ROW_HEIGHT_PX, viewportHeight / visibleRows);
     const desiredHeight = Math.max(
       this.scrollContainer.clientHeight,
-      rows * ROW_HEIGHT_PX + GRID_VERTICAL_PADDING_PX,
+      rows * rowHeightPx + GRID_VERTICAL_PADDING_PX,
     );
-    const viewportHeight = Math.max(this.scrollContainer.clientHeight, ROW_HEIGHT_PX);
 
     this.canvas.style.height = `${desiredHeight}px`;
     this.renderer.setSize(width, desiredHeight, false);
@@ -340,7 +342,6 @@ export class CardLibraryScene {
     this.camera.aspect = width / desiredHeight;
 
     const totalWidth = GRID_LEFT_PADDING * 2 + (GRID_COLUMNS - 1) * GRID_X_SPACING + CARD_WIDTH;
-    const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
     const visibleHeight =
       GRID_TOP_PADDING +
       GRID_BOTTOM_PADDING +
