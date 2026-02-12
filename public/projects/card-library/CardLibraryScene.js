@@ -21,6 +21,10 @@ const GRID_BOTTOM_PADDING = 0;
 const MIN_ROW_HEIGHT_PX = 280;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
+const COMPACT_BREAKPOINT_PX = 900;
+const DESKTOP_MIN_CANVAS_HEIGHT_PX = 460;
+const MOBILE_MIN_CANVAS_HEIGHT_PX = 320;
+const VIEWPORT_RESERVED_HEIGHT_PX = 140;
 const HOLD_CANCEL_DISTANCE_PX = 10;
 const DRAG_START_DISTANCE_PX = 6;
 const DEFAULT_PREVIEW_ROTATION_OFFSET = Object.freeze({
@@ -420,8 +424,11 @@ export class CardLibraryScene {
   }
 
   getViewportSize() {
+    const compactViewport = window.innerWidth <= COMPACT_BREAKPOINT_PX;
+    const minCanvasHeight = compactViewport ? MOBILE_MIN_CANVAS_HEIGHT_PX : DESKTOP_MIN_CANVAS_HEIGHT_PX;
+    const targetCanvasHeight = Math.max(minCanvasHeight, window.innerHeight - VIEWPORT_RESERVED_HEIGHT_PX);
     const width = Math.max(this.canvas.clientWidth, this.scrollContainer.clientWidth);
-    const height = Math.max(this.canvas.clientHeight, MIN_ROW_HEIGHT_PX);
+    const height = Math.max(targetCanvasHeight, this.canvas.clientHeight, MIN_ROW_HEIGHT_PX);
     return { width, height };
   }
 
@@ -434,6 +441,9 @@ export class CardLibraryScene {
     const desiredHeight = viewportHeight;
     this.viewportWidth = width;
     this.viewportHeight = desiredHeight;
+
+    this.canvas.style.height = `${desiredHeight}px`;
+    this.scrollContainer.style.minHeight = `${desiredHeight}px`;
 
     this.renderer.setSize(width, desiredHeight, false);
 
