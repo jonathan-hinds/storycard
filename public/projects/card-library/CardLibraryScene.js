@@ -138,6 +138,8 @@ export class CardLibraryScene {
     this.scrollTargetY = 0;
     this.maxScrollY = 0;
     this.visibleRows = 1;
+    this.viewportWidth = 0;
+    this.viewportHeight = 0;
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
@@ -352,20 +354,27 @@ export class CardLibraryScene {
   }
 
   pixelsToWorldY(pixelDelta) {
-    const viewportHeightPx = Math.max(this.scrollContainer.clientHeight, MIN_ROW_HEIGHT_PX);
+    const viewportHeightPx = Math.max(this.viewportHeight, MIN_ROW_HEIGHT_PX);
     const worldVisibleHeight = CARD_HEIGHT + (this.visibleRows - 1) * GRID_Y_SPACING + CAMERA_VERTICAL_OVERSCAN * 2;
     return (pixelDelta / viewportHeightPx) * worldVisibleHeight;
   }
 
+  getViewportSize() {
+    const width = Math.max(this.canvas.clientWidth, this.scrollContainer.clientWidth);
+    const height = Math.max(this.canvas.clientHeight, MIN_ROW_HEIGHT_PX);
+    return { width, height };
+  }
+
   onResize() {
-    const width = this.scrollContainer.clientWidth;
+    const { width, height } = this.getViewportSize();
     const rows = Math.max(Math.ceil(this.cards.length / GRID_COLUMNS), 1);
-    const viewportHeight = Math.max(this.scrollContainer.clientHeight, MIN_ROW_HEIGHT_PX);
+    const viewportHeight = height;
     const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
     this.visibleRows = visibleRows;
     const desiredHeight = viewportHeight;
+    this.viewportWidth = width;
+    this.viewportHeight = desiredHeight;
 
-    this.canvas.style.height = `${desiredHeight}px`;
     this.renderer.setSize(width, desiredHeight, false);
 
     this.camera.aspect = width / desiredHeight;
@@ -398,9 +407,8 @@ export class CardLibraryScene {
 
   render() {
     const elapsed = this.clock.getElapsedTime();
-    const width = this.scrollContainer.clientWidth;
-    const height = Math.max(this.scrollContainer.clientHeight, MIN_ROW_HEIGHT_PX);
-    if (this.canvas.width !== width || this.canvas.height !== height) this.onResize();
+    const { width, height } = this.getViewportSize();
+    if (width !== this.viewportWidth || height !== this.viewportHeight) this.onResize();
 
     this.scrollY = THREE.MathUtils.damp(this.scrollY, this.scrollTargetY, 14, 1 / 60);
 
