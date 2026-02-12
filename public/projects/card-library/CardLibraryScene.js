@@ -9,17 +9,22 @@ import {
   loadPreviewTuning,
 } from '/public/card-game/index.js';
 
-const GRID_COLUMNS = 5;
-const CARD_WIDTH = 1.8;
-const CARD_HEIGHT = 2.5;
-const CARD_THICKNESS = 0.08;
-const GRID_X_SPACING = CARD_WIDTH;
-const GRID_Y_SPACING = CARD_HEIGHT;
-const GRID_LEFT_PADDING = 0;
-const GRID_TOP_PADDING = 0;
-const GRID_BOTTOM_PADDING = 0;
+const BASE_GRID_COLUMNS = 5;
+const BASE_CARD_WIDTH = 1.8;
+const BASE_CARD_HEIGHT = 2.5;
+const BASE_CARD_THICKNESS = 0.08;
+const DEFAULT_GRID_TUNING = Object.freeze({
+  columns: BASE_GRID_COLUMNS,
+  cardScale: 1,
+  columnGap: 1,
+  rowGap: 1,
+  marginX: 0,
+  marginY: 0,
+  visibleRows: 2,
+  cameraDistanceOffset: 0,
+  animationIntensity: 1,
+});
 const MIN_ROW_HEIGHT_PX = 280;
-const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
 const COMPACT_BREAKPOINT_PX = 900;
 const DESKTOP_MIN_CANVAS_HEIGHT_PX = 460;
@@ -38,6 +43,20 @@ const DEFAULT_PREVIEW_POSITION_OFFSET = Object.freeze({
   y: 0,
   z: 0,
 });
+
+function sanitizeGridTuning(tuning = {}) {
+  return {
+    columns: THREE.MathUtils.clamp(Math.round(Number(tuning.columns) || DEFAULT_GRID_TUNING.columns), 1, 8),
+    cardScale: THREE.MathUtils.clamp(Number(tuning.cardScale) || DEFAULT_GRID_TUNING.cardScale, 0.65, 1.8),
+    columnGap: THREE.MathUtils.clamp(Number(tuning.columnGap) || DEFAULT_GRID_TUNING.columnGap, 0.8, 2.2),
+    rowGap: THREE.MathUtils.clamp(Number(tuning.rowGap) || DEFAULT_GRID_TUNING.rowGap, 0.8, 2.4),
+    marginX: THREE.MathUtils.clamp(Number(tuning.marginX) || DEFAULT_GRID_TUNING.marginX, -1.2, 4),
+    marginY: THREE.MathUtils.clamp(Number(tuning.marginY) || DEFAULT_GRID_TUNING.marginY, -1.2, 4),
+    visibleRows: THREE.MathUtils.clamp(Math.round(Number(tuning.visibleRows) || DEFAULT_GRID_TUNING.visibleRows), 1, 4),
+    cameraDistanceOffset: THREE.MathUtils.clamp(Number(tuning.cameraDistanceOffset) || DEFAULT_GRID_TUNING.cameraDistanceOffset, -3, 4),
+    animationIntensity: THREE.MathUtils.clamp(Number(tuning.animationIntensity) || DEFAULT_GRID_TUNING.animationIntensity, 0, 1.6),
+  };
+}
 
 const TYPE_COLORS = {
   assassin: 0x7f5af0,
@@ -133,6 +152,7 @@ export class CardLibraryScene {
     scrollContainer,
     previewRotationOffset = DEFAULT_PREVIEW_ROTATION_OFFSET,
     previewPositionOffset = DEFAULT_PREVIEW_POSITION_OFFSET,
+    gridTuning = DEFAULT_GRID_TUNING,
   }) {
     this.canvas = canvas;
     this.scrollContainer = scrollContainer;
@@ -172,6 +192,7 @@ export class CardLibraryScene {
       y: Number.isFinite(previewPositionOffset?.y) ? previewPositionOffset.y : DEFAULT_PREVIEW_POSITION_OFFSET.y,
       z: Number.isFinite(previewPositionOffset?.z) ? previewPositionOffset.z : DEFAULT_PREVIEW_POSITION_OFFSET.z,
     };
+    this.gridTuning = sanitizeGridTuning(gridTuning);
     this.isDraggingScroll = false;
     this.scrollY = 0;
     this.scrollTargetY = 0;
@@ -207,6 +228,25 @@ export class CardLibraryScene {
 
     this.onResize();
     this.renderer.setAnimationLoop(() => this.render());
+  }
+
+  getLayoutMetrics() {
+    const cardWidth = BASE_CARD_WIDTH * this.gridTuning.cardScale;
+    const cardHeight = BASE_CARD_HEIGHT * this.gridTuning.cardScale;
+    return {
+      columns: this.gridTuning.columns,
+      cardWidth,
+      cardHeight,
+      cardThickness: BASE_CARD_THICKNESS * this.gridTuning.cardScale,
+      gridXSpacing: cardWidth * this.gridTuning.columnGap,
+      gridYSpacing: cardHeight * this.gridTuning.rowGap,
+      gridLeftPadding: this.gridTuning.marginX,
+      gridTopPadding: this.gridTuning.marginY,
+      gridBottomPadding: this.gridTuning.marginY,
+      visibleRowsTarget: this.gridTuning.visibleRows,
+      cameraDistanceOffset: this.gridTuning.cameraDistanceOffset,
+      animationIntensity: this.gridTuning.animationIntensity,
+    };
   }
 
   destroy() {
@@ -248,30 +288,32 @@ export class CardLibraryScene {
     this.clearCards();
     this.cards = cards.slice();
 
+    const layout = this.getLayoutMetrics();
+
     this.cards.forEach((card, index) => {
-      const row = Math.floor(index / GRID_COLUMNS);
-      const column = index % GRID_COLUMNS;
+      const row = Math.floor(index / layout.columns);
+      const column = index % layout.columns;
       const basePosition = new THREE.Vector3(
-        GRID_LEFT_PADDING + CARD_WIDTH * 0.5 + column * GRID_X_SPACING,
-        -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + row * GRID_Y_SPACING),
+        layout.gridLeftPadding + layout.cardWidth * 0.5 + column * layout.gridXSpacing,
+        -(layout.gridTopPadding + layout.cardHeight * 0.5 + row * layout.gridYSpacing),
         0,
       );
 
       const root = CardMeshFactory.createCard({
         id: card.id,
-        width: CARD_WIDTH,
-        height: CARD_HEIGHT,
-        thickness: CARD_THICKNESS,
+        width: layout.cardWidth,
+        height: layout.cardHeight,
+        thickness: layout.cardThickness,
         cornerRadius: 0.15,
         color: colorForType(card.type),
       });
 
       const texture = createCardLabelTexture(card);
       const face = new THREE.Mesh(
-        new THREE.PlaneGeometry(CARD_WIDTH * 0.92, CARD_HEIGHT * 0.92),
+        new THREE.PlaneGeometry(layout.cardWidth * 0.92, layout.cardHeight * 0.92),
         new THREE.MeshStandardMaterial({ map: texture, roughness: 0.75, metalness: 0.04 }),
       );
-      face.position.set(0, 0, CARD_THICKNESS * 0.51);
+      face.position.set(0, 0, layout.cardThickness * 0.51);
       root.userData.tiltPivot.add(face);
       root.userData.face = face;
 
@@ -287,6 +329,12 @@ export class CardLibraryScene {
     });
 
     this.onResize();
+  }
+
+
+  setGridTuning(tuning = {}) {
+    this.gridTuning = sanitizeGridTuning({ ...this.gridTuning, ...tuning });
+    this.setCards(this.cards);
   }
 
   setPointer(event) {
@@ -418,8 +466,9 @@ export class CardLibraryScene {
   }
 
   pixelsToWorldY(pixelDelta) {
+    const layout = this.getLayoutMetrics();
     const viewportHeightPx = Math.max(this.viewportHeight, MIN_ROW_HEIGHT_PX);
-    const worldVisibleHeight = CARD_HEIGHT + (this.visibleRows - 1) * GRID_Y_SPACING + CAMERA_VERTICAL_OVERSCAN * 2;
+    const worldVisibleHeight = layout.cardHeight + (this.visibleRows - 1) * layout.gridYSpacing + CAMERA_VERTICAL_OVERSCAN * 2;
     return (pixelDelta / viewportHeightPx) * worldVisibleHeight;
   }
 
@@ -433,10 +482,11 @@ export class CardLibraryScene {
   }
 
   onResize() {
+    const layout = this.getLayoutMetrics();
     const { width, height } = this.getViewportSize();
-    const rows = Math.max(Math.ceil(this.cards.length / GRID_COLUMNS), 1);
+    const rows = Math.max(Math.ceil(this.cards.length / layout.columns), 1);
     const viewportHeight = height;
-    const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
+    const visibleRows = Math.min(Math.max(layout.visibleRowsTarget, 1), rows);
     this.visibleRows = visibleRows;
     const desiredHeight = viewportHeight;
     this.viewportWidth = width;
@@ -449,23 +499,23 @@ export class CardLibraryScene {
 
     this.camera.aspect = width / desiredHeight;
 
-    const totalWidth = GRID_LEFT_PADDING * 2 + (GRID_COLUMNS - 1) * GRID_X_SPACING + CARD_WIDTH;
-    const visibleHeight = GRID_TOP_PADDING + GRID_BOTTOM_PADDING + CARD_HEIGHT + (visibleRows - 1) * GRID_Y_SPACING + CAMERA_VERTICAL_OVERSCAN * 2;
+    const totalWidth = layout.gridLeftPadding * 2 + (layout.columns - 1) * layout.gridXSpacing + layout.cardWidth;
+    const visibleHeight = layout.gridTopPadding + layout.gridBottomPadding + layout.cardHeight + (visibleRows - 1) * layout.gridYSpacing + CAMERA_VERTICAL_OVERSCAN * 2;
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
     const viewportAspect = width / viewportHeight;
     const fitDistanceX = totalWidth / (2 * Math.tan(fov / 2) * viewportAspect);
     const fitDistanceY = visibleHeight / (2 * Math.tan(fov / 2));
     const fitDistance = Math.max(fitDistanceX, fitDistanceY);
     const cameraX = totalWidth * 0.5;
-    const cameraBaseY = -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + ((visibleRows - 1) * GRID_Y_SPACING) * 0.5);
-    const totalRowsHeight = CARD_HEIGHT + (rows - 1) * GRID_Y_SPACING;
-    const maxVisibleRowsHeight = CARD_HEIGHT + (visibleRows - 1) * GRID_Y_SPACING;
+    const cameraBaseY = -(layout.gridTopPadding + layout.cardHeight * 0.5 + ((visibleRows - 1) * layout.gridYSpacing) * 0.5);
+    const totalRowsHeight = layout.cardHeight + (rows - 1) * layout.gridYSpacing;
+    const maxVisibleRowsHeight = layout.cardHeight + (visibleRows - 1) * layout.gridYSpacing;
     this.maxScrollY = Math.max(totalRowsHeight - maxVisibleRowsHeight, 0);
     this.scrollY = THREE.MathUtils.clamp(this.scrollY, 0, this.maxScrollY);
     this.scrollTargetY = THREE.MathUtils.clamp(this.scrollTargetY, 0, this.maxScrollY);
     const cameraY = cameraBaseY - this.scrollY;
 
-    this.camera.position.set(cameraX, cameraY, fitDistance + 3.2);
+    this.camera.position.set(cameraX, cameraY, fitDistance + 3.2 + layout.cameraDistanceOffset);
     this.camera.lookAt(cameraX, cameraY, 0);
     this.camera.updateProjectionMatrix();
   }
@@ -478,7 +528,8 @@ export class CardLibraryScene {
     this.scrollY = THREE.MathUtils.damp(this.scrollY, this.scrollTargetY, 14, 1 / 60);
 
     const cameraX = this.camera.position.x;
-    const cameraBaseY = -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + ((this.visibleRows - 1) * GRID_Y_SPACING) * 0.5);
+    const layout = this.getLayoutMetrics();
+    const cameraBaseY = -(layout.gridTopPadding + layout.cardHeight * 0.5 + ((this.visibleRows - 1) * layout.gridYSpacing) * 0.5);
     const cameraY = cameraBaseY - this.scrollY;
     if (Math.abs(this.camera.position.y - cameraY) > 0.0001) {
       this.camera.position.y = cameraY;
@@ -489,15 +540,16 @@ export class CardLibraryScene {
 
     this.cardRoots.forEach((root) => {
       const { basePosition, phase } = root.userData;
-      const swirlX = Math.sin(elapsed * 1.8 + phase) * 0.09;
-      const swirlZ = Math.cos(elapsed * 1.45 + phase * 1.2) * 0.05;
-      const ambientLift = basePosition.y + Math.sin(elapsed * 1.2 + phase * 0.7) * 0.12;
+      const motionScale = layout.animationIntensity;
+      const swirlX = Math.sin(elapsed * 1.8 + phase) * 0.09 * motionScale;
+      const swirlZ = Math.cos(elapsed * 1.45 + phase * 1.2) * 0.05 * motionScale;
+      const ambientLift = basePosition.y + Math.sin(elapsed * 1.2 + phase * 0.7) * 0.12 * motionScale;
 
       root.position.set(basePosition.x + swirlX, ambientLift, basePosition.z + swirlZ);
       root.rotation.set(
-        -0.06 + Math.sin(elapsed * 2.2 + phase) * 0.04,
-        Math.sin(elapsed * 1.5 + phase * 0.5) * 0.18,
-        Math.cos(elapsed * 1.8 + phase) * 0.03,
+        -0.06 + Math.sin(elapsed * 2.2 + phase) * 0.04 * motionScale,
+        Math.sin(elapsed * 1.5 + phase * 0.5) * 0.18 * motionScale,
+        Math.cos(elapsed * 1.8 + phase) * 0.03 * motionScale,
       );
 
       if (root === this.previewCard) {
