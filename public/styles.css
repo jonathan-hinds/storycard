@@ -357,7 +357,7 @@ button {
 .cards-list-wrap {
   padding: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(560px, 1fr);
   gap: 0;
 }
 
@@ -445,6 +445,10 @@ button {
 
   .cards-list {
     min-height: 320px;
+  }
+
+  .cards-list-wrap {
+    grid-template-rows: auto auto minmax(320px, 1fr);
   }
 
   .cards-library-canvas {
