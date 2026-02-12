@@ -26,6 +26,26 @@ const CARD_LIBRARY_PREVIEW_DEFAULTS = {
 };
 
 const CARD_LIBRARY_COMPACT_BREAKPOINT_PX = 900;
+const PREVIEW_Z_RANGE = Object.freeze({
+  desktop: { min: 1.5, max: 6 },
+  mobile: { min: -2, max: 6 },
+});
+
+function getPreviewZBounds() {
+  return window.innerWidth <= CARD_LIBRARY_COMPACT_BREAKPOINT_PX
+    ? PREVIEW_Z_RANGE.mobile
+    : PREVIEW_Z_RANGE.desktop;
+}
+
+function applyPreviewZBounds() {
+  const bounds = getPreviewZBounds();
+  previewOffsetZInput.min = String(bounds.min);
+  previewOffsetZInput.max = String(bounds.max);
+
+  const zValue = Number.parseFloat(previewOffsetZInput.value);
+  const clampedZ = Math.min(bounds.max, Math.max(bounds.min, zValue));
+  if (clampedZ !== zValue) previewOffsetZInput.value = String(clampedZ);
+}
 
 function getResponsivePreviewPosition() {
   const isCompactViewport = window.innerWidth <= CARD_LIBRARY_COMPACT_BREAKPOINT_PX;
@@ -71,7 +91,13 @@ function applyPreviewPositionFromControls() {
   });
 }
 
+function onWindowResize() {
+  applyPreviewZBounds();
+  applyPreviewPositionFromControls();
+}
+
 syncPreviewPositionUI(getResponsivePreviewPosition());
+applyPreviewZBounds();
 applyPreviewPositionFromControls();
 previewOffsetXInput.addEventListener('input', applyPreviewPositionFromControls);
 previewOffsetYInput.addEventListener('input', applyPreviewPositionFromControls);
@@ -155,10 +181,12 @@ form.addEventListener('submit', async (event) => {
 });
 
 fetchCards();
+window.addEventListener('resize', onWindowResize);
 
 window.addEventListener('beforeunload', () => {
   previewOffsetXInput.removeEventListener('input', applyPreviewPositionFromControls);
   previewOffsetYInput.removeEventListener('input', applyPreviewPositionFromControls);
   previewOffsetZInput.removeEventListener('input', applyPreviewPositionFromControls);
+  window.removeEventListener('resize', onWindowResize);
   cardLibraryScene.destroy();
 });
