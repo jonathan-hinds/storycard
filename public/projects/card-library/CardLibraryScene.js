@@ -11,13 +11,13 @@ const GRID_LEFT_PADDING = 0;
 const GRID_TOP_PADDING = 0;
 const GRID_BOTTOM_PADDING = 0;
 const MIN_ROW_HEIGHT_PX = 280;
-const GRID_VERTICAL_PADDING_PX = 0;
 const TARGET_VISIBLE_ROWS = 2;
 const CAMERA_VERTICAL_OVERSCAN = 0;
 const HOLD_DELAY_MS = 250;
 const HOLD_CANCEL_DISTANCE_PX = 10;
 const HOLD_SCALE = 1.52;
 const HOLD_Z_OFFSET = 2.2;
+const DRAG_START_DISTANCE_PX = 6;
 
 const TYPE_COLORS = {
   assassin: 0x7f5af0,
@@ -128,10 +128,16 @@ export class CardLibraryScene {
     this.pointer = new THREE.Vector2();
     this.activePointerId = null;
     this.pressPointer = { x: 0, y: 0 };
+    this.lastPointerY = 0;
     this.pointerCard = null;
     this.holdTimeoutId = null;
     this.heldCard = null;
     this.heldStartTime = 0;
+    this.isDraggingScroll = false;
+    this.scrollY = 0;
+    this.scrollTargetY = 0;
+    this.maxScrollY = 0;
+    this.visibleRows = 1;
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
@@ -287,6 +293,10 @@ export class CardLibraryScene {
     this.activePointerId = event.pointerId;
     this.pressPointer.x = event.clientX;
     this.pressPointer.y = event.clientY;
+    this.lastPointerY = event.clientY;
+    this.isDraggingScroll = false;
+
+    this.scrollContainer.setPointerCapture(event.pointerId);
 
     const target = this.pickCard(event);
     this.pointerCard = target;
@@ -297,14 +307,29 @@ export class CardLibraryScene {
       this.heldCard = target;
       this.heldStartTime = performance.now();
       target.userData.targetHoldProgress = 1;
-      this.scrollContainer.setPointerCapture(event.pointerId);
     }, HOLD_DELAY_MS);
   }
 
   onPointerMove(event) {
     if (this.activePointerId !== event.pointerId) return;
 
-    if (!this.heldCard && this.pointerCard && this.getPointerDistance(event) > HOLD_CANCEL_DISTANCE_PX) {
+    const pointerDistance = this.getPointerDistance(event);
+
+    if (!this.heldCard && !this.isDraggingScroll && pointerDistance > DRAG_START_DISTANCE_PX) {
+      this.isDraggingScroll = true;
+      this.pointerCard = null;
+      this.clearHoldTimer();
+    }
+
+    if (this.isDraggingScroll && !this.heldCard) {
+      const deltaY = event.clientY - this.lastPointerY;
+      this.scrollTargetY = THREE.MathUtils.clamp(this.scrollTargetY - this.pixelsToWorldY(deltaY), 0, this.maxScrollY);
+      event.preventDefault();
+    }
+
+    this.lastPointerY = event.clientY;
+
+    if (!this.heldCard && this.pointerCard && pointerDistance > HOLD_CANCEL_DISTANCE_PX) {
       this.clearHoldTimer();
       this.pointerCard = null;
     }
@@ -323,6 +348,13 @@ export class CardLibraryScene {
     this.activePointerId = null;
     this.pointerCard = null;
     this.heldCard = null;
+    this.isDraggingScroll = false;
+  }
+
+  pixelsToWorldY(pixelDelta) {
+    const viewportHeightPx = Math.max(this.scrollContainer.clientHeight, MIN_ROW_HEIGHT_PX);
+    const worldVisibleHeight = CARD_HEIGHT + (this.visibleRows - 1) * GRID_Y_SPACING + CAMERA_VERTICAL_OVERSCAN * 2;
+    return (pixelDelta / viewportHeightPx) * worldVisibleHeight;
   }
 
   onResize() {
@@ -330,11 +362,8 @@ export class CardLibraryScene {
     const rows = Math.max(Math.ceil(this.cards.length / GRID_COLUMNS), 1);
     const viewportHeight = Math.max(this.scrollContainer.clientHeight, MIN_ROW_HEIGHT_PX);
     const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
-    const rowHeightPx = Math.max(MIN_ROW_HEIGHT_PX, viewportHeight / visibleRows);
-    const desiredHeight = Math.max(
-      this.scrollContainer.clientHeight,
-      rows * rowHeightPx + GRID_VERTICAL_PADDING_PX,
-    );
+    this.visibleRows = visibleRows;
+    const desiredHeight = viewportHeight;
 
     this.canvas.style.height = `${desiredHeight}px`;
     this.renderer.setSize(width, desiredHeight, false);
@@ -354,7 +383,13 @@ export class CardLibraryScene {
     const fitDistanceY = visibleHeight / (2 * Math.tan(fov / 2));
     const fitDistance = Math.max(fitDistanceX, fitDistanceY);
     const cameraX = totalWidth * 0.5;
-    const cameraY = -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + ((visibleRows - 1) * GRID_Y_SPACING) * 0.5);
+    const cameraBaseY = -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + ((visibleRows - 1) * GRID_Y_SPACING) * 0.5);
+    const totalRowsHeight = CARD_HEIGHT + (rows - 1) * GRID_Y_SPACING;
+    const maxVisibleRowsHeight = CARD_HEIGHT + (visibleRows - 1) * GRID_Y_SPACING;
+    this.maxScrollY = Math.max(totalRowsHeight - maxVisibleRowsHeight, 0);
+    this.scrollY = THREE.MathUtils.clamp(this.scrollY, 0, this.maxScrollY);
+    this.scrollTargetY = THREE.MathUtils.clamp(this.scrollTargetY, 0, this.maxScrollY);
+    const cameraY = cameraBaseY - this.scrollY;
 
     this.camera.position.set(cameraX, cameraY, fitDistance + 3.2);
     this.camera.lookAt(cameraX, cameraY, 0);
@@ -363,6 +398,19 @@ export class CardLibraryScene {
 
   render() {
     const elapsed = this.clock.getElapsedTime();
+    const width = this.scrollContainer.clientWidth;
+    const height = Math.max(this.scrollContainer.clientHeight, MIN_ROW_HEIGHT_PX);
+    if (this.canvas.width !== width || this.canvas.height !== height) this.onResize();
+
+    this.scrollY = THREE.MathUtils.damp(this.scrollY, this.scrollTargetY, 14, 1 / 60);
+
+    const cameraX = this.camera.position.x;
+    const cameraBaseY = -(GRID_TOP_PADDING + CARD_HEIGHT * 0.5 + ((this.visibleRows - 1) * GRID_Y_SPACING) * 0.5);
+    const cameraY = cameraBaseY - this.scrollY;
+    if (Math.abs(this.camera.position.y - cameraY) > 0.0001) {
+      this.camera.position.y = cameraY;
+      this.camera.lookAt(cameraX, cameraY, 0);
+    }
 
     this.cardRoots.forEach((root) => {
       const { basePosition, phase } = root.userData;
