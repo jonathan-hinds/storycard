@@ -10,6 +10,7 @@ const DEFAULT_OPTIONS = {
   commitInterAttackDelayMs: 740,
   commitAttackAnimationDurationMs: 760,
   commitSettleBufferMs: 80,
+  commitPreRollBufferMs: 1200,
 };
 
 class PhaseManagerServer {
@@ -230,7 +231,8 @@ class PhaseManagerServer {
       return this.options.commitSettleBufferMs;
     }
 
-    return ((commitAttackCount - 1) * this.options.commitInterAttackDelayMs)
+    return this.options.commitPreRollBufferMs
+      + ((commitAttackCount - 1) * this.options.commitInterAttackDelayMs)
       + this.options.commitAttackAnimationDurationMs
       + this.options.commitSettleBufferMs;
   }
