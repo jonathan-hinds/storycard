@@ -10,7 +10,7 @@ const DEFAULT_OPTIONS = {
   commitInterAttackDelayMs: 740,
   commitAttackAnimationDurationMs: 760,
   commitSettleBufferMs: 80,
-  commitPreRollBufferMs: 1200,
+  commitPostRollObserveMs: 5000,
 };
 
 class PhaseManagerServer {
@@ -158,6 +158,7 @@ class PhaseManagerServer {
       meta: {
         drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
         phaseStartedAt: match.phaseStartedAt,
+        commitAllRolledAt: match.commitAllRolledAt || null,
         commitAttacks,
       },
     };
@@ -219,10 +220,12 @@ class PhaseManagerServer {
       pendingAttacks.set(playerId, attacks);
     });
     match.pendingCommitAttacksByPlayer = pendingAttacks;
-    match.phaseEndsAt = match.phaseStartedAt + this.getCommitPhaseDurationMs(match);
+    match.commitCompletedPlayers = new Set();
+    match.commitAllRolledAt = null;
+    match.phaseEndsAt = null;
   }
 
-  getCommitPhaseDurationMs(match) {
+  getCommitPhaseAnimationDurationMs(match) {
     const commitAttackCount = Array
       .from(match.pendingCommitAttacksByPlayer.values())
       .reduce((sum, attacks) => sum + (Array.isArray(attacks) ? attacks.length : 0), 0);
@@ -231,10 +234,36 @@ class PhaseManagerServer {
       return this.options.commitSettleBufferMs;
     }
 
-    return this.options.commitPreRollBufferMs
-      + ((commitAttackCount - 1) * this.options.commitInterAttackDelayMs)
+    return ((commitAttackCount - 1) * this.options.commitInterAttackDelayMs)
       + this.options.commitAttackAnimationDurationMs
       + this.options.commitSettleBufferMs;
+  }
+
+  completeCommitRolls(payload) {
+    const { playerId } = payload;
+    const status = this.phaseMatchmakingState.get(playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      return { error: 'player is not in an active match', statusCode: 409 };
+    }
+
+    const match = this.phaseMatches.get(status.matchId);
+    if (!match) {
+      return { error: 'active match not found', statusCode: 409 };
+    }
+
+    if (match.phase !== 2) {
+      return { error: 'cannot complete commit rolls outside commit phase', statusCode: 409 };
+    }
+
+    match.commitCompletedPlayers.add(playerId);
+    if (match.commitCompletedPlayers.size === match.players.length && !match.commitAllRolledAt) {
+      match.commitAllRolledAt = Date.now();
+      match.phaseEndsAt = match.commitAllRolledAt
+        + this.options.commitPostRollObserveMs
+        + this.getCommitPhaseAnimationDurationMs(match);
+    }
+
+    return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
 
   readyPlayerInMatch(match, playerId) {
@@ -349,7 +378,7 @@ class PhaseManagerServer {
         this.phaseMatchmakingState.set(playerId, { status: 'idle' });
         return { status: 'idle', queueCount: this.phaseQueue.length };
       }
-      if (match.phase === 2 && Date.now() >= (match.phaseEndsAt || match.phaseStartedAt || 0)) {
+      if (match.phase === 2 && Number.isFinite(match.phaseEndsAt) && Date.now() >= match.phaseEndsAt) {
         this.advanceMatchToDecisionPhase(match);
       }
 
@@ -407,6 +436,8 @@ class PhaseManagerServer {
         readyPlayers: new Set(),
         lastDrawnCardsByPlayer: new Map(),
         pendingCommitAttacksByPlayer: new Map(),
+        commitCompletedPlayers: new Set(),
+        commitAllRolledAt: null,
         createdAt: Date.now(),
       };
       this.phaseMatches.set(matchId, match);

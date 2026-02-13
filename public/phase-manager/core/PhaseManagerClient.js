@@ -21,6 +21,7 @@ export class PhaseManagerClient {
     this.elements = elements;
     this.options = {
       pollIntervalMs: 1200,
+      commitObservationDelayMs: 5000,
       ...options,
     };
     this.client = null;
@@ -347,13 +348,48 @@ export class PhaseManagerClient {
       } catch (error) {
         this.elements.statusEl.textContent = `Dice roll error: ${error.message}`;
         this.cardRollerOverlay.clear();
+        return;
       }
+    }
+
+    try {
+      await this.postJson('/api/phase-manager/match/commit-complete', {
+        playerId: this.playerId,
+      });
+    } catch (error) {
+      this.elements.statusEl.textContent = `Commit sync error: ${error.message}`;
+      return;
+    }
+
+    const allRolledAt = await this.waitForCommitAllRolledAt();
+    if (!allRolledAt) return;
+
+    const waitRemainingMs = Math.max(0, (allRolledAt + this.options.commitObservationDelayMs) - Date.now());
+    if (waitRemainingMs > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, waitRemainingMs));
     }
 
     this.client.playCommitPhaseAnimations(commitAttacks, {
       interAttackDelayMs: 740,
     });
     this.lastAnimatedCommitKey = commitAnimationKey;
+  }
+
+  async waitForCommitAllRolledAt() {
+    const maxAttempts = 45;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        const status = await this.getJson(`/api/phase-manager/matchmaking/status?playerId=${encodeURIComponent(this.playerId)}`);
+        const commitAllRolledAt = status?.matchState?.meta?.commitAllRolledAt;
+        if (Number.isFinite(commitAllRolledAt)) return commitAllRolledAt;
+        if (status?.matchState?.phase !== 2) return null;
+      } catch (error) {
+        this.elements.statusEl.textContent = `Commit polling error: ${error.message}`;
+        return null;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, this.options.pollIntervalMs));
+    }
+    return null;
   }
 
   async syncMatchStateAfterCardCommit() {
