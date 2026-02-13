@@ -68,6 +68,7 @@ function buildSlider({ elementKey, prop, label, min, max, step }) {
   };
 
   input.addEventListener('input', syncValue);
+  input.addEventListener('change', syncValue);
   syncValue();
 
   row.append(valueLabel, input);
@@ -92,6 +93,7 @@ function buildColorControl({ elementKey, label }) {
   };
 
   input.addEventListener('input', syncValue);
+  input.addEventListener('change', syncValue);
   syncValue();
 
   row.append(valueLabel, input);
@@ -295,6 +297,7 @@ function buildMeshColorControl() {
   };
 
   input.addEventListener('input', syncValue);
+  input.addEventListener('change', syncValue);
   syncValue();
 
   row.append(valueLabel, input);
