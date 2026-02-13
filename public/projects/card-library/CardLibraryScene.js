@@ -52,10 +52,54 @@ const CARD_LABEL_CANVAS_SIZE = 1024;
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   name: Object.freeze({ x: 512, y: 200, size: 74, color: '#dfe8ff', align: 'center' }),
   type: Object.freeze({ x: 512, y: 268, size: 40, color: '#9ab0d8', align: 'center' }),
-  damage: Object.freeze({ x: 170, y: 757, size: 0.85, boxWidth: 190, boxHeight: 250, boxBevel: 24 }),
-  health: Object.freeze({ x: 398, y: 757, size: 0.85, boxWidth: 190, boxHeight: 250, boxBevel: 24 }),
-  speed: Object.freeze({ x: 626, y: 757, size: 0.85, boxWidth: 190, boxHeight: 250, boxBevel: 24 }),
-  defense: Object.freeze({ x: 854, y: 757, size: 0.85, boxWidth: 190, boxHeight: 250, boxBevel: 24 }),
+  damage: Object.freeze({
+    x: 170,
+    y: 757,
+    size: 0.85,
+    boxWidth: 190,
+    boxHeight: 250,
+    boxBevel: 24,
+    backgroundOpacity: 0.82,
+    labelSize: 36,
+    valueSize: 78,
+    textColor: '#f1f5ff',
+  }),
+  health: Object.freeze({
+    x: 398,
+    y: 757,
+    size: 0.85,
+    boxWidth: 190,
+    boxHeight: 250,
+    boxBevel: 24,
+    backgroundOpacity: 0.82,
+    labelSize: 36,
+    valueSize: 78,
+    textColor: '#f1f5ff',
+  }),
+  speed: Object.freeze({
+    x: 626,
+    y: 757,
+    size: 0.85,
+    boxWidth: 190,
+    boxHeight: 250,
+    boxBevel: 24,
+    backgroundOpacity: 0.82,
+    labelSize: 36,
+    valueSize: 78,
+    textColor: '#f1f5ff',
+  }),
+  defense: Object.freeze({
+    x: 854,
+    y: 757,
+    size: 0.85,
+    boxWidth: 190,
+    boxHeight: 250,
+    boxBevel: 24,
+    backgroundOpacity: 0.82,
+    labelSize: 36,
+    valueSize: 78,
+    textColor: '#f1f5ff',
+  }),
 });
 
 function normalizeTextColor(color, fallbackColor) {
@@ -141,6 +185,28 @@ function normalizeLabelElementLayout(layout, fallback) {
       : fallback.boxBevel;
   }
 
+  if (Number.isFinite(fallback.backgroundOpacity)) {
+    normalizedLayout.backgroundOpacity = Number.isFinite(layout?.backgroundOpacity)
+      ? THREE.MathUtils.clamp(layout.backgroundOpacity, 0, 1)
+      : fallback.backgroundOpacity;
+  }
+
+  if (Number.isFinite(fallback.labelSize)) {
+    normalizedLayout.labelSize = Number.isFinite(layout?.labelSize)
+      ? Math.max(8, layout.labelSize)
+      : fallback.labelSize;
+  }
+
+  if (Number.isFinite(fallback.valueSize)) {
+    normalizedLayout.valueSize = Number.isFinite(layout?.valueSize)
+      ? Math.max(8, layout.valueSize)
+      : fallback.valueSize;
+  }
+
+  if (typeof fallback.textColor === 'string') {
+    normalizedLayout.textColor = normalizeTextColor(layout?.textColor, fallback.textColor);
+  }
+
   return normalizedLayout;
 }
 
@@ -203,17 +269,17 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
     const left = elementLayout.x - width / 2;
     const top = elementLayout.y - height / 2;
 
-    ctx.fillStyle = 'rgba(18, 24, 40, 0.82)';
+    ctx.fillStyle = `rgba(18, 24, 40, ${elementLayout.backgroundOpacity})`;
     drawRoundedRect(ctx, left, top, width, height, elementLayout.boxBevel);
     ctx.fill();
 
-    ctx.fillStyle = '#8ea4cf';
+    ctx.fillStyle = elementLayout.textColor;
     ctx.textAlign = 'center';
-    ctx.font = `600 ${Math.round(36 * elementLayout.size)}px Inter, system-ui, sans-serif`;
+    ctx.font = `600 ${Math.round(elementLayout.labelSize * elementLayout.size)}px Inter, system-ui, sans-serif`;
     ctx.fillText(label, left + width / 2, top + (88 * elementLayout.size));
 
-    ctx.fillStyle = '#f1f5ff';
-    ctx.font = `700 ${Math.round(78 * elementLayout.size)}px Inter, system-ui, sans-serif`;
+    ctx.fillStyle = elementLayout.textColor;
+    ctx.font = `700 ${Math.round(elementLayout.valueSize * elementLayout.size)}px Inter, system-ui, sans-serif`;
     ctx.fillText(String(value ?? '-'), left + width / 2, top + (188 * elementLayout.size));
   });
 
