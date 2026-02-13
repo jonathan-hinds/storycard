@@ -12,6 +12,7 @@ const defaultCard = {
   health: 18,
   speed: 4,
   defense: 5,
+  meshColor: '#2cb67d',
 };
 
 const previewCard = { ...defaultCard };
@@ -276,6 +277,30 @@ function buildBackgroundSelectControl() {
   return row;
 }
 
+function buildMeshColorControl() {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = previewCard.meshColor;
+
+  const syncValue = () => {
+    previewCard.meshColor = input.value;
+    valueLabel.textContent = `Card Mesh Color: ${input.value.toUpperCase()}`;
+    scene.setCards([previewCard]);
+  };
+
+  input.addEventListener('input', syncValue);
+  syncValue();
+
+  row.append(valueLabel, input);
+  return row;
+}
+
 const textPreviewGroup = document.createElement('div');
 textPreviewGroup.className = 'card tools-group';
 
@@ -285,6 +310,7 @@ textPreviewGroup.append(textPreviewHeading);
 textPreviewGroup.append(
   buildTextInputControl({ cardProp: 'name', label: 'Name Text' }),
   buildTextInputControl({ cardProp: 'type', label: 'Type Text' }),
+  buildMeshColorControl(),
   buildBackgroundSelectControl(),
   buildExportControls(),
 );
