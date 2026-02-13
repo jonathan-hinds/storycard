@@ -5,6 +5,16 @@ const DEFAULT_PANEL_SIZE_PX = 98;
 const DEFAULT_ROLL_DELAY_MS = 260;
 const ORTHO_OFFSET_Y = 0.62;
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function parseSidesFromStat(value, fallbackSides = 6) {
   if (typeof value === 'number' && Number.isFinite(value) && value >= 2) {
     return Math.max(2, Math.floor(value));
@@ -85,7 +95,8 @@ export class CardRollerOverlay {
     if (!Array.isArray(attackPlan) || !attackPlan.length) return [];
 
     const boardSlotsPerSide = Math.floor((this.cardGameClient.boardSlots?.length || 0) / 2);
-    const rolls = [];
+    const pendingRolls = [];
+    this.layer.dataset.active = 'true';
 
     for (const step of attackPlan) {
       const attackerSide = step?.attackerSide === 'opponent' ? 'opponent' : 'player';
@@ -105,33 +116,63 @@ export class CardRollerOverlay {
         assets: {},
       });
 
-      const entry = { panel, roller, globalSlotIndex };
+      const settled = createDeferred();
+      roller.handlers.onSettled = ({ value }) => settled.resolve(value ?? null);
+      roller.handlers.onError = (error) => settled.reject(error);
+
+      const entry = {
+        panel,
+        roller,
+        globalSlotIndex,
+        hasRolled: false,
+      };
       this.activeRollers.push(entry);
       this.positionRollerEntry(entry);
 
-      const result = await roller.roll({
-        dice: [{ id: `${card.userData.cardId}-${rollType}`, sides }],
+      panel.title = 'Click to roll';
+      panel.dataset.state = 'pending';
+      panel.addEventListener('click', async () => {
+        if (entry.hasRolled) return;
+        entry.hasRolled = true;
+        panel.dataset.state = 'rolling';
+        try {
+          await roller.roll({
+            dice: [{ id: `${card.userData.cardId}-${rollType}`, sides }],
+          });
+        } catch (error) {
+          settled.reject(error);
+        }
       });
 
-      rolls.push({
-        cardId: card.userData.cardId,
-        rollType,
-        statValue,
-        sides,
-        outcome: result?.results?.[0]?.outcome ?? null,
-      });
+      pendingRolls.push(settled.promise.then((outcome) => {
+        panel.dataset.state = 'settled';
+        return {
+          cardId: card.userData.cardId,
+          rollType,
+          statValue,
+          sides,
+          outcome,
+        };
+      }));
+    }
+
+    if (!pendingRolls.length) {
+      this.clear();
+      return [];
     }
 
     if (!this.positionTick) {
       this.positionTick = requestAnimationFrame(this.updatePositions);
     }
 
+    const rolls = await Promise.all(pendingRolls);
     await new Promise((resolve) => window.setTimeout(resolve, this.rollDelayMs));
     this.clear();
     return rolls;
   }
 
   clear() {
+    this.layer.removeAttribute('data-active');
     if (this.positionTick) {
       cancelAnimationFrame(this.positionTick);
       this.positionTick = 0;
@@ -146,4 +187,3 @@ export class CardRollerOverlay {
     if (this.layer.parentNode) this.layer.parentNode.removeChild(this.layer);
   }
 }
-

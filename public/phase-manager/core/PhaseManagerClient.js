@@ -235,9 +235,11 @@ export class PhaseManagerClient {
     const opponent = this.match.players.opponent;
 
     overlayEl.hidden = true;
+    overlayEl.style.pointerEvents = 'auto';
     if (this.match.phase === 2) {
       overlayEl.hidden = false;
-      overlayEl.textContent = 'Commit phase resolving…';
+      overlayEl.textContent = 'Commit phase: click each die overlay to roll and continue.';
+      overlayEl.style.pointerEvents = 'none';
     } else if (this.match.youAreReady) {
       overlayEl.hidden = false;
       overlayEl.textContent = 'Waiting for opponent to ready…';
@@ -332,7 +334,7 @@ export class PhaseManagerClient {
       ? (this.match.youAreReady
         ? 'You are readied up. Waiting for opponent to ready…'
         : 'Decision phase: play cards, then drag ready board cards onto enemy cards to queue attacks, then click Ready Up.')
-      : 'Commit phase resolving automatically…';
+      : 'Commit phase: roll each die overlay to resolve attacks.';
 
     this.setReadyLockState();
     this.updateSummaryPanels();

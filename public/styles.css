@@ -332,7 +332,11 @@ button {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
+}
+
+.card-roller-overlay-layer[data-active='true'] {
+  pointer-events: auto;
 }
 
 .card-roller-overlay-panel {
@@ -342,6 +346,16 @@ button {
   background: rgba(6, 10, 18, 0.88);
   overflow: hidden;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.card-roller-overlay-panel[data-state='rolling'] {
+  border-color: rgba(255, 201, 107, 0.95);
+}
+
+.card-roller-overlay-panel[data-state='settled'] {
+  border-color: rgba(129, 229, 168, 0.95);
 }
 
 .card-roller-overlay-panel .die-canvas {
