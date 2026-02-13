@@ -32,6 +32,7 @@ export class PhaseManagerClient {
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
+    this.activeCommitSequenceKey = null;
     this.cardRollerOverlay = null;
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
@@ -327,8 +328,24 @@ export class PhaseManagerClient {
 
     const commitAnimationKey = `${this.match.id}:${this.match.turnNumber}:${this.match.phase}`;
     const commitAttacks = Array.isArray(this.match.meta?.commitAttacks) ? this.match.meta.commitAttacks : [];
-    if (this.match.phase === 2 && this.client && typeof this.client.playCommitPhaseAnimations === 'function' && commitAnimationKey !== this.lastAnimatedCommitKey) {
-      this.commitSequencePromise = this.runCommitSequence(commitAttacks, commitAnimationKey);
+    if (this.match.phase !== 2) {
+      this.activeCommitSequenceKey = null;
+      this.commitSequencePromise = null;
+      this.cardRollerOverlay?.clear();
+    } else if (
+      this.client
+      && typeof this.client.playCommitPhaseAnimations === 'function'
+      && commitAnimationKey !== this.lastAnimatedCommitKey
+      && !this.commitSequencePromise
+    ) {
+      this.activeCommitSequenceKey = commitAnimationKey;
+      this.commitSequencePromise = this.runCommitSequence(commitAttacks, commitAnimationKey)
+        .finally(() => {
+          if (this.activeCommitSequenceKey === commitAnimationKey) {
+            this.activeCommitSequenceKey = null;
+            this.commitSequencePromise = null;
+          }
+        });
     }
 
     statusEl.textContent = this.match.phase === 1
@@ -342,6 +359,10 @@ export class PhaseManagerClient {
   }
 
   async runCommitSequence(commitAttacks, commitAnimationKey) {
+    if (this.activeCommitSequenceKey && this.activeCommitSequenceKey !== commitAnimationKey) {
+      return;
+    }
+
     if (this.cardRollerOverlay) {
       try {
         await this.cardRollerOverlay.rollForAttacks(commitAttacks, { rollType: 'damage' });

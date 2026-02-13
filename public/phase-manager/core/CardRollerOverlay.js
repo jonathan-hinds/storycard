@@ -132,7 +132,8 @@ export class CardRollerOverlay {
 
       panel.title = 'Click to roll';
       panel.dataset.state = 'pending';
-      panel.addEventListener('click', async () => {
+      const triggerRoll = async (event) => {
+        event?.preventDefault?.();
         if (entry.hasRolled) return;
         entry.hasRolled = true;
         panel.dataset.state = 'rolling';
@@ -143,7 +144,11 @@ export class CardRollerOverlay {
         } catch (error) {
           settled.reject(error);
         }
-      });
+      };
+
+      panel.addEventListener('click', triggerRoll);
+      panel.addEventListener('pointerup', triggerRoll);
+      panel.addEventListener('touchend', triggerRoll, { passive: false });
 
       pendingRolls.push(settled.promise.then((outcome) => {
         panel.dataset.state = 'settled';
