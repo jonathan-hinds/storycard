@@ -345,7 +345,7 @@ sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, s
     group.append(
       buildSlider({ elementKey: key, prop: 'boxWidth', label: 'Box Width', min: 80, max: 420, step: 1 }),
       buildSlider({ elementKey: key, prop: 'boxHeight', label: 'Box Height', min: 80, max: 420, step: 1 }),
-      buildSlider({ elementKey: key, prop: 'boxBevel', label: 'Box Bevel', min: 0, max: 110, step: 1 }),
+      buildSlider({ elementKey: key, prop: 'boxBevel', label: 'Box Bevel', min: 0, max: 210, step: 1 }),
     );
   }
 
