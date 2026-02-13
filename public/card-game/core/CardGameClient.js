@@ -53,7 +53,7 @@ export class CardGameClient {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x101522);
+    this.scene.background = new THREE.Color(0x000000);
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
     this.camera.position.set(0, 8.2, 4.8);
@@ -136,7 +136,7 @@ export class CardGameClient {
 
     const table = new THREE.Mesh(
       new THREE.PlaneGeometry(20, 20),
-      new THREE.MeshStandardMaterial({ color: 0x1c2434, roughness: 0.95, metalness: 0.03 }),
+      new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.95, metalness: 0.03 }),
     );
     table.rotation.x = -Math.PI / 2;
     table.position.y = -0.72;
@@ -145,7 +145,7 @@ export class CardGameClient {
 
     const boardArea = new THREE.Mesh(
       new THREE.PlaneGeometry(8.3, 5.8),
-      new THREE.MeshStandardMaterial({ color: 0x243146, roughness: 0.85, metalness: 0.06, transparent: true, opacity: 0.45 }),
+      new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.85, metalness: 0.06, transparent: true, opacity: 0.45 }),
     );
     boardArea.position.set(0, -0.71, 0.15);
     boardArea.rotation.x = -Math.PI / 2;
@@ -153,7 +153,7 @@ export class CardGameClient {
 
     const playerTerritoryArea = new THREE.Mesh(
       new THREE.PlaneGeometry(8.3, 2.9),
-      new THREE.MeshStandardMaterial({ color: 0x2f4c7f, roughness: 0.86, metalness: 0.08, transparent: true, opacity: 0.38 }),
+      new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.86, metalness: 0.08, transparent: true, opacity: 0.38 }),
     );
     playerTerritoryArea.position.set(0, -0.708, 1.6);
     playerTerritoryArea.rotation.x = -Math.PI / 2;
@@ -161,7 +161,7 @@ export class CardGameClient {
 
     const opponentTerritoryArea = new THREE.Mesh(
       new THREE.PlaneGeometry(8.3, 2.9),
-      new THREE.MeshStandardMaterial({ color: 0x5a2f4f, roughness: 0.86, metalness: 0.08, transparent: true, opacity: 0.26 }),
+      new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.86, metalness: 0.08, transparent: true, opacity: 0.26 }),
     );
     opponentTerritoryArea.position.set(0, -0.708, -1.3);
     opponentTerritoryArea.rotation.x = -Math.PI / 2;
@@ -169,7 +169,7 @@ export class CardGameClient {
 
     this.handArea = new THREE.Mesh(
       new THREE.PlaneGeometry(8.6, 2),
-      new THREE.MeshStandardMaterial({ color: 0x1f2a3f, roughness: 0.9, metalness: 0.04, transparent: true, opacity: 0.55 }),
+      new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.9, metalness: 0.04, transparent: true, opacity: 0.55 }),
     );
     this.handArea.position.set(0, -0.71, HAND_BASE_Z);
     this.handArea.rotation.x = -Math.PI / 2;

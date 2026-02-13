@@ -196,7 +196,7 @@ button {
   width: 300px;
   height: 300px;
   border-radius: 0.55rem;
-  background: radial-gradient(circle at center, #2b3142, #131723 70%);
+  background: #000000;
   display: block;
 }
 
@@ -264,7 +264,7 @@ button {
   min-height: 560px;
   border-radius: 0.8rem;
   border: 1px solid #2a3448;
-  background: radial-gradient(circle at center, #273249, #101522 72%);
+  background: #000000;
   display: block;
 }
 
@@ -390,7 +390,7 @@ button {
   min-height: 560px;
   border-radius: 0.8rem;
   border: 1px solid #2a3448;
-  background: radial-gradient(circle at center, #273249, #101522 72%);
+  background: #000000;
   display: block;
 }
 

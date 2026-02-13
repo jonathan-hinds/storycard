@@ -326,7 +326,7 @@ export class CardLibraryScene {
     this.renderer.shadowMap.enabled = true;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0f1320);
+    this.scene.background = new THREE.Color(0x000000);
 
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 300);
 
