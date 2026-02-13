@@ -33,8 +33,8 @@ const scene = new CardLibraryScene({
 scene.setCards([defaultCard]);
 
 const sections = [
-  { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1 },
-  { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1 },
+  { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
+  { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1, supportsTextStyle: true },
   { key: 'damage', label: 'Damage', minSize: 0.5, maxSize: 1.7, stepSize: 0.05 },
   { key: 'health', label: 'Health', minSize: 0.5, maxSize: 1.7, stepSize: 0.05 },
   { key: 'speed', label: 'Speed', minSize: 0.5, maxSize: 1.7, stepSize: 0.05 },
@@ -68,7 +68,63 @@ function buildSlider({ elementKey, prop, label, min, max, step }) {
   return row;
 }
 
-sections.forEach(({ key, label, minSize, maxSize, stepSize }) => {
+function buildColorControl({ elementKey, label }) {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = editorState[elementKey].color;
+
+  const syncValue = () => {
+    editorState[elementKey].color = input.value;
+    valueLabel.textContent = `${label}: ${input.value.toUpperCase()}`;
+    scene.setCardLabelLayout(editorState);
+  };
+
+  input.addEventListener('input', syncValue);
+  syncValue();
+
+  row.append(valueLabel, input);
+  return row;
+}
+
+function buildAlignmentControl({ elementKey, label }) {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+  valueLabel.textContent = label;
+
+  const select = document.createElement('select');
+  select.className = 'tools-select';
+
+  [
+    { value: 'left', text: 'Left' },
+    { value: 'center', text: 'Center' },
+    { value: 'right', text: 'Right' },
+  ].forEach((optionDef) => {
+    const option = document.createElement('option');
+    option.value = optionDef.value;
+    option.textContent = optionDef.text;
+    select.append(option);
+  });
+
+  select.value = editorState[elementKey].align;
+  select.addEventListener('change', () => {
+    editorState[elementKey].align = select.value;
+    scene.setCardLabelLayout(editorState);
+  });
+
+  row.append(valueLabel, select);
+  return row;
+}
+
+sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle }) => {
   const group = document.createElement('div');
   group.className = 'card tools-group';
 
@@ -81,6 +137,13 @@ sections.forEach(({ key, label, minSize, maxSize, stepSize }) => {
     buildSlider({ elementKey: key, prop: 'y', label: 'Up / Down', min: 110, max: 930, step: 1 }),
     buildSlider({ elementKey: key, prop: 'size', label: 'Size', min: minSize, max: maxSize, step: stepSize }),
   );
+
+  if (supportsTextStyle) {
+    group.append(
+      buildColorControl({ elementKey: key, label: 'Text Color' }),
+      buildAlignmentControl({ elementKey: key, label: 'Text Alignment' }),
+    );
+  }
 
   controlsRoot.append(group);
 });

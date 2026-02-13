@@ -498,6 +498,19 @@ button {
   padding: 0;
 }
 
+.tools-slider-row input[type='color'] {
+  width: 100%;
+  height: 2rem;
+  border: 1px solid #33405f;
+  border-radius: 0.45rem;
+  background: #121a2b;
+  padding: 0.2rem;
+}
+
+.tools-select {
+  width: 100%;
+}
+
 @media (max-width: 900px) {
   .tools-layout {
     grid-template-columns: 1fr;

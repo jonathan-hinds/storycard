@@ -50,12 +50,23 @@ const DEFAULT_LAYOUT_TUNING = Object.freeze({
 const CARD_FACE_Z_EPSILON = 0.01;
 const CARD_LABEL_CANVAS_SIZE = 1024;
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
-  name: Object.freeze({ x: 512, y: 200, size: 74 }),
-  type: Object.freeze({ x: 512, y: 268, size: 40 }),
+  name: Object.freeze({ x: 512, y: 200, size: 74, color: '#dfe8ff', align: 'center' }),
+  type: Object.freeze({ x: 512, y: 268, size: 40, color: '#9ab0d8', align: 'center' }),
   damage: Object.freeze({ x: 245, y: 757, size: 1 }),
   health: Object.freeze({ x: 529, y: 757, size: 1 }),
   speed: Object.freeze({ x: 813, y: 757, size: 1 }),
 });
+
+function normalizeTextColor(color, fallbackColor) {
+  if (typeof color !== 'string') return fallbackColor;
+  const normalized = color.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized : fallbackColor;
+}
+
+function normalizeTextAlign(align, fallbackAlign) {
+  const validAlignments = ['left', 'center', 'right'];
+  return validAlignments.includes(align) ? align : fallbackAlign;
+}
 
 function getCardScaleFromControlValue(controlValue) {
   const clampedValue = THREE.MathUtils.clamp(controlValue, CARD_SCALE_CONTROL_MIN, CARD_SCALE_CONTROL_MAX);
@@ -100,6 +111,8 @@ function normalizeLabelElementLayout(layout, fallback) {
     x: Number.isFinite(layout?.x) ? layout.x : fallback.x,
     y: Number.isFinite(layout?.y) ? layout.y : fallback.y,
     size: Number.isFinite(layout?.size) ? Math.max(0.25, layout.size) : fallback.size,
+    color: normalizeTextColor(layout?.color, fallback.color),
+    align: normalizeTextAlign(layout?.align, fallback.align),
   };
 }
 
@@ -131,12 +144,13 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
     ctx.fill();
   }
 
-  ctx.fillStyle = '#dfe8ff';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = cardLabelLayout.name.color;
+  ctx.textAlign = cardLabelLayout.name.align;
   ctx.font = `bold ${Math.round(cardLabelLayout.name.size)}px Inter, system-ui, sans-serif`;
   ctx.fillText(card.name || 'Unnamed Card', cardLabelLayout.name.x, cardLabelLayout.name.y, 820);
 
-  ctx.fillStyle = '#9ab0d8';
+  ctx.fillStyle = cardLabelLayout.type.color;
+  ctx.textAlign = cardLabelLayout.type.align;
   ctx.font = `600 ${Math.round(cardLabelLayout.type.size)}px Inter, system-ui, sans-serif`;
   ctx.fillText(card.type || 'unknown', cardLabelLayout.type.x, cardLabelLayout.type.y, 720);
 
@@ -158,6 +172,7 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
     ctx.fill();
 
     ctx.fillStyle = '#8ea4cf';
+    ctx.textAlign = 'center';
     ctx.font = `600 ${Math.round(36 * elementLayout.size)}px Inter, system-ui, sans-serif`;
     ctx.fillText(label, left + width / 2, top + (88 * elementLayout.size));
 
