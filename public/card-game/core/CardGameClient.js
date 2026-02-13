@@ -259,16 +259,6 @@ export class CardGameClient {
     return new THREE.Vector3(x, y, z);
   }
 
-  getBoardRotationYForSlot(slot) {
-    if (!slot) return 0;
-    return slot.side === this.template.playerSide ? 0 : Math.PI;
-  }
-
-  getBoardRotationYForCard(card) {
-    if (!card || !Number.isInteger(card.userData?.slotIndex)) return 0;
-    return this.getBoardRotationYForSlot(this.boardSlots[card.userData.slotIndex]);
-  }
-
   relayoutBoardAndHand() {
     this.boardSlots.forEach((slot) => {
       if (!slot.card) return;
@@ -278,7 +268,7 @@ export class CardGameClient {
       card.userData.zone = CARD_ZONE_TYPES.BOARD;
       card.userData.slotIndex = slot.index;
       card.position.set(slot.x, 0, slot.z);
-      card.rotation.set(CARD_FACE_ROTATION_X, this.getBoardRotationYForSlot(slot), 0);
+      card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
     });
 
     const handCards = this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.HAND);
@@ -558,7 +548,6 @@ export class CardGameClient {
         if (slot) {
           slot.card = card;
           card.position.set(slot.x, 0, slot.z);
-          card.rotation.set(CARD_FACE_ROTATION_X, this.getBoardRotationYForSlot(slot), 0);
         }
       }
       this.scene.add(card);
@@ -665,7 +654,7 @@ export class CardGameClient {
       card.userData.zone = CARD_ZONE_TYPES.BOARD;
       card.userData.slotIndex = slot.index;
       card.position.set(slot.x, 0, slot.z);
-      card.rotation.set(CARD_FACE_ROTATION_X, this.getBoardRotationYForSlot(slot), 0);
+      card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
       await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: CARD_ZONE_TYPES.BOARD, slotIndex: slot.index });
       card.userData.owner = this.template.playerSide;
       await this.notifyCardStateCommitted(card);
@@ -688,12 +677,11 @@ export class CardGameClient {
         card.userData.zone = CARD_ZONE_TYPES.BOARD;
         card.userData.slotIndex = slot.index;
         card.position.set(slot.x, 0, slot.z);
-        card.rotation.set(CARD_FACE_ROTATION_X, this.getBoardRotationYForSlot(slot), 0);
       } else {
         card.userData.zone = CARD_ZONE_TYPES.HAND;
         card.userData.slotIndex = null;
-        card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
       }
+      card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
       if (this.state.pendingCardDidPickup) {
         await this.sendCardEvent(card.userData.cardId, 'putdown', { zone: card.userData.zone, slotIndex: card.userData.slotIndex });
         await this.notifyCardStateCommitted(card);
@@ -822,7 +810,7 @@ export class CardGameClient {
         }
 
         card.position.copy(pos);
-        card.rotation.set(CARD_FACE_ROTATION_X, this.getBoardRotationYForCard(card), 0);
+        card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
 
         if (!animation.didHit && t >= 0.58 && animation.defenderCard) {
           animation.didHit = true;
@@ -937,10 +925,9 @@ export class CardGameClient {
       const ambientLift = Math.sin(elapsed * 2.15 + phaseSeed * 0.7) * PLACED_CARD_VERTICAL_SWAY_AMPLITUDE;
       const rotationalFlareY = Math.sin(elapsed * 1.7 + phaseSeed) * PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE;
       const rotationalFlareZ = Math.cos(elapsed * 1.95 + phaseSeed * 1.3) * PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE * 0.4;
-      const baseRotationY = this.getBoardRotationYForSlot(slot);
 
       card.position.set(slot.x + swirlX, ambientLift, slot.z + swirlZ);
-      card.rotation.set(CARD_FACE_ROTATION_X, baseRotationY + rotationalFlareY, rotationalFlareZ);
+      card.rotation.set(CARD_FACE_ROTATION_X, rotationalFlareY, rotationalFlareZ);
     }
   }
 
