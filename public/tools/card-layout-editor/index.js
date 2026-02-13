@@ -17,6 +17,7 @@ const defaultCard = {
 
 const previewCard = { ...defaultCard };
 const imageCache = new Map();
+let selectedBackgroundImagePath = '';
 
 const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUT);
 
@@ -63,7 +64,8 @@ function buildSlider({ elementKey, prop, label, min, max, step }) {
   const syncValue = () => {
     const numericValue = Number(input.value);
     editorState[elementKey][prop] = numericValue;
-    valueLabel.textContent = `${label}: ${numericValue.toFixed(prop === 'size' && elementKey !== 'name' && elementKey !== 'type' ? 2 : 0)}`;
+    const precision = step < 1 ? 2 : 0;
+    valueLabel.textContent = `${label}: ${numericValue.toFixed(precision)}`;
     scene.setCardLabelLayout(editorState);
   };
 
@@ -75,7 +77,7 @@ function buildSlider({ elementKey, prop, label, min, max, step }) {
   return row;
 }
 
-function buildColorControl({ elementKey, label }) {
+function buildColorControl({ elementKey, label, prop = 'color' }) {
   const row = document.createElement('label');
   row.className = 'tools-slider-row';
 
@@ -84,10 +86,10 @@ function buildColorControl({ elementKey, label }) {
 
   const input = document.createElement('input');
   input.type = 'color';
-  input.value = editorState[elementKey].color;
+  input.value = editorState[elementKey][prop];
 
   const syncValue = () => {
-    editorState[elementKey].color = input.value;
+    editorState[elementKey][prop] = input.value;
     valueLabel.textContent = `${label}: ${input.value.toUpperCase()}`;
     scene.setCardLabelLayout(editorState);
   };
@@ -177,7 +179,15 @@ function buildExportControls() {
   const status = document.createElement('p');
   status.className = 'tools-slider-value';
 
-  const getSerializedState = () => JSON.stringify(editorState, null, 2);
+  const getSerializedState = () => JSON.stringify({
+    cardLabelLayout: editorState,
+    preview: {
+      name: previewCard.name,
+      type: previewCard.type,
+      meshColor: previewCard.meshColor,
+      backgroundImagePath: selectedBackgroundImagePath || null,
+    },
+  }, null, 2);
 
   exportButton.addEventListener('click', () => {
     const payload = getSerializedState();
@@ -247,6 +257,7 @@ function buildBackgroundSelectControl() {
   select.addEventListener('change', async () => {
     try {
       const selectedPath = select.value;
+      selectedBackgroundImagePath = selectedPath;
       if (!selectedPath) {
         delete previewCard.backgroundImage;
         scene.setCards([previewCard]);
@@ -346,6 +357,10 @@ sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, s
       buildSlider({ elementKey: key, prop: 'boxWidth', label: 'Box Width', min: 80, max: 420, step: 1 }),
       buildSlider({ elementKey: key, prop: 'boxHeight', label: 'Box Height', min: 80, max: 420, step: 1 }),
       buildSlider({ elementKey: key, prop: 'boxBevel', label: 'Box Bevel', min: 0, max: 210, step: 1 }),
+      buildSlider({ elementKey: key, prop: 'backgroundOpacity', label: 'Background Opacity', min: 0, max: 1, step: 0.01 }),
+      buildSlider({ elementKey: key, prop: 'labelSize', label: 'Label Text Size', min: 8, max: 96, step: 1 }),
+      buildSlider({ elementKey: key, prop: 'valueSize', label: 'Value Text Size', min: 8, max: 160, step: 1 }),
+      buildColorControl({ elementKey: key, label: 'Label + Value Color', prop: 'textColor' }),
     );
   }
 
