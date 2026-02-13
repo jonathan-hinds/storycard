@@ -507,6 +507,15 @@ button {
   padding: 0.2rem;
 }
 
+.tools-slider-row input[type='text'] {
+  width: 100%;
+  border: 1px solid #33405f;
+  border-radius: 0.45rem;
+  background: #121a2b;
+  color: #d2dbf2;
+  padding: 0.4rem 0.55rem;
+}
+
 .tools-select {
   width: 100%;
 }

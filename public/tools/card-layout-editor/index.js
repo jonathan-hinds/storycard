@@ -13,6 +13,8 @@ const defaultCard = {
   speed: 4,
 };
 
+const previewCard = { ...defaultCard };
+
 const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUT);
 
 const scene = new CardLibraryScene({
@@ -30,7 +32,7 @@ const scene = new CardLibraryScene({
   cardLabelLayout: editorState,
 });
 
-scene.setCards([defaultCard]);
+scene.setCards([previewCard]);
 
 const sections = [
   { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
@@ -123,6 +125,41 @@ function buildAlignmentControl({ elementKey, label }) {
   row.append(valueLabel, select);
   return row;
 }
+
+function buildTextInputControl({ cardProp, label }) {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+  valueLabel.textContent = label;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = previewCard[cardProp];
+  input.placeholder = `Enter ${label.toLowerCase()}`;
+
+  input.addEventListener('input', () => {
+    previewCard[cardProp] = input.value || defaultCard[cardProp];
+    scene.setCards([previewCard]);
+  });
+
+  row.append(valueLabel, input);
+  return row;
+}
+
+const textPreviewGroup = document.createElement('div');
+textPreviewGroup.className = 'card tools-group';
+
+const textPreviewHeading = document.createElement('h2');
+textPreviewHeading.textContent = 'Preview Text';
+textPreviewGroup.append(textPreviewHeading);
+textPreviewGroup.append(
+  buildTextInputControl({ cardProp: 'name', label: 'Name Text' }),
+  buildTextInputControl({ cardProp: 'type', label: 'Type Text' }),
+);
+
+controlsRoot.append(textPreviewGroup);
 
 sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle }) => {
   const group = document.createElement('div');
