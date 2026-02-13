@@ -49,6 +49,8 @@ const DEFAULT_LAYOUT_TUNING = Object.freeze({
 });
 const CARD_FACE_Z_EPSILON = 0.01;
 const CARD_LABEL_CANVAS_SIZE = 1024;
+const DEFAULT_CARD_BACKGROUND_IMAGE_PATH = '/public/assets/CardFront2.png';
+const backgroundImagePromiseCache = new Map();
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   name: Object.freeze({ x: 335, y: 110, size: 52, color: '#000000', align: 'left' }),
   type: Object.freeze({ x: 512, y: 644, size: 48, color: '#ffffff', align: 'center' }),
@@ -288,6 +290,21 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
   texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
+}
+
+function loadBackgroundImage(assetPath) {
+  if (!assetPath) return Promise.resolve(null);
+  if (backgroundImagePromiseCache.has(assetPath)) return backgroundImagePromiseCache.get(assetPath);
+
+  const imagePromise = new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Unable to load card background image: ${assetPath}`));
+    image.src = assetPath;
+  });
+
+  backgroundImagePromiseCache.set(assetPath, imagePromise);
+  return imagePromise;
 }
 
 export class CardLibraryScene {
@@ -549,6 +566,23 @@ export class CardLibraryScene {
 
       this.scene.add(root);
       this.cardRoots.push(root);
+
+      const backgroundImagePath = card.backgroundImagePath || DEFAULT_CARD_BACKGROUND_IMAGE_PATH;
+      if (!(card.backgroundImage instanceof HTMLImageElement) && backgroundImagePath) {
+        loadBackgroundImage(backgroundImagePath)
+          .then((image) => {
+            if (!image) return;
+            card.backgroundImage = image;
+            if (!this.cardRoots.includes(root)) return;
+            const previousTexture = face.material.map;
+            face.material.map = createCardLabelTexture(card, this.cardLabelLayout);
+            face.material.needsUpdate = true;
+            previousTexture?.dispose?.();
+          })
+          .catch(() => {
+            // Keep gradient fallback when the selected asset is unavailable.
+          });
+      }
     });
 
     this.onResize();
