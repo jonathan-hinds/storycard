@@ -92,6 +92,13 @@ function colorForType(type) {
   return TYPE_COLORS[String(type).toLowerCase()] ?? 0x4f8ef7;
 }
 
+function colorFromHexString(hexColor, fallbackColor) {
+  if (typeof hexColor !== 'string') return fallbackColor;
+  const normalized = hexColor.trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(normalized)) return fallbackColor;
+  return Number.parseInt(normalized.slice(1), 16);
+}
+
 function drawRoundedRect(ctx, x, y, width, height, radius) {
   const r = Math.min(radius, width / 2, height / 2);
   ctx.beginPath();
@@ -448,7 +455,7 @@ export class CardLibraryScene {
         height: cardHeight,
         thickness: CARD_THICKNESS,
         cornerRadius: 0.15,
-        color: colorForType(card.type),
+        color: colorFromHexString(card.meshColor, colorForType(card.type)),
       });
 
       const texture = createCardLabelTexture(card, this.cardLabelLayout);
