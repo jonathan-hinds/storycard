@@ -66,6 +66,10 @@ export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
     labelSize: 60,
     valueSize: 120,
     textColor: '#ffffff',
+    iconWidth: 124,
+    iconHeight: 124,
+    iconOffsetX: 0,
+    iconOffsetY: 10,
   }),
   health: Object.freeze({
     x: 202,
@@ -90,6 +94,10 @@ export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
     labelSize: 60,
     valueSize: 120,
     textColor: '#ffffff',
+    iconWidth: 124,
+    iconHeight: 124,
+    iconOffsetX: 0,
+    iconOffsetY: 10,
   }),
   defense: Object.freeze({
     x: 854,
@@ -102,8 +110,21 @@ export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
     labelSize: 60,
     valueSize: 120,
     textColor: '#ffffff',
+    iconWidth: 124,
+    iconHeight: 124,
+    iconOffsetX: 0,
+    iconOffsetY: 10,
   }),
 });
+
+const DIE_ICON_PATHS = Object.freeze({
+  D6: '/public/assets/D6Icon.png',
+  D8: '/public/assets/D8Icon.png',
+  D12: '/public/assets/D12Icon.png',
+  D20: '/public/assets/D20Icon.png',
+});
+const dieIconCache = new Map();
+const dieIconLoadPromises = new Map();
 
 function normalizeTextColor(color, fallbackColor) {
   if (typeof color !== 'string') return fallbackColor;
@@ -210,7 +231,67 @@ function normalizeLabelElementLayout(layout, fallback) {
     normalizedLayout.textColor = normalizeTextColor(layout?.textColor, fallback.textColor);
   }
 
+  if (Number.isFinite(fallback.iconWidth)) {
+    normalizedLayout.iconWidth = Number.isFinite(layout?.iconWidth)
+      ? Math.max(8, layout.iconWidth)
+      : fallback.iconWidth;
+  }
+
+  if (Number.isFinite(fallback.iconHeight)) {
+    normalizedLayout.iconHeight = Number.isFinite(layout?.iconHeight)
+      ? Math.max(8, layout.iconHeight)
+      : fallback.iconHeight;
+  }
+
+  if (Number.isFinite(fallback.iconOffsetX)) {
+    normalizedLayout.iconOffsetX = Number.isFinite(layout?.iconOffsetX)
+      ? layout.iconOffsetX
+      : fallback.iconOffsetX;
+  }
+
+  if (Number.isFinite(fallback.iconOffsetY)) {
+    normalizedLayout.iconOffsetY = Number.isFinite(layout?.iconOffsetY)
+      ? layout.iconOffsetY
+      : fallback.iconOffsetY;
+  }
+
   return normalizedLayout;
+}
+
+function normalizeDieValue(value) {
+  if (value == null) return null;
+  const match = String(value).trim().toUpperCase().match(/^D(6|8|12|20)$/);
+  return match ? `D${match[1]}` : null;
+}
+
+function ensureDieIconLoaded(dieValue) {
+  const iconPath = DIE_ICON_PATHS[dieValue];
+  if (!iconPath || dieIconCache.has(dieValue) || dieIconLoadPromises.has(dieValue)) return;
+
+  const imagePromise = new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      dieIconCache.set(dieValue, image);
+      resolve(image);
+    };
+    image.onerror = () => reject(new Error(`Unable to load die icon: ${iconPath}`));
+    image.src = iconPath;
+  })
+    .catch(() => {
+      // Keep text fallback when icon assets are unavailable.
+    })
+    .finally(() => {
+      dieIconLoadPromises.delete(dieValue);
+    });
+
+  dieIconLoadPromises.set(dieValue, imagePromise);
+}
+
+function getDieIcon(dieValue) {
+  const normalizedDieValue = normalizeDieValue(dieValue);
+  if (!normalizedDieValue) return null;
+  ensureDieIconLoaded(normalizedDieValue);
+  return dieIconCache.get(normalizedDieValue) ?? null;
 }
 
 function normalizeCardLabelLayout(cardLabelLayout = {}) {
@@ -280,6 +361,16 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
     ctx.textAlign = 'center';
     ctx.font = `600 ${Math.round(elementLayout.labelSize * elementLayout.size)}px Inter, system-ui, sans-serif`;
     ctx.fillText(label, left + width / 2, top + (88 * elementLayout.size));
+
+    const dieIcon = ['damage', 'speed', 'defense'].includes(key) ? getDieIcon(value) : null;
+    if (dieIcon) {
+      const iconWidth = elementLayout.iconWidth * elementLayout.size;
+      const iconHeight = elementLayout.iconHeight * elementLayout.size;
+      const iconX = left + (width / 2) + elementLayout.iconOffsetX - (iconWidth / 2);
+      const iconY = top + (188 * elementLayout.size) + elementLayout.iconOffsetY - (iconHeight / 2);
+      ctx.drawImage(dieIcon, iconX, iconY, iconWidth, iconHeight);
+      return;
+    }
 
     ctx.fillStyle = elementLayout.textColor;
     ctx.font = `700 ${Math.round(elementLayout.valueSize * elementLayout.size)}px Inter, system-ui, sans-serif`;
@@ -394,10 +485,20 @@ export class CardLibraryScene {
 
     this.onResize();
     this.renderer.setAnimationLoop(() => this.render());
+
+    Promise.all(Object.keys(DIE_ICON_PATHS).map((dieValue) => {
+      ensureDieIconLoaded(dieValue);
+      return dieIconLoadPromises.get(dieValue);
+    }))
+      .then(() => {
+        this.refreshCardTextures();
+      })
+      .catch(() => {
+        // Keep text fallback when icon assets are unavailable.
+      });
   }
 
-  setCardLabelLayout(cardLabelLayout = {}) {
-    this.cardLabelLayout = normalizeCardLabelLayout({ ...this.cardLabelLayout, ...cardLabelLayout });
+  refreshCardTextures() {
     this.cardRoots.forEach((root) => {
       const face = root.userData.face;
       const card = root.userData.catalogCard;
@@ -407,6 +508,11 @@ export class CardLibraryScene {
       face.material.needsUpdate = true;
       previousTexture?.dispose?.();
     });
+  }
+
+  setCardLabelLayout(cardLabelLayout = {}) {
+    this.cardLabelLayout = normalizeCardLabelLayout({ ...this.cardLabelLayout, ...cardLabelLayout });
+    this.refreshCardTextures();
   }
 
   normalizeLayoutTuning(layoutTuning = {}) {

@@ -373,6 +373,15 @@ sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, s
       buildSlider({ elementKey: key, prop: 'valueSize', label: 'Value Text Size', min: 8, max: 160, step: 1 }),
       buildColorControl({ elementKey: key, label: 'Label + Value Color', prop: 'textColor' }),
     );
+
+    if (['damage', 'speed', 'defense'].includes(key)) {
+      group.append(
+        buildSlider({ elementKey: key, prop: 'iconWidth', label: 'Die Icon Width', min: 16, max: 260, step: 1 }),
+        buildSlider({ elementKey: key, prop: 'iconHeight', label: 'Die Icon Height', min: 16, max: 260, step: 1 }),
+        buildSlider({ elementKey: key, prop: 'iconOffsetX', label: 'Die Icon Left / Right', min: -220, max: 220, step: 1 }),
+        buildSlider({ elementKey: key, prop: 'iconOffsetY', label: 'Die Icon Up / Down', min: -220, max: 220, step: 1 }),
+      );
+    }
   }
 
   controlsRoot.append(group);
