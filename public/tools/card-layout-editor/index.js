@@ -7,17 +7,17 @@ const controlsRoot = document.getElementById('layout-controls');
 const defaultCard = {
   id: 'layout-editor-default',
   name: 'Ember Warden',
-  type: 'Tank',
+  type: 'Fire',
   damage: 7,
   health: 18,
   speed: 4,
   defense: 5,
-  meshColor: '#2cb67d',
+  meshColor: '#000000',
 };
 
 const previewCard = { ...defaultCard };
 const imageCache = new Map();
-let selectedBackgroundImagePath = '';
+let selectedBackgroundImagePath = '/public/assets/CardFront2.png';
 
 const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUT);
 
@@ -37,6 +37,16 @@ const scene = new CardLibraryScene({
 });
 
 scene.setCards([previewCard]);
+
+loadImage(selectedBackgroundImagePath)
+  .then((image) => {
+    if (!image) return;
+    previewCard.backgroundImage = image;
+    scene.setCards([previewCard]);
+  })
+  .catch((error) => {
+    console.warn(error);
+  });
 
 const sections = [
   { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
@@ -280,6 +290,7 @@ function buildBackgroundSelectControl() {
         option.textContent = asset.name;
         select.append(option);
       });
+      select.value = selectedBackgroundImagePath;
       select.disabled = false;
     })
     .catch(() => {
