@@ -1,4 +1,5 @@
 import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
+import { CardRollerOverlay } from './CardRollerOverlay.js';
 
 const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
@@ -29,6 +30,8 @@ export class PhaseManagerClient {
     this.lastAnimatedMatchId = null;
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
+    this.commitSequencePromise = null;
+    this.cardRollerOverlay = null;
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
 
@@ -80,6 +83,10 @@ export class PhaseManagerClient {
     if (this.client) {
       this.client.destroy();
       this.client = null;
+    }
+    if (this.cardRollerOverlay) {
+      this.cardRollerOverlay.destroy();
+      this.cardRollerOverlay = null;
     }
   }
 
@@ -303,6 +310,10 @@ export class PhaseManagerClient {
           ],
         },
       });
+      this.cardRollerOverlay = new CardRollerOverlay({
+        host: canvas.parentElement,
+        cardGameClient: this.client,
+      });
     } else {
       this.client.template = template;
       this.client.resetDemo();
@@ -314,10 +325,7 @@ export class PhaseManagerClient {
     const commitAnimationKey = `${this.match.id}:${this.match.turnNumber}:${this.match.phase}`;
     const commitAttacks = Array.isArray(this.match.meta?.commitAttacks) ? this.match.meta.commitAttacks : [];
     if (this.match.phase === 2 && this.client && typeof this.client.playCommitPhaseAnimations === 'function' && commitAnimationKey !== this.lastAnimatedCommitKey) {
-      this.client.playCommitPhaseAnimations(commitAttacks, {
-        interAttackDelayMs: 740,
-      });
-      this.lastAnimatedCommitKey = commitAnimationKey;
+      this.commitSequencePromise = this.runCommitSequence(commitAttacks, commitAnimationKey);
     }
 
     statusEl.textContent = this.match.phase === 1
@@ -328,6 +336,22 @@ export class PhaseManagerClient {
 
     this.setReadyLockState();
     this.updateSummaryPanels();
+  }
+
+  async runCommitSequence(commitAttacks, commitAnimationKey) {
+    if (this.cardRollerOverlay) {
+      try {
+        await this.cardRollerOverlay.rollForAttacks(commitAttacks, { rollType: 'damage' });
+      } catch (error) {
+        this.elements.statusEl.textContent = `Dice roll error: ${error.message}`;
+        this.cardRollerOverlay.clear();
+      }
+    }
+
+    this.client.playCommitPhaseAnimations(commitAttacks, {
+      interAttackDelayMs: 740,
+    });
+    this.lastAnimatedCommitKey = commitAnimationKey;
   }
 
   async syncMatchStateAfterCardCommit() {
@@ -395,9 +419,14 @@ export class PhaseManagerClient {
     this.lastAnimatedMatchId = null;
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
+    this.commitSequencePromise = null;
     if (this.client) {
       this.client.destroy();
       this.client = null;
+    }
+    if (this.cardRollerOverlay) {
+      this.cardRollerOverlay.destroy();
+      this.cardRollerOverlay = null;
     }
 
     if (status.status === 'searching') {
@@ -472,9 +501,14 @@ export class PhaseManagerClient {
     this.lastAnimatedMatchId = null;
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
+    this.commitSequencePromise = null;
     if (this.client) {
       this.client.destroy();
       this.client = null;
+    }
+    if (this.cardRollerOverlay) {
+      this.cardRollerOverlay.destroy();
+      this.cardRollerOverlay = null;
     }
 
     this.postJson('/api/phase-manager/matchmaking/reset', { playerId: this.playerId })
