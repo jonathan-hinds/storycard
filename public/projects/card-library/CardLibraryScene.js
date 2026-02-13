@@ -52,9 +52,9 @@ const CARD_LABEL_CANVAS_SIZE = 1024;
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   name: Object.freeze({ x: 512, y: 200, size: 74, color: '#dfe8ff', align: 'center' }),
   type: Object.freeze({ x: 512, y: 268, size: 40, color: '#9ab0d8', align: 'center' }),
-  damage: Object.freeze({ x: 245, y: 757, size: 1 }),
-  health: Object.freeze({ x: 529, y: 757, size: 1 }),
-  speed: Object.freeze({ x: 813, y: 757, size: 1 }),
+  damage: Object.freeze({ x: 245, y: 757, size: 1, boxWidth: 250, boxHeight: 250, boxBevel: 24 }),
+  health: Object.freeze({ x: 529, y: 757, size: 1, boxWidth: 250, boxHeight: 250, boxBevel: 24 }),
+  speed: Object.freeze({ x: 813, y: 757, size: 1, boxWidth: 250, boxHeight: 250, boxBevel: 24 }),
 });
 
 function normalizeTextColor(color, fallbackColor) {
@@ -107,13 +107,33 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
 }
 
 function normalizeLabelElementLayout(layout, fallback) {
-  return {
+  const normalizedLayout = {
     x: Number.isFinite(layout?.x) ? layout.x : fallback.x,
     y: Number.isFinite(layout?.y) ? layout.y : fallback.y,
     size: Number.isFinite(layout?.size) ? Math.max(0.25, layout.size) : fallback.size,
     color: normalizeTextColor(layout?.color, fallback.color),
     align: normalizeTextAlign(layout?.align, fallback.align),
   };
+
+  if (Number.isFinite(fallback.boxWidth)) {
+    normalizedLayout.boxWidth = Number.isFinite(layout?.boxWidth)
+      ? Math.max(80, layout.boxWidth)
+      : fallback.boxWidth;
+  }
+
+  if (Number.isFinite(fallback.boxHeight)) {
+    normalizedLayout.boxHeight = Number.isFinite(layout?.boxHeight)
+      ? Math.max(80, layout.boxHeight)
+      : fallback.boxHeight;
+  }
+
+  if (Number.isFinite(fallback.boxBevel)) {
+    normalizedLayout.boxBevel = Number.isFinite(layout?.boxBevel)
+      ? Math.max(0, layout.boxBevel)
+      : fallback.boxBevel;
+  }
+
+  return normalizedLayout;
 }
 
 function normalizeCardLabelLayout(cardLabelLayout = {}) {
@@ -171,13 +191,13 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
 
   stats.forEach(({ key, label, value }) => {
     const elementLayout = cardLabelLayout[key];
-    const width = 250 * elementLayout.size;
-    const height = 250 * elementLayout.size;
+    const width = elementLayout.boxWidth;
+    const height = elementLayout.boxHeight;
     const left = elementLayout.x - width / 2;
     const top = elementLayout.y - height / 2;
 
     ctx.fillStyle = 'rgba(18, 24, 40, 0.82)';
-    drawRoundedRect(ctx, left, top, width, height, 24);
+    drawRoundedRect(ctx, left, top, width, height, elementLayout.boxBevel);
     ctx.fill();
 
     ctx.fillStyle = '#8ea4cf';
