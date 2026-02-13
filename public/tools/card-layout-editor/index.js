@@ -8,10 +8,10 @@ const defaultCard = {
   id: 'layout-editor-default',
   name: 'Ember Warden',
   type: 'Fire',
-  damage: 7,
+  damage: 'D8',
   health: 18,
-  speed: 4,
-  defense: 5,
+  speed: 'D6',
+  defense: 'D12',
   meshColor: '#000000',
 };
 
