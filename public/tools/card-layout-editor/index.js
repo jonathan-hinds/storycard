@@ -38,9 +38,9 @@ scene.setCards([previewCard]);
 const sections = [
   { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
   { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1, supportsTextStyle: true },
-  { key: 'damage', label: 'Damage', minSize: 0.5, maxSize: 1.7, stepSize: 0.05 },
-  { key: 'health', label: 'Health', minSize: 0.5, maxSize: 1.7, stepSize: 0.05 },
-  { key: 'speed', label: 'Speed', minSize: 0.5, maxSize: 1.7, stepSize: 0.05 },
+  { key: 'damage', label: 'Attack', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+  { key: 'health', label: 'Health', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+  { key: 'speed', label: 'Speed', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
 ];
 
 function buildSlider({ elementKey, prop, label, min, max, step }) {
@@ -149,6 +149,64 @@ function buildTextInputControl({ cardProp, label }) {
   return row;
 }
 
+function buildExportControls() {
+  const group = document.createElement('div');
+  group.className = 'tools-export';
+
+  const buttonRow = document.createElement('div');
+  buttonRow.className = 'tools-export-buttons';
+
+  const exportButton = document.createElement('button');
+  exportButton.type = 'button';
+  exportButton.textContent = 'Export Layout JSON';
+
+  const copyButton = document.createElement('button');
+  copyButton.type = 'button';
+  copyButton.textContent = 'Copy JSON';
+
+  const output = document.createElement('textarea');
+  output.className = 'tools-export-output';
+  output.rows = 8;
+  output.readOnly = true;
+
+  const status = document.createElement('p');
+  status.className = 'tools-slider-value';
+
+  const getSerializedState = () => JSON.stringify(editorState, null, 2);
+
+  exportButton.addEventListener('click', () => {
+    const payload = getSerializedState();
+    output.value = payload;
+
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'card-layout.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+
+    status.textContent = 'Exported card-layout.json.';
+  });
+
+  copyButton.addEventListener('click', async () => {
+    const payload = getSerializedState();
+    output.value = payload;
+
+    try {
+      await navigator.clipboard.writeText(payload);
+      status.textContent = 'Layout JSON copied to clipboard.';
+    } catch (_error) {
+      status.textContent = 'Could not copy automatically. Copy from the text box below.';
+    }
+  });
+
+  buttonRow.append(exportButton, copyButton);
+  group.append(buttonRow, output, status);
+
+  return group;
+}
+
 function loadImage(assetPath) {
   if (!assetPath) return Promise.resolve(null);
   if (imageCache.has(assetPath)) return imageCache.get(assetPath);
@@ -226,11 +284,12 @@ textPreviewGroup.append(
   buildTextInputControl({ cardProp: 'name', label: 'Name Text' }),
   buildTextInputControl({ cardProp: 'type', label: 'Type Text' }),
   buildBackgroundSelectControl(),
+  buildExportControls(),
 );
 
 controlsRoot.append(textPreviewGroup);
 
-sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle }) => {
+sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, supportsStatBoxStyle }) => {
   const group = document.createElement('div');
   group.className = 'card tools-group';
 
@@ -248,6 +307,14 @@ sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle })
     group.append(
       buildColorControl({ elementKey: key, label: 'Text Color' }),
       buildAlignmentControl({ elementKey: key, label: 'Text Alignment' }),
+    );
+  }
+
+  if (supportsStatBoxStyle) {
+    group.append(
+      buildSlider({ elementKey: key, prop: 'boxWidth', label: 'Box Width', min: 80, max: 420, step: 1 }),
+      buildSlider({ elementKey: key, prop: 'boxHeight', label: 'Box Height', min: 80, max: 420, step: 1 }),
+      buildSlider({ elementKey: key, prop: 'boxBevel', label: 'Box Bevel', min: 0, max: 110, step: 1 }),
     );
   }
 
