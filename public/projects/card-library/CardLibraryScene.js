@@ -162,10 +162,12 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-  for (let index = 0; index < 14; index += 1) {
-    drawRoundedRect(ctx, 42 + index * 8, 42 + index * 8, 940 - index * 16, 940 - index * 16, 28);
-    ctx.fill();
+  if (!(card.backgroundImage instanceof HTMLImageElement)) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    for (let index = 0; index < 14; index += 1) {
+      drawRoundedRect(ctx, 42 + index * 8, 42 + index * 8, 940 - index * 16, 940 - index * 16, 28);
+      ctx.fill();
+    }
   }
 
   ctx.fillStyle = cardLabelLayout.name.color;
