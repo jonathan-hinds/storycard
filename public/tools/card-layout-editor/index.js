@@ -14,6 +14,7 @@ const defaultCard = {
 };
 
 const previewCard = { ...defaultCard };
+const imageCache = new Map();
 
 const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUT);
 
@@ -148,6 +149,73 @@ function buildTextInputControl({ cardProp, label }) {
   return row;
 }
 
+function loadImage(assetPath) {
+  if (!assetPath) return Promise.resolve(null);
+  if (imageCache.has(assetPath)) return imageCache.get(assetPath);
+
+  const imagePromise = new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Unable to load background image: ${assetPath}`));
+    image.src = assetPath;
+  });
+
+  imageCache.set(assetPath, imagePromise);
+  return imagePromise;
+}
+
+function buildBackgroundSelectControl() {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+  valueLabel.textContent = 'Background Image';
+
+  const select = document.createElement('select');
+  select.className = 'tools-select';
+  select.disabled = true;
+
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = 'Default gradient';
+  select.append(defaultOption);
+
+  select.addEventListener('change', async () => {
+    try {
+      const selectedPath = select.value;
+      if (!selectedPath) {
+        delete previewCard.backgroundImage;
+        scene.setCards([previewCard]);
+        return;
+      }
+
+      previewCard.backgroundImage = await loadImage(selectedPath);
+      scene.setCards([previewCard]);
+    } catch (error) {
+      console.warn(error);
+    }
+  });
+
+  fetch('/api/assets')
+    .then((response) => response.json())
+    .then(({ assets = [] }) => {
+      assets.forEach((asset) => {
+        const option = document.createElement('option');
+        option.value = asset.path;
+        option.textContent = asset.name;
+        select.append(option);
+      });
+      select.disabled = false;
+    })
+    .catch(() => {
+      valueLabel.textContent = 'Background Image (assets unavailable)';
+    });
+
+  row.append(valueLabel, select);
+  return row;
+}
+
 const textPreviewGroup = document.createElement('div');
 textPreviewGroup.className = 'card tools-group';
 
@@ -157,6 +225,7 @@ textPreviewGroup.append(textPreviewHeading);
 textPreviewGroup.append(
   buildTextInputControl({ cardProp: 'name', label: 'Name Text' }),
   buildTextInputControl({ cardProp: 'type', label: 'Type Text' }),
+  buildBackgroundSelectControl(),
 );
 
 controlsRoot.append(textPreviewGroup);

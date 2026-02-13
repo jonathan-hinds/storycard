@@ -91,6 +91,30 @@ function rollDie(die, options = {}) {
 }
 
 async function handleApi(req, res, pathname) {
+  if (req.method === 'GET' && pathname === '/api/assets') {
+    const assetsDir = path.join(PUBLIC_DIR, 'assets');
+    fs.readdir(assetsDir, { withFileTypes: true }, (error, entries = []) => {
+      if (error) {
+        sendJson(res, 500, { error: 'Unable to list assets' });
+        return;
+      }
+
+      const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+      const assets = entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name)
+        .filter((name) => imageExtensions.has(path.extname(name).toLowerCase()))
+        .sort((left, right) => left.localeCompare(right))
+        .map((name) => ({
+          name,
+          path: `/public/assets/${name}`,
+        }));
+
+      sendJson(res, 200, { assets });
+    });
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/dice') {
     const list = Array.from(diceStore.values()).map((die) => ({
       id: die.id,

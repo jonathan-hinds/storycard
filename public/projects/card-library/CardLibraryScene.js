@@ -132,11 +132,20 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
   canvas.height = CARD_LABEL_CANVAS_SIZE;
   const ctx = canvas.getContext('2d');
 
-  const gradient = ctx.createLinearGradient(0, 0, CARD_LABEL_CANVAS_SIZE, CARD_LABEL_CANVAS_SIZE);
-  gradient.addColorStop(0, '#1f2a44');
-  gradient.addColorStop(1, '#0d1321');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (card.backgroundImage instanceof HTMLImageElement) {
+    ctx.drawImage(card.backgroundImage, 0, 0, canvas.width, canvas.height);
+    const overlay = ctx.createLinearGradient(0, 0, CARD_LABEL_CANVAS_SIZE, CARD_LABEL_CANVAS_SIZE);
+    overlay.addColorStop(0, 'rgba(8, 12, 22, 0.42)');
+    overlay.addColorStop(1, 'rgba(6, 10, 18, 0.65)');
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    const gradient = ctx.createLinearGradient(0, 0, CARD_LABEL_CANVAS_SIZE, CARD_LABEL_CANVAS_SIZE);
+    gradient.addColorStop(0, '#1f2a44');
+    gradient.addColorStop(1, '#0d1321');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
   for (let index = 0; index < 14; index += 1) {
