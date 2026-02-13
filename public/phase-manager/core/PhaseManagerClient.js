@@ -462,11 +462,17 @@ export class PhaseManagerClient {
         };
       }
 
+      const shouldRefreshScene = this.shouldRefreshMatchScene(nextMatch);
       const nextSerialized = JSON.stringify(nextMatch);
       const currentSerialized = JSON.stringify(this.match);
       if (nextSerialized !== currentSerialized) {
         this.match = nextMatch;
-        this.renderMatch();
+        if (shouldRefreshScene) {
+          this.renderMatch();
+        } else {
+          this.setReadyLockState();
+          this.updateSummaryPanels();
+        }
       } else {
         this.setReadyLockState();
         this.updateSummaryPanels();
@@ -500,6 +506,21 @@ export class PhaseManagerClient {
     matchmakingBtn.disabled = false;
     matchmakingBtn.textContent = 'Find Match';
     this.renderMatch();
+  }
+
+  shouldRefreshMatchScene(nextMatch) {
+    if (!nextMatch || !this.match) return true;
+
+    const isSameCommitTurn = this.match.id === nextMatch.id
+      && this.match.turnNumber === nextMatch.turnNumber
+      && this.match.phase === 2
+      && nextMatch.phase === 2;
+
+    if (isSameCommitTurn) {
+      return false;
+    }
+
+    return true;
   }
 
   async pollMatchmakingStatus() {
