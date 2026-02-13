@@ -115,6 +115,7 @@ export class CardRollerOverlay {
         container: panel,
         assets: {},
       });
+      roller.renderStaticPreview(sides);
 
       const settled = createDeferred();
       roller.handlers.onSettled = ({ value }) => settled.resolve(value ?? null);

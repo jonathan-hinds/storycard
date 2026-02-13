@@ -332,6 +332,30 @@ async function handleApi(req, res, pathname) {
     return true;
   }
 
+
+  if (req.method === 'POST' && pathname === '/api/phase-manager/match/commit-complete') {
+    let body = {};
+    try {
+      body = await readRequestJson(req);
+    } catch (error) {
+      body = {};
+    }
+
+    if (!body.playerId || typeof body.playerId !== 'string') {
+      sendJson(res, 400, { error: 'playerId is required' });
+      return true;
+    }
+
+    const result = phaseManagerServer.completeCommitRolls(body);
+    if (result.error) {
+      sendJson(res, result.statusCode || 400, { error: result.error });
+      return true;
+    }
+
+    sendJson(res, result.statusCode || 200, result.payload);
+    return true;
+  }
+
   if (req.method === 'POST' && pathname === '/api/phase-manager/match/sync-state') {
     let body = {};
     try {

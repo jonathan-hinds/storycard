@@ -30,6 +30,22 @@ export class DieRollerClient {
     this.currentRoll = null;
   }
 
+
+  ensureVisual(sides = 6) {
+    if (this.visual && this.visualSides === sides) return;
+    if (this.visual?.renderer) this.visual.renderer.dispose();
+    this.visual = createSceneForCanvas(this.canvas, sides);
+    this.visualSides = sides;
+  }
+
+  renderStaticPreview(sides = 6) {
+    this.ensureVisual(sides);
+    if (!this.visual) return;
+    resizeRendererToDisplaySize(this.visual);
+    syncCameraToDie(this.visual);
+    this.visual.renderer.render(this.visual.scene, this.visual.camera);
+  }
+
   async roll({ dice, seed, throwProfile } = {}) {
     try {
       this.handlers.onStart?.({ dice, seed, throwProfile });
@@ -42,11 +58,7 @@ export class DieRollerClient {
 
       const first = results[0];
       if (first) {
-        if (!this.visual || this.visualSides !== first.sides) {
-          if (this.visual?.renderer) this.visual.renderer.dispose();
-          this.visual = createSceneForCanvas(this.canvas, first.sides);
-          this.visualSides = first.sides;
-        }
+        this.ensureVisual(first.sides);
         this.currentRoll = first.roll;
         this.rollQueue = [...first.roll.frames];
         this.#ensureLoop();
