@@ -1,5 +1,12 @@
 const { randomUUID } = require('crypto');
 
+const TYPE_COLORS = Object.freeze({
+  nature: 0x2cb67d,
+  fire: 0xef4565,
+  water: 0x3da9fc,
+  arcane: 0x7f5af0,
+});
+
 const DEFAULT_OPTIONS = {
   deckSizePerPlayer: 10,
   startingHandSize: 3,
@@ -12,7 +19,11 @@ const DEFAULT_OPTIONS = {
 
 class PhaseManagerServer {
   constructor(options = {}) {
-    this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.options = {
+      ...DEFAULT_OPTIONS,
+      catalogProvider: typeof options.catalogProvider === 'function' ? options.catalogProvider : async () => [],
+      ...options,
+    };
     this.phaseQueue = [];
     this.phaseMatchmakingState = new Map();
     this.phaseMatches = new Map();
@@ -52,6 +63,57 @@ class PhaseManagerServer {
   randomCardColor() {
     const colorPool = [0x5f8dff, 0x8f6cff, 0x2dc6ad, 0xf28a65, 0xf1c965, 0xe76fb9, 0x4ecdc4, 0xff6b6b, 0xc7f464, 0xffa94d];
     return colorPool[Math.floor(Math.random() * colorPool.length)];
+  }
+
+
+  colorForType(type) {
+    if (!type) return this.randomCardColor();
+    return TYPE_COLORS[String(type).toLowerCase()] || this.randomCardColor();
+  }
+
+  normalizeCatalogCard(catalogCard = {}) {
+    return {
+      id: catalogCard.id || null,
+      name: catalogCard.name || 'Unnamed Card',
+      type: catalogCard.type || 'Unknown',
+      damage: catalogCard.damage ?? '-',
+      health: catalogCard.health ?? '-',
+      speed: catalogCard.speed ?? '-',
+      defense: catalogCard.defense ?? '-',
+    };
+  }
+
+  buildDeckFromCatalog(playerId, catalogCards = []) {
+    if (!Array.isArray(catalogCards) || catalogCards.length === 0) {
+      return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => ({
+        id: `${playerId}-card-${index + 1}`,
+        color: this.randomCardColor(),
+        catalogCard: this.normalizeCatalogCard({
+          name: `Test Card ${index + 1}`,
+          type: 'Unknown',
+          damage: 'D6',
+          health: 10,
+          speed: 'D6',
+          defense: 'D6',
+        }),
+        summonedTurn: null,
+        attackCommitted: false,
+        targetSlotIndex: null,
+      }));
+    }
+
+    return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => {
+      const randomCard = catalogCards[Math.floor(Math.random() * catalogCards.length)] || {};
+      const normalizedCard = this.normalizeCatalogCard(randomCard);
+      return {
+        id: `${playerId}-card-${index + 1}`,
+        color: this.colorForType(normalizedCard.type),
+        catalogCard: normalizedCard,
+        summonedTurn: null,
+        attackCommitted: false,
+        targetSlotIndex: null,
+      };
+    });
   }
 
   serializeMatchForPlayer(match, playerId) {
@@ -309,7 +371,7 @@ class PhaseManagerServer {
     return { status: 'idle', queueCount: this.phaseQueue.length };
   }
 
-  findMatch(playerId) {
+  async findMatch(playerId) {
     const existing = this.getPlayerPhaseStatus(playerId);
     if (existing.status === 'matched' || existing.status === 'searching') {
       return existing;
@@ -320,15 +382,17 @@ class PhaseManagerServer {
       const matchId = `match-${randomUUID().slice(0, 8)}`;
       const players = [opponentId, playerId];
       const cardsByPlayer = new Map();
+      let catalogCards = [];
+
+      try {
+        const loadedCards = await this.options.catalogProvider();
+        catalogCards = Array.isArray(loadedCards) ? loadedCards : [];
+      } catch (error) {
+        catalogCards = [];
+      }
 
       players.forEach((id) => {
-        const cards = Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => ({
-          id: `${id}-card-${index + 1}`,
-          color: this.randomCardColor(),
-          summonedTurn: null,
-          attackCommitted: false,
-          targetSlotIndex: null,
-        }));
+        const cards = this.buildDeckFromCatalog(id, catalogCards);
         cardsByPlayer.set(id, {
           allCards: cards,
           hand: cards.slice(0, this.options.startingHandSize),

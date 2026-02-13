@@ -27,7 +27,9 @@ const MIME_TYPES = {
 
 const diceStore = new Map();
 const dieRollerServer = new DieRollerServer();
-const phaseManagerServer = new PhaseManagerServer();
+const phaseManagerServer = new PhaseManagerServer({
+  catalogProvider: async () => listCatalogCards(),
+});
 const cardGameServer = new CardGameServer({
   cards: [
     { id: 'card-alpha', held: false, updatedAt: null, zone: 'board', slotIndex: 0 },
@@ -286,7 +288,7 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    sendJson(res, 200, phaseManagerServer.findMatch(body.playerId));
+    sendJson(res, 200, await phaseManagerServer.findMatch(body.playerId));
     return true;
   }
 

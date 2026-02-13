@@ -27,6 +27,7 @@ export class CardMeshFactory {
     thickness = 0.06,
     cornerRadius = 0.16,
     color = 0x4f8ef7,
+    faceTexture = null,
   } = {}) {
     const root = new THREE.Group();
     const tiltPivot = new THREE.Group();
@@ -66,6 +67,21 @@ export class CardMeshFactory {
     root.userData.dragPivot = dragPivot;
     root.userData.mesh = mesh;
     root.userData.params = { width, height, thickness, cornerRadius };
+
+    if (faceTexture) {
+      const face = new THREE.Mesh(
+        new THREE.PlaneGeometry(width * 0.96, height * 0.96),
+        new THREE.MeshStandardMaterial({
+          map: faceTexture,
+          transparent: true,
+          roughness: 0.48,
+          metalness: 0.08,
+        }),
+      );
+      face.position.set(0, 0, (thickness / 2) + 0.002);
+      dragPivot.add(face);
+      root.userData.face = face;
+    }
 
     return root;
   }

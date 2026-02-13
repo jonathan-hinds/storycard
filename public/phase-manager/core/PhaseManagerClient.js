@@ -131,6 +131,7 @@ export class PhaseManagerClient {
         canAttack: false,
         attackCommitted: false,
         targetSlotIndex: null,
+        catalogCard: card.catalogCard || null,
       });
     });
 
@@ -145,6 +146,7 @@ export class PhaseManagerClient {
         canAttack: card.canAttack === true,
         attackCommitted: card.attackCommitted === true,
         targetSlotIndex: Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null,
+        catalogCard: card.catalogCard || null,
       });
     });
 
@@ -156,6 +158,7 @@ export class PhaseManagerClient {
         zone: CARD_ZONE_TYPES.HAND,
         dealOrder: animatedDrawCardIds.has(card.id) ? handIndex : null,
         shouldDealAnimate: animatedDrawCardIds.has(card.id),
+        catalogCard: card.catalogCard || null,
       });
     });
 

@@ -1,5 +1,6 @@
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 import { CardMeshFactory } from '../render/CardMeshFactory.js';
+import { createCardLabelTexture } from '../render/cardLabelTexture.js';
 import { CardPicker } from '../render/CardPicker.js';
 import { CardGameHttpClient } from '../net/httpClient.js';
 import { SINGLE_CARD_TEMPLATE } from '../templates/singleCardTemplate.js';
@@ -516,7 +517,18 @@ export class CardGameClient {
     this.cards.length = 0;
 
     for (const cfg of this.template.initialCards) {
-      const card = CardMeshFactory.createCard({ id: cfg.id, width: 1.8, height: 2.5, thickness: 0.08, cornerRadius: 0.15, color: cfg.color });
+      const faceTexture = cfg.catalogCard
+        ? createCardLabelTexture(cfg.catalogCard, { backgroundImagePath: '/public/assets/CardFront2.png' })
+        : null;
+      const card = CardMeshFactory.createCard({
+        id: cfg.id,
+        width: 1.8,
+        height: 2.5,
+        thickness: 0.08,
+        cornerRadius: 0.15,
+        color: cfg.color,
+        faceTexture,
+      });
       card.userData.zone = isKnownZone(cfg.zone, this.zoneFramework) ? cfg.zone : CARD_ZONE_TYPES.HAND;
       card.userData.slotIndex = cfg.slotIndex ?? null;
       card.userData.owner = cfg.owner ?? this.template.playerSide;
@@ -527,6 +539,7 @@ export class CardGameClient {
       card.userData.canAttack = cfg.canAttack === true;
       card.userData.attackCommitted = cfg.attackCommitted === true;
       card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
+      card.userData.catalogCard = cfg.catalogCard ?? null;
       card.userData.isAttackHover = false;
       card.scale.setScalar(1);
       card.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
