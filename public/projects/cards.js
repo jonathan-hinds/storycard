@@ -4,6 +4,7 @@ const form = document.getElementById('create-card-form');
 const status = document.getElementById('create-card-status');
 const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
+const saveCardButton = document.getElementById('save-card-button');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
 const GRID_LAYOUT_DEFAULTS = Object.freeze({
@@ -42,6 +43,8 @@ const PREVIEW_CLOSENESS_BY_VIEWPORT = Object.freeze({
 });
 
 let cardLibraryScene;
+let selectedCardId = null;
+let cardsCache = [];
 
 function getDynamicPreviewZMax(baseMax) {
   const cameraDistance = cardLibraryScene?.camera?.position?.z;
@@ -86,6 +89,18 @@ cardLibraryScene = new CardLibraryScene({
   previewRotationOffset: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
   previewPositionOffset: getResponsivePreviewPosition(),
   layoutTuning: GRID_LAYOUT_DEFAULTS,
+  onCardSelect: (card) => {
+    if (!card) return;
+    selectedCardId = card.id;
+    form.elements.name.value = card.name ?? '';
+    form.elements.damage.value = card.damage ?? 0;
+    form.elements.health.value = card.health ?? 0;
+    form.elements.speed.value = card.speed ?? 0;
+    form.elements.defense.value = card.defense ?? 0;
+    typeSelect.value = card.type;
+    saveCardButton.disabled = false;
+    setStatus(`Editing "${card.name}". Update fields and click Save Card.`);
+  },
 });
 
 function applyResponsivePreviewPosition() {
@@ -103,6 +118,7 @@ function onWindowResize() {
 applyResponsivePreviewPosition();
 
 function renderCards(cards) {
+  cardsCache = cards;
   if (!cards.length) {
     cardLibraryCanvas.hidden = true;
     cardList.innerHTML = '<p class="catalog-empty">No cards yet. Create your first card using the form.</p>';
@@ -114,6 +130,12 @@ function renderCards(cards) {
   cardList.append(cardLibraryStageWrap);
   cardLibraryCanvas.hidden = false;
   cardLibraryScene.setCards(cards);
+}
+
+function resetFormToCreateMode() {
+  selectedCardId = null;
+  saveCardButton.disabled = true;
+  form.reset();
 }
 
 function setStatus(message, isError = false) {
@@ -154,6 +176,7 @@ form.addEventListener('submit', async (event) => {
     damage: Number.parseInt(formData.get('damage'), 10),
     health: Number.parseInt(formData.get('health'), 10),
     speed: Number.parseInt(formData.get('speed'), 10),
+    defense: Number.parseInt(formData.get('defense'), 10),
     type: formData.get('type'),
   };
 
@@ -170,10 +193,56 @@ form.addEventListener('submit', async (event) => {
       throw new Error(payload.error || 'Failed to create card');
     }
 
-    form.reset();
+    resetFormToCreateMode();
     typeSelect.value = payload.card.type;
     setStatus(`Saved "${payload.card.name}".`);
     await fetchCards();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
+
+saveCardButton.addEventListener('click', async () => {
+  if (!selectedCardId) {
+    setStatus('Select a card in the library before saving changes.', true);
+    return;
+  }
+
+  const formData = new FormData(form);
+  const cardInput = {
+    name: formData.get('name'),
+    damage: Number.parseInt(formData.get('damage'), 10),
+    health: Number.parseInt(formData.get('health'), 10),
+    speed: Number.parseInt(formData.get('speed'), 10),
+    defense: Number.parseInt(formData.get('defense'), 10),
+    type: formData.get('type'),
+  };
+
+  setStatus('Updating card...');
+
+  try {
+    const response = await fetch(`/api/projects/cards/${selectedCardId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cardInput),
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Failed to update card');
+    }
+
+    setStatus(`Updated "${payload.card.name}".`);
+    await fetchCards();
+    const updatedCard = cardsCache.find((card) => card.id === selectedCardId);
+    if (updatedCard) {
+      form.elements.name.value = updatedCard.name ?? '';
+      form.elements.damage.value = updatedCard.damage ?? 0;
+      form.elements.health.value = updatedCard.health ?? 0;
+      form.elements.speed.value = updatedCard.speed ?? 0;
+      form.elements.defense.value = updatedCard.defense ?? 0;
+      typeSelect.value = updatedCard.type;
+    }
   } catch (error) {
     setStatus(error.message, true);
   }

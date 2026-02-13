@@ -8,7 +8,7 @@ let clientPromise;
 
 function getMongoClientConstructor() {
   try {
-    return require('mongodb').MongoClient;
+    return require('mongodb');
   } catch (error) {
     throw new Error('MongoDB driver missing. Run `npm install` to install dependencies before using cards catalog APIs.');
   }
@@ -16,7 +16,7 @@ function getMongoClientConstructor() {
 
 function getClient() {
   if (!clientPromise) {
-    const MongoClient = getMongoClientConstructor();
+    const { MongoClient } = getMongoClientConstructor();
     const mongoUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
     const client = new MongoClient(mongoUri);
     clientPromise = client.connect();
@@ -43,8 +43,10 @@ function toCardRecord(document) {
     damage: document.damage,
     health: document.health,
     speed: document.speed,
+    defense: document.defense,
     type: document.type,
     createdAt: document.createdAt,
+    updatedAt: document.updatedAt ?? null,
   };
 }
 
@@ -75,6 +77,7 @@ function validateCardInput(input = {}) {
     damage: normalizeInteger(input.damage, 'damage'),
     health: normalizeInteger(input.health, 'health'),
     speed: normalizeInteger(input.speed, 'speed'),
+    defense: normalizeInteger(input.defense, 'defense'),
     type,
   };
 }
@@ -98,8 +101,36 @@ async function createCard(input = {}) {
   return toCardRecord(inserted);
 }
 
+async function updateCard(cardId, input = {}) {
+  const collection = await getCollection();
+  const validated = validateCardInput(input);
+  const { ObjectId } = getMongoClientConstructor();
+
+  if (!ObjectId.isValid(cardId)) {
+    throw new Error('Card not found');
+  }
+
+  const updateResult = await collection.updateOne(
+    { _id: new ObjectId(cardId) },
+    {
+      $set: {
+        ...validated,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  );
+
+  if (!updateResult.matchedCount) {
+    throw new Error('Card not found');
+  }
+
+  const updatedCard = await collection.findOne({ _id: new ObjectId(cardId) });
+  return toCardRecord(updatedCard);
+}
+
 module.exports = {
   CARD_TYPES,
   listCards,
   createCard,
+  updateCard,
 };
