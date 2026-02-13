@@ -52,9 +52,10 @@ const CARD_LABEL_CANVAS_SIZE = 1024;
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   name: Object.freeze({ x: 512, y: 200, size: 74, color: '#dfe8ff', align: 'center' }),
   type: Object.freeze({ x: 512, y: 268, size: 40, color: '#9ab0d8', align: 'center' }),
-  damage: Object.freeze({ x: 245, y: 757, size: 1, boxWidth: 250, boxHeight: 250, boxBevel: 24 }),
-  health: Object.freeze({ x: 529, y: 757, size: 1, boxWidth: 250, boxHeight: 250, boxBevel: 24 }),
-  speed: Object.freeze({ x: 813, y: 757, size: 1, boxWidth: 250, boxHeight: 250, boxBevel: 24 }),
+  damage: Object.freeze({ x: 170, y: 757, size: 0.85, boxWidth: 190, boxHeight: 250, boxBevel: 24 }),
+  health: Object.freeze({ x: 398, y: 757, size: 0.85, boxWidth: 190, boxHeight: 250, boxBevel: 24 }),
+  speed: Object.freeze({ x: 626, y: 757, size: 0.85, boxWidth: 190, boxHeight: 250, boxBevel: 24 }),
+  defense: Object.freeze({ x: 854, y: 757, size: 0.85, boxWidth: 190, boxHeight: 250, boxBevel: 24 }),
 });
 
 function normalizeTextColor(color, fallbackColor) {
@@ -143,6 +144,7 @@ function normalizeCardLabelLayout(cardLabelLayout = {}) {
     damage: normalizeLabelElementLayout(cardLabelLayout.damage, DEFAULT_CARD_LABEL_LAYOUT.damage),
     health: normalizeLabelElementLayout(cardLabelLayout.health, DEFAULT_CARD_LABEL_LAYOUT.health),
     speed: normalizeLabelElementLayout(cardLabelLayout.speed, DEFAULT_CARD_LABEL_LAYOUT.speed),
+    defense: normalizeLabelElementLayout(cardLabelLayout.defense, DEFAULT_CARD_LABEL_LAYOUT.defense),
   };
 }
 
@@ -184,6 +186,7 @@ function createCardLabelTexture(card, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOU
     { key: 'damage', label: 'DMG', value: card.damage },
     { key: 'health', label: 'HP', value: card.health },
     { key: 'speed', label: 'SPD', value: card.speed },
+    { key: 'defense', label: 'DEF', value: card.defense },
   ];
 
   stats.forEach(({ key, label, value }) => {
@@ -222,6 +225,7 @@ export class CardLibraryScene {
     previewPositionOffset = DEFAULT_PREVIEW_POSITION_OFFSET,
     layoutTuning = DEFAULT_LAYOUT_TUNING,
     cardLabelLayout = DEFAULT_CARD_LABEL_LAYOUT,
+    onCardSelect = null,
   }) {
     this.canvas = canvas;
     this.scrollContainer = scrollContainer;
@@ -270,6 +274,7 @@ export class CardLibraryScene {
     this.viewportHeight = 0;
     this.layout = this.normalizeLayoutTuning(layoutTuning);
     this.cardLabelLayout = normalizeCardLabelLayout(cardLabelLayout);
+    this.onCardSelect = typeof onCardSelect === 'function' ? onCardSelect : null;
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
@@ -596,6 +601,10 @@ export class CardLibraryScene {
     if (this.previewCard) {
       this.previewStartedAt = performance.now();
       beginPreviewReturnTransition(this, this.previewStartedAt);
+    }
+
+    if (!this.previewCard && this.pointerCard && this.getPointerDistance(event) <= DRAG_START_DISTANCE_PX) {
+      this.onCardSelect?.(this.pointerCard.userData.catalogCard);
     }
 
     this.releasePointerCapture();

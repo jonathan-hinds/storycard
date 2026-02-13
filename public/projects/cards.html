@@ -58,10 +58,14 @@
           <label for="card-speed">Speed</label>
           <input id="card-speed" name="speed" type="number" step="1" required />
 
+          <label for="card-defense">Defense</label>
+          <input id="card-defense" name="defense" type="number" step="1" required />
+
           <label for="card-type">Type</label>
           <select id="card-type" name="type" required></select>
 
           <button type="submit">Create Card</button>
+          <button id="save-card-button" type="button" disabled>Save Card</button>
           <p id="create-card-status" class="cards-status" aria-live="polite"></p>
         </form>
       </section>

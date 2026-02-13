@@ -11,6 +11,7 @@ const defaultCard = {
   damage: 7,
   health: 18,
   speed: 4,
+  defense: 5,
 };
 
 const previewCard = { ...defaultCard };
@@ -41,6 +42,7 @@ const sections = [
   { key: 'damage', label: 'Attack', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
   { key: 'health', label: 'Health', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
   { key: 'speed', label: 'Speed', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+  { key: 'defense', label: 'Defense', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
 ];
 
 function buildSlider({ elementKey, prop, label, min, max, step }) {
