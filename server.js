@@ -9,6 +9,7 @@ const { CardGameServer } = require('./shared/card-game');
 const { PhaseManagerServer } = require('./shared/phase-manager');
 const {
   CARD_TYPES,
+  CARD_STAT_DICE,
   listCards: listCatalogCards,
   createCard: createCatalogCard,
   updateCard: updateCatalogCard,
@@ -184,7 +185,7 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/projects/cards') {
     try {
       const cards = await listCatalogCards();
-      sendJson(res, 200, { cards, cardTypes: CARD_TYPES });
+      sendJson(res, 200, { cards, cardTypes: CARD_TYPES, cardStatDice: CARD_STAT_DICE });
     } catch (error) {
       sendJson(res, 500, { error: 'Unable to load cards from database' });
     }

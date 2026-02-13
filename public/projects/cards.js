@@ -4,6 +4,9 @@ const form = document.getElementById('create-card-form');
 const status = document.getElementById('create-card-status');
 const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
+const damageSelect = document.getElementById('card-damage');
+const speedSelect = document.getElementById('card-speed');
+const defenseSelect = document.getElementById('card-defense');
 const saveCardButton = document.getElementById('save-card-button');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
@@ -93,10 +96,10 @@ cardLibraryScene = new CardLibraryScene({
     if (!card) return;
     selectedCardId = card.id;
     form.elements.name.value = card.name ?? '';
-    form.elements.damage.value = card.damage ?? 0;
+    form.elements.damage.value = card.damage ?? '';
     form.elements.health.value = card.health ?? 0;
-    form.elements.speed.value = card.speed ?? 0;
-    form.elements.defense.value = card.defense ?? 0;
+    form.elements.speed.value = card.speed ?? '';
+    form.elements.defense.value = card.defense ?? '';
     typeSelect.value = card.type;
     saveCardButton.disabled = false;
     setStatus(`Editing "${card.name}". Update fields and click Save Card.`);
@@ -153,13 +156,27 @@ async function fetchCards() {
       throw new Error(payload.error || 'Failed to load cards');
     }
 
-    typeSelect.innerHTML = '';
-    payload.cardTypes.forEach((type) => {
-      const option = document.createElement('option');
-      option.value = type;
-      option.textContent = type;
-      typeSelect.append(option);
-    });
+    const buildSelectOptions = (select, values, placeholder) => {
+      select.innerHTML = '';
+      const placeholderOption = document.createElement('option');
+      placeholderOption.value = '';
+      placeholderOption.textContent = placeholder;
+      placeholderOption.disabled = true;
+      placeholderOption.selected = true;
+      select.append(placeholderOption);
+
+      values.forEach((value) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        select.append(option);
+      });
+    };
+
+    buildSelectOptions(typeSelect, payload.cardTypes, 'Select a type');
+    buildSelectOptions(damageSelect, payload.cardStatDice, 'Select a die');
+    buildSelectOptions(speedSelect, payload.cardStatDice, 'Select a die');
+    buildSelectOptions(defenseSelect, payload.cardStatDice, 'Select a die');
 
     renderCards(payload.cards);
     setStatus(`Loaded ${payload.cards.length} card${payload.cards.length === 1 ? '' : 's'}.`);
@@ -173,10 +190,10 @@ form.addEventListener('submit', async (event) => {
   const formData = new FormData(form);
   const cardInput = {
     name: formData.get('name'),
-    damage: Number.parseInt(formData.get('damage'), 10),
+    damage: formData.get('damage'),
     health: Number.parseInt(formData.get('health'), 10),
-    speed: Number.parseInt(formData.get('speed'), 10),
-    defense: Number.parseInt(formData.get('defense'), 10),
+    speed: formData.get('speed'),
+    defense: formData.get('defense'),
     type: formData.get('type'),
   };
 
@@ -211,10 +228,10 @@ saveCardButton.addEventListener('click', async () => {
   const formData = new FormData(form);
   const cardInput = {
     name: formData.get('name'),
-    damage: Number.parseInt(formData.get('damage'), 10),
+    damage: formData.get('damage'),
     health: Number.parseInt(formData.get('health'), 10),
-    speed: Number.parseInt(formData.get('speed'), 10),
-    defense: Number.parseInt(formData.get('defense'), 10),
+    speed: formData.get('speed'),
+    defense: formData.get('defense'),
     type: formData.get('type'),
   };
 
@@ -237,10 +254,10 @@ saveCardButton.addEventListener('click', async () => {
     const updatedCard = cardsCache.find((card) => card.id === selectedCardId);
     if (updatedCard) {
       form.elements.name.value = updatedCard.name ?? '';
-      form.elements.damage.value = updatedCard.damage ?? 0;
+      form.elements.damage.value = updatedCard.damage ?? '';
       form.elements.health.value = updatedCard.health ?? 0;
-      form.elements.speed.value = updatedCard.speed ?? 0;
-      form.elements.defense.value = updatedCard.defense ?? 0;
+      form.elements.speed.value = updatedCard.speed ?? '';
+      form.elements.defense.value = updatedCard.defense ?? '';
       typeSelect.value = updatedCard.type;
     }
   } catch (error) {
