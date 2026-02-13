@@ -937,7 +937,7 @@ export class CardGameClient {
       const card = slot.card;
       if (!card) continue;
       if (card.userData.isAnimating || card.userData.locked) continue;
-      if (card === this.state.activeCard && (this.state.mode === 'preview' || this.state.mode === 'drag')) continue;
+      if (card === this.state.activeCard && (this.state.mode === 'preview' || this.state.mode === 'drag' || this.state.mode === 'preview-return')) continue;
 
       const phaseSeed = slot.index * 0.9;
       const swirlX = Math.sin(elapsed * 1.8 + phaseSeed) * PLACED_CARD_SWIRL_AMPLITUDE;
