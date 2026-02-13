@@ -50,6 +50,7 @@ const DEFAULT_LAYOUT_TUNING = Object.freeze({
 const CARD_FACE_Z_EPSILON = 0.01;
 const CARD_LABEL_CANVAS_SIZE = 1024;
 const DEFAULT_CARD_BACKGROUND_IMAGE_PATH = '/public/assets/CardFront2.png';
+const DEFAULT_CARD_MESH_COLOR = 0x000000;
 const backgroundImagePromiseCache = new Map();
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   name: Object.freeze({ x: 335, y: 110, size: 52, color: '#000000', align: 'left' }),
@@ -538,7 +539,7 @@ export class CardLibraryScene {
         height: cardHeight,
         thickness: CARD_THICKNESS,
         cornerRadius: 0.15,
-        color: colorFromHexString(card.meshColor, colorForType(card.type)),
+        color: colorFromHexString(card.meshColor, DEFAULT_CARD_MESH_COLOR),
       });
 
       const texture = createCardLabelTexture(card, this.cardLabelLayout);
