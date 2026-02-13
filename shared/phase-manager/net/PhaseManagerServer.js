@@ -1,11 +1,6 @@
 const { randomUUID } = require('crypto');
 
-const TYPE_COLORS = Object.freeze({
-  nature: 0x2cb67d,
-  fire: 0xef4565,
-  water: 0x3da9fc,
-  arcane: 0x7f5af0,
-});
+const DEFAULT_CARD_MESH_COLOR = 0x000000;
 
 const DEFAULT_OPTIONS = {
   deckSizePerPlayer: 10,
@@ -60,15 +55,11 @@ class PhaseManagerServer {
     this.phaseMatchmakingState.set(playerId, { status: 'idle' });
   }
 
-  randomCardColor() {
-    const colorPool = [0x5f8dff, 0x8f6cff, 0x2dc6ad, 0xf28a65, 0xf1c965, 0xe76fb9, 0x4ecdc4, 0xff6b6b, 0xc7f464, 0xffa94d];
-    return colorPool[Math.floor(Math.random() * colorPool.length)];
-  }
-
-
-  colorForType(type) {
-    if (!type) return this.randomCardColor();
-    return TYPE_COLORS[String(type).toLowerCase()] || this.randomCardColor();
+  colorFromHexString(hexColor, fallbackColor = DEFAULT_CARD_MESH_COLOR) {
+    if (typeof hexColor !== 'string') return fallbackColor;
+    const normalized = hexColor.trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(normalized)) return fallbackColor;
+    return Number.parseInt(normalized.slice(1), 16);
   }
 
   normalizeCatalogCard(catalogCard = {}) {
@@ -80,6 +71,7 @@ class PhaseManagerServer {
       health: catalogCard.health ?? '-',
       speed: catalogCard.speed ?? '-',
       defense: catalogCard.defense ?? '-',
+      meshColor: typeof catalogCard.meshColor === 'string' ? catalogCard.meshColor : '#000000',
     };
   }
 
@@ -87,7 +79,7 @@ class PhaseManagerServer {
     if (!Array.isArray(catalogCards) || catalogCards.length === 0) {
       return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => ({
         id: `${playerId}-card-${index + 1}`,
-        color: this.randomCardColor(),
+        color: DEFAULT_CARD_MESH_COLOR,
         catalogCard: this.normalizeCatalogCard({
           name: `Test Card ${index + 1}`,
           type: 'Unknown',
@@ -95,6 +87,7 @@ class PhaseManagerServer {
           health: 10,
           speed: 'D6',
           defense: 'D6',
+          meshColor: '#000000',
         }),
         summonedTurn: null,
         attackCommitted: false,
@@ -107,7 +100,7 @@ class PhaseManagerServer {
       const normalizedCard = this.normalizeCatalogCard(randomCard);
       return {
         id: `${playerId}-card-${index + 1}`,
-        color: this.colorForType(normalizedCard.type),
+        color: this.colorFromHexString(normalizedCard.meshColor),
         catalogCard: normalizedCard,
         summonedTurn: null,
         attackCommitted: false,

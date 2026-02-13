@@ -71,14 +71,6 @@ function getControlValueFromCardScale(cardScale) {
   return CARD_SCALE_CONTROL_MIN + CARD_SCALE_CONTROL_MAX - clampedScale;
 }
 
-const TYPE_COLORS = {
-  assassin: 0x7f5af0,
-  tank: 0x2cb67d,
-  mage: 0xef4565,
-  support: 0xf4b400,
-  ranger: 0x3da9fc,
-};
-
 function colorFromHexString(hexColor, fallbackColor) {
   if (typeof hexColor !== 'string') return fallbackColor;
   const normalized = hexColor.trim();
