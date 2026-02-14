@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cards API Docs</title>
+    <title>Dice UV Editor</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="cards-docs">
+  <body data-page="dice-uv-editor">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -17,6 +17,7 @@
             <ul class="flyout">
               <li><a href="/public/dice/index.html">Dice</a></li>
               <li><a href="/public/projects/cards.html">Cards</a></li>
+              <li><a href="/public/card/single-card/index.html">Card / Single Card</a></li>
               <li><a href="/public/projects/phase-manager/index.html">Phase Manager</a></li>
             </ul>
           </li>
@@ -40,9 +41,17 @@
       </nav>
     </header>
 
-    <main class="placeholder-page">
-      <h1>Cards API Docs</h1>
-      <p>This page is intentionally blank for now.</p>
+    <main class="layout tools-layout">
+      <section class="controls tools-controls">
+        <h1>Dice UV Editor</h1>
+        <p>Pick a die + texture, drag UV points, then export JSON to share updates.</p>
+        <div id="dice-uv-controls" class="tools-slider-grid"></div>
+      </section>
+      <section class="dice-uv-stage-wrap">
+        <canvas id="dice-uv-canvas" class="dice-uv-canvas" width="1024" height="1024" aria-label="Dice UV editor"></canvas>
+      </section>
     </main>
+
+    <script type="module" src="/public/tools/dice-uv-editor/index.js"></script>
   </body>
 </html>
