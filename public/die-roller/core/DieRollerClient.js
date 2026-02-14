@@ -75,6 +75,16 @@ export class DieRollerClient {
     }
   }
 
+
+  playRoll({ roll, sides } = {}) {
+    if (!roll || !Array.isArray(roll.frames)) return;
+    const resolvedSides = Number.isFinite(sides) ? sides : roll?.sides || 6;
+    this.ensureVisual(resolvedSides);
+    this.currentRoll = roll;
+    this.rollQueue = [...roll.frames];
+    this.#ensureLoop();
+  }
+
   #ensureLoop() {
     if (this.animationFrame) return;
     const tick = () => {

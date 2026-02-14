@@ -358,6 +358,49 @@ export class PhaseManagerClient {
     this.updateSummaryPanels();
   }
 
+
+  getCommitRollByAttackId(attackId) {
+    if (!this.match || typeof attackId !== 'string') return null;
+    const commitRolls = Array.isArray(this.match.meta?.commitRolls) ? this.match.meta.commitRolls : [];
+    return commitRolls.find((entry) => entry?.attackId === attackId) || null;
+  }
+
+  async submitCommitRoll({ attackId, rollType, sides, roll }) {
+    await this.postJson('/api/phase-manager/match/commit-roll', {
+      playerId: this.playerId,
+      attackId,
+      rollType,
+      sides,
+      roll,
+    });
+  }
+
+  async waitForRemoteAttackRoll(attackId) {
+    const maxAttempts = 120;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const existing = this.getCommitRollByAttackId(attackId);
+      if (existing?.roll) return existing;
+
+      try {
+        const status = await this.getJson(`/api/phase-manager/matchmaking/status?playerId=${encodeURIComponent(this.playerId)}`);
+        if (status?.matchState) {
+          this.applyMatchmakingStatus(status);
+        }
+        const remoteRolls = Array.isArray(status?.matchState?.meta?.commitRolls) ? status.matchState.meta.commitRolls : [];
+        const matched = remoteRolls.find((entry) => entry?.attackId === attackId);
+        if (matched?.roll) return matched;
+        if (status?.matchState?.phase !== 2) return null;
+      } catch (error) {
+        this.elements.statusEl.textContent = `Commit roll polling error: ${error.message}`;
+        return null;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+    }
+
+    return null;
+  }
+
   async runCommitSequence(commitAttacks, commitAnimationKey) {
     if (this.activeCommitSequenceKey && this.activeCommitSequenceKey !== commitAnimationKey) {
       return;
@@ -365,7 +408,17 @@ export class PhaseManagerClient {
 
     if (this.cardRollerOverlay) {
       try {
-        await this.cardRollerOverlay.rollForAttacks(commitAttacks, { rollType: 'damage' });
+        await this.cardRollerOverlay.rollForAttacks(commitAttacks, {
+          rollType: 'damage',
+          canControlAttack: (attack) => attack?.attackerSide === PLAYER_SIDE,
+          onAttackRoll: ({ attack, rollType, sides, roll }) => this.submitCommitRoll({
+            attackId: attack?.id,
+            rollType,
+            sides,
+            roll,
+          }),
+          waitForRemoteRoll: (attack) => this.waitForRemoteAttackRoll(attack?.id),
+        });
       } catch (error) {
         this.elements.statusEl.textContent = `Dice roll error: ${error.message}`;
         this.cardRollerOverlay.clear();

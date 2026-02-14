@@ -160,6 +160,10 @@ class PhaseManagerServer {
         phaseStartedAt: match.phaseStartedAt,
         commitAllRolledAt: match.commitAllRolledAt || null,
         commitAttacks,
+        commitRolls: Array.from(match.commitRollsByAttackId?.values() || []).map((rollEntry) => ({
+          ...rollEntry,
+          attackerSide: rollEntry.attackerId === playerId ? 'player' : 'opponent',
+        })),
       },
     };
   }
@@ -193,6 +197,7 @@ class PhaseManagerServer {
     match.phaseEndsAt = null;
     match.readyPlayers.clear();
     match.pendingCommitAttacksByPlayer = new Map();
+    match.commitRollsByAttackId = new Map();
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
       if (!playerState) return;
@@ -214,12 +219,14 @@ class PhaseManagerServer {
       const attacks = playerState?.board
         ?.filter((card) => card.attackCommitted === true && Number.isInteger(card.slotIndex) && Number.isInteger(card.targetSlotIndex))
         .map((card) => ({
+          id: `${playerId}:${card.slotIndex}:${card.targetSlotIndex}`,
           attackerSlotIndex: card.slotIndex,
           targetSlotIndex: card.targetSlotIndex,
         })) || [];
       pendingAttacks.set(playerId, attacks);
     });
     match.pendingCommitAttacksByPlayer = pendingAttacks;
+    match.commitRollsByAttackId = new Map();
     match.commitCompletedPlayers = new Set();
     match.commitAllRolledAt = null;
     match.phaseEndsAt = null;
@@ -262,6 +269,49 @@ class PhaseManagerServer {
         + this.options.commitPostRollObserveMs
         + this.getCommitPhaseAnimationDurationMs(match);
     }
+
+    return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
+  }
+
+
+  submitCommitRoll(payload) {
+    const { playerId, attackId, rollType, sides, roll } = payload;
+    const status = this.phaseMatchmakingState.get(playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      return { error: 'player is not in an active match', statusCode: 409 };
+    }
+
+    const match = this.phaseMatches.get(status.matchId);
+    if (!match) {
+      return { error: 'active match not found', statusCode: 409 };
+    }
+
+    if (match.phase !== 2) {
+      return { error: 'cannot submit commit rolls outside commit phase', statusCode: 409 };
+    }
+
+    if (typeof attackId !== 'string' || !attackId.trim()) {
+      return { error: 'attackId is required', statusCode: 400 };
+    }
+
+    const playerAttacks = match.pendingCommitAttacksByPlayer.get(playerId) || [];
+    const isPlayersAttack = playerAttacks.some((attack) => attack.id === attackId);
+    if (!isPlayersAttack) {
+      return { error: 'you may only roll your own attacks', statusCode: 403 };
+    }
+
+    if (!roll || typeof roll !== 'object' || !Array.isArray(roll.frames) || !Number.isFinite(roll.outcome)) {
+      return { error: 'a roll payload with frames and outcome is required', statusCode: 400 };
+    }
+
+    match.commitRollsByAttackId.set(attackId, {
+      attackId,
+      attackerId: playerId,
+      rollType: typeof rollType === 'string' ? rollType : 'damage',
+      sides: Number.isFinite(sides) ? sides : null,
+      roll,
+      submittedAt: Date.now(),
+    });
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
@@ -436,6 +486,7 @@ class PhaseManagerServer {
         readyPlayers: new Set(),
         lastDrawnCardsByPlayer: new Map(),
         pendingCommitAttacksByPlayer: new Map(),
+        commitRollsByAttackId: new Map(),
         commitCompletedPlayers: new Set(),
         commitAllRolledAt: null,
         createdAt: Date.now(),
