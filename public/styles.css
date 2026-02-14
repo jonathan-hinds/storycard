@@ -597,3 +597,27 @@ button {
     max-height: none;
   }
 }
+
+.dice-uv-stage-wrap {
+  background: #0f172a;
+  border-left: 1px solid #252b3a;
+  padding: 1rem;
+}
+
+.dice-uv-canvas {
+  width: min(100%, 900px);
+  aspect-ratio: 1 / 1;
+  border: 1px solid #33405f;
+  border-radius: 0.5rem;
+  background: #0b1222;
+  display: block;
+  margin: 0 auto;
+  touch-action: none;
+}
+
+@media (max-width: 900px) {
+  .dice-uv-stage-wrap {
+    border-left: 0;
+    border-top: 1px solid #252b3a;
+  }
+}
