@@ -91,7 +91,12 @@ export class CardRollerOverlay {
     this.positionTick = requestAnimationFrame(this.updatePositions);
   };
 
-  async rollForAttacks(attackPlan = [], { rollType = 'damage' } = {}) {
+  async rollForAttacks(attackPlan = [], {
+    rollType = 'damage',
+    canControlAttack = () => false,
+    onAttackRoll = null,
+    waitForRemoteRoll = null,
+  } = {}) {
     if (!Array.isArray(attackPlan) || !attackPlan.length) return [];
 
     const boardSlotsPerSide = Math.floor((this.cardGameClient.boardSlots?.length || 0) / 2);
@@ -130,37 +135,71 @@ export class CardRollerOverlay {
       this.activeRollers.push(entry);
       this.positionRollerEntry(entry);
 
-      panel.title = 'Click to roll';
-      panel.dataset.state = 'pending';
-      const triggerRoll = async (event) => {
-        event?.preventDefault?.();
-        event?.stopPropagation?.();
-        if (entry.hasRolled) return;
-        entry.hasRolled = true;
-        panel.dataset.state = 'rolling';
-        try {
-          await roller.roll({
-            dice: [{ id: `${card.userData.cardId}-${rollType}`, sides }],
-          });
-        } catch (error) {
-          settled.reject(error);
-        }
-      };
+      const controlsAttack = canControlAttack(step);
+      if (controlsAttack) {
+        panel.title = 'Click to roll';
+        panel.dataset.state = 'pending';
+        const triggerRoll = async (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          if (entry.hasRolled) return;
+          entry.hasRolled = true;
+          panel.dataset.state = 'rolling';
+          try {
+            const payload = await roller.roll({
+              dice: [{ id: `${card.userData.cardId}-${rollType}`, sides }],
+            });
+            const rolled = payload?.results?.[0]?.roll;
+            if (rolled && typeof onAttackRoll === 'function') {
+              await onAttackRoll({
+                attack: step,
+                rollType,
+                sides,
+                roll: rolled,
+              });
+            }
+          } catch (error) {
+            settled.reject(error);
+          }
+        };
 
-      const addRollTriggerListeners = (target) => {
-        if (!target) return;
-        target.addEventListener('pointerdown', triggerRoll);
-        target.addEventListener('click', triggerRoll);
-        target.addEventListener('touchstart', triggerRoll, { passive: false });
-      };
+        const addRollTriggerListeners = (target) => {
+          if (!target) return;
+          target.addEventListener('pointerdown', triggerRoll);
+          target.addEventListener('click', triggerRoll);
+          target.addEventListener('touchstart', triggerRoll, { passive: false });
+        };
 
-      addRollTriggerListeners(panel);
-      addRollTriggerListeners(roller.canvas);
+        addRollTriggerListeners(panel);
+        addRollTriggerListeners(roller.canvas);
+      } else {
+        panel.title = 'Waiting for attacker roll';
+        panel.dataset.state = 'waiting';
+        pendingRolls.push((async () => {
+          const remoteRoll = typeof waitForRemoteRoll === 'function' ? await waitForRemoteRoll(step) : null;
+          if (!remoteRoll) {
+            settled.resolve(null);
+            return null;
+          }
+          panel.dataset.state = 'rolling';
+          roller.playRoll({ roll: remoteRoll.roll, sides: remoteRoll.sides || sides });
+          return settled.promise;
+        })().then((outcome) => ({
+          cardId: card.userData.cardId,
+          attackId: step.id,
+          rollType,
+          statValue,
+          sides,
+          outcome,
+        })));
+        continue;
+      }
 
       pendingRolls.push(settled.promise.then((outcome) => {
         panel.dataset.state = 'settled';
         return {
           cardId: card.userData.cardId,
+          attackId: step.id,
           rollType,
           statValue,
           sides,
