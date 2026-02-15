@@ -264,6 +264,7 @@
     }
 
     #stepBody(body, dt) {
+      let groundContact = false;
       body.velocity.y += this.gravity * dt;
       const linearDecay = Math.max(0, 1 - body.linearDamping * dt);
       const angularDecay = Math.max(0, 1 - body.angularDamping * dt);
@@ -376,6 +377,14 @@
         body.position.z += collider.n.z * correction;
 
         this.contactEvents.push({ collider: collider.id, penetration: -signedDistance, normalSpeed });
+        if (collider.id === 'ground') groundContact = true;
+      }
+
+      if (groundContact) {
+        const contactDamping = Math.max(0, 1 - ((2.8 + body.friction * 0.9) * dt));
+        body.angularVelocity.x *= contactDamping;
+        body.angularVelocity.y *= contactDamping;
+        body.angularVelocity.z *= contactDamping;
       }
     }
 
@@ -400,7 +409,7 @@
         friction: 0.3 + (1 - this.tuning.dieSlipperiness) * 1.55,
         mass: this.tuning.dieWeight,
       });
-      this.body.angularDamping = this.tuning.rotationFriction * 4.6;
+      this.body.angularDamping = 0.35 + this.tuning.rotationFriction * 4.6;
       this.areaSize = areaSize;
       this.rollApplied = false;
       this.maxLinearSpeed = 0;
