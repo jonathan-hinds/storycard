@@ -12,7 +12,9 @@ const state = {
   texturePath: '',
   textureImage: null,
   faces: [],
+  bounds: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
   viewBox: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
+  zoom: 1,
   drag: null,
   status: 'Loading die + assets...',
 };
@@ -21,6 +23,8 @@ const controls = {
   dieSelect: null,
   sidesSelect: null,
   textureSelect: null,
+  zoomInput: null,
+  zoomLabel: null,
   output: null,
   status: null,
 };
@@ -63,6 +67,25 @@ function buildUi() {
     updateExportOutput();
     draw();
   });
+
+  const zoomRow = document.createElement('label');
+  zoomRow.className = 'tools-slider-row';
+
+  controls.zoomLabel = document.createElement('span');
+  controls.zoomLabel.className = 'tools-slider-value';
+  controls.zoomLabel.textContent = 'Zoom (1.0x)';
+
+  controls.zoomInput = document.createElement('input');
+  controls.zoomInput.type = 'range';
+  controls.zoomInput.min = '1';
+  controls.zoomInput.max = '8';
+  controls.zoomInput.step = '0.1';
+  controls.zoomInput.value = String(state.zoom);
+  controls.zoomInput.addEventListener('input', () => {
+    setZoom(Number.parseFloat(controls.zoomInput.value));
+  });
+
+  zoomRow.append(controls.zoomLabel, controls.zoomInput);
 
   const buttons = document.createElement('div');
   buttons.className = 'tools-export-buttons';
@@ -110,7 +133,14 @@ function buildUi() {
     setStatus('Reset to generated unwrap.');
   });
 
-  buttons.append(exportButton, copyButton, resetButton);
+  const resetZoomButton = document.createElement('button');
+  resetZoomButton.type = 'button';
+  resetZoomButton.textContent = 'Reset Zoom';
+  resetZoomButton.addEventListener('click', () => {
+    setZoom(1);
+  });
+
+  buttons.append(exportButton, copyButton, resetButton, resetZoomButton);
 
   controls.output = document.createElement('textarea');
   controls.output.className = 'tools-export-output';
@@ -128,6 +158,7 @@ function buildUi() {
     controls.dieSelect.row,
     controls.sidesSelect.row,
     controls.textureSelect.row,
+    zoomRow,
     exportGroup
   );
 
@@ -135,6 +166,7 @@ function buildUi() {
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointerleave', onPointerUp);
+  canvas.addEventListener('wheel', onWheel, { passive: false });
 }
 
 async function initialize() {
@@ -236,17 +268,39 @@ async function syncTexture() {
 
 function updateViewBox() {
   const allPoints = state.faces.flatMap((face) => face.points);
+  if (allPoints.length === 0) return;
+
   const minX = Math.min(...allPoints.map((point) => point.x));
   const maxX = Math.max(...allPoints.map((point) => point.x));
   const minY = Math.min(...allPoints.map((point) => point.y));
   const maxY = Math.max(...allPoints.map((point) => point.y));
   const pad = 0.2;
-  state.viewBox = {
+  state.bounds = {
     minX: minX - pad,
     maxX: maxX + pad,
     minY: minY - pad,
     maxY: maxY + pad,
   };
+
+  const centerX = (state.bounds.minX + state.bounds.maxX) / 2;
+  const centerY = (state.bounds.minY + state.bounds.maxY) / 2;
+  const width = (state.bounds.maxX - state.bounds.minX) / state.zoom;
+  const height = (state.bounds.maxY - state.bounds.minY) / state.zoom;
+  state.viewBox = {
+    minX: centerX - (width / 2),
+    maxX: centerX + (width / 2),
+    minY: centerY - (height / 2),
+    maxY: centerY + (height / 2),
+  };
+}
+
+function setZoom(nextZoom) {
+  const safeZoom = Number.isFinite(nextZoom) ? Math.min(8, Math.max(1, nextZoom)) : 1;
+  state.zoom = safeZoom;
+  controls.zoomInput.value = safeZoom.toFixed(1);
+  controls.zoomLabel.textContent = `Zoom (${safeZoom.toFixed(1)}x)`;
+  updateViewBox();
+  draw();
 }
 
 function draw() {
@@ -322,6 +376,13 @@ function onPointerMove(event) {
   updateViewBox();
   updateExportOutput();
   draw();
+}
+
+function onWheel(event) {
+  event.preventDefault();
+  const direction = Math.sign(event.deltaY);
+  const delta = direction > 0 ? -0.2 : 0.2;
+  setZoom(state.zoom + delta);
 }
 
 function onPointerUp(event) {
