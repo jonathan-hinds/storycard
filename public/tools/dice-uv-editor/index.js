@@ -5,7 +5,6 @@ const UV_PRECISION = 10000;
 const controlsRoot = document.getElementById('dice-uv-controls');
 const canvas = document.getElementById('dice-uv-canvas');
 const ctx = canvas.getContext('2d');
-const previewCanvas = document.getElementById('dice-preview-canvas');
 
 const state = {
   dieId: '',
@@ -16,10 +15,7 @@ const state = {
   viewBox: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
   drag: null,
   status: 'Loading die + assets...',
-  dieGeometry: null,
 };
-
-const preview = buildPreview(previewCanvas);
 
 const controls = {
   dieSelect: null,
@@ -219,30 +215,23 @@ async function loadAssetOptions() {
 function rebuildFaces() {
   const geometry = createDieGeometry(state.sides);
   const faces = generateUnwrappedNet(geometry, state.sides);
-  if (state.dieGeometry) {
-    state.dieGeometry.dispose();
-  }
-  state.dieGeometry = geometry;
+  geometry.dispose();
 
   state.faces = faces.map((face) => ({
     value: face.value,
-    points3D: face.points3D.map((point) => ({ x: point.x, y: point.y, z: point.z })),
     points: face.points.map((point) => ({ x: point.x, y: point.y })),
   }));
 
   updateViewBox();
-  updatePreview();
 }
 
 async function syncTexture() {
   if (!state.texturePath) {
     state.textureImage = null;
-    updatePreviewTexture();
     return;
   }
 
   state.textureImage = await loadImage(state.texturePath).catch(() => null);
-  updatePreviewTexture();
 }
 
 function updateViewBox() {
@@ -332,7 +321,6 @@ function onPointerMove(event) {
 
   updateViewBox();
   updateExportOutput();
-  updatePreview();
   draw();
 }
 
@@ -403,143 +391,6 @@ function buildExportPayload() {
       points: face.points.map((point) => ({ x: roundNumber(point.x), y: roundNumber(point.y) })),
     })),
   };
-}
-
-function buildPreview(canvasElement) {
-  const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setSize(canvasElement.clientWidth || canvasElement.width, canvasElement.clientHeight || canvasElement.height, false);
-
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#0b1222');
-
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(2.4, 2.2, 2.9);
-  camera.lookAt(0, 0, 0);
-
-  const ambient = new THREE.AmbientLight('#ffffff', 0.75);
-  const key = new THREE.DirectionalLight('#dbeafe', 1.25);
-  key.position.set(3, 4, 5);
-  scene.add(ambient, key);
-
-  const material = new THREE.MeshStandardMaterial({
-    color: '#f8fafc',
-    roughness: 0.65,
-    metalness: 0.08,
-  });
-  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
-  scene.add(mesh);
-
-  const wireframe = new THREE.LineSegments(
-    new THREE.WireframeGeometry(new THREE.BufferGeometry()),
-    new THREE.LineBasicMaterial({ color: '#1e293b', transparent: true, opacity: 0.42 })
-  );
-  scene.add(wireframe);
-
-  const resize = () => {
-    const width = canvasElement.clientWidth || canvasElement.width;
-    const height = canvasElement.clientHeight || canvasElement.height;
-    renderer.setSize(width, height, false);
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-  };
-
-  window.addEventListener('resize', resize);
-  resize();
-
-  const clock = new THREE.Clock();
-  const render = () => {
-    const delta = clock.getDelta();
-    mesh.rotation.y += delta * 0.45;
-    mesh.rotation.x = 0.35;
-    wireframe.rotation.copy(mesh.rotation);
-    renderer.render(scene, camera);
-    requestAnimationFrame(render);
-  };
-  requestAnimationFrame(render);
-
-  return { material, mesh, wireframe };
-}
-
-function updatePreviewTexture() {
-  const existingTexture = preview.material.map;
-  if (existingTexture) {
-    existingTexture.dispose();
-  }
-
-  if (!state.textureImage) {
-    preview.material.map = null;
-    preview.material.color.set('#f8fafc');
-    preview.material.needsUpdate = true;
-    return;
-  }
-
-  const texture = new THREE.Texture(state.textureImage);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.needsUpdate = true;
-  preview.material.map = texture;
-  preview.material.color.set('#ffffff');
-  preview.material.needsUpdate = true;
-}
-
-function updatePreview() {
-  if (!state.faces.length) return;
-  const geometry = buildPreviewGeometry();
-  preview.mesh.geometry.dispose();
-  preview.mesh.geometry = geometry;
-  preview.wireframe.geometry.dispose();
-  preview.wireframe.geometry = new THREE.WireframeGeometry(geometry);
-}
-
-function worldToUv(point) {
-  const width = state.viewBox.maxX - state.viewBox.minX;
-  const height = state.viewBox.maxY - state.viewBox.minY;
-  if (width <= 0 || height <= 0) return { u: 0.5, v: 0.5 };
-  return {
-    u: (point.x - state.viewBox.minX) / width,
-    v: (point.y - state.viewBox.minY) / height,
-  };
-}
-
-function buildPreviewGeometry() {
-  const positions = [];
-  const normals = [];
-  const uvs = [];
-
-  state.faces.forEach((face) => {
-    const pointCount = face.points3D.length;
-    if (pointCount < 3 || pointCount !== face.points.length) return;
-
-    const points3D = face.points3D.map((point) => new THREE.Vector3(point.x, point.y, point.z));
-    const pointsUv = face.points.map((point) => worldToUv(point));
-
-    for (let i = 1; i < pointCount - 1; i += 1) {
-      const triA = points3D[0];
-      const triB = points3D[i];
-      const triC = points3D[i + 1];
-      const normal = new THREE.Vector3().crossVectors(
-        new THREE.Vector3().subVectors(triB, triA),
-        new THREE.Vector3().subVectors(triC, triA)
-      ).normalize();
-
-      [
-        { point: triA, uv: pointsUv[0] },
-        { point: triB, uv: pointsUv[i] },
-        { point: triC, uv: pointsUv[i + 1] },
-      ].forEach((entry) => {
-        positions.push(entry.point.x, entry.point.y, entry.point.z);
-        normals.push(normal.x, normal.y, normal.z);
-        uvs.push(entry.uv.u, entry.uv.v);
-      });
-    }
-  });
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.computeBoundingSphere();
-  return geometry;
 }
 
 function roundNumber(value) {
@@ -777,7 +628,6 @@ function generateUnwrappedNet(geometry, sideCount) {
 
   return faces.map((face, index) => ({
     value: index + 1,
-    points3D: face.points3D.map((point) => ({ x: point.x, y: point.y, z: point.z })),
     points: (placements.get(face.id) || face.points2D).map((point) => ({ x: point.x, y: point.y })),
   }));
 }
