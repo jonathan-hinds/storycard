@@ -44,6 +44,7 @@ function buildUi() {
     state.dieId = '';
     rebuildFaces();
     await syncTexture();
+    layoutFacesInImageSpace();
     updateExportOutput();
     draw();
   });
@@ -57,6 +58,7 @@ function buildUi() {
       controls.sidesSelect.select.value = String(sides);
       rebuildFaces();
       await syncTexture();
+      layoutFacesInImageSpace();
       updateExportOutput();
       draw();
     }
@@ -70,13 +72,17 @@ function buildUi() {
   });
 
   controls.imageWidthInput = buildNumberControl('Image Width', state.imageWidth, (value) => {
+    const previousWidth = state.imageWidth;
     state.imageWidth = Math.max(0.00001, value);
+    scaleFacesToImageResize(previousWidth, state.imageHeight, state.imageWidth, state.imageHeight);
     updateExportOutput();
     draw();
   });
 
   controls.imageHeightInput = buildNumberControl('Image Height', state.imageHeight, (value) => {
+    const previousHeight = state.imageHeight;
     state.imageHeight = Math.max(0.00001, value);
+    scaleFacesToImageResize(state.imageWidth, previousHeight, state.imageWidth, state.imageHeight);
     updateExportOutput();
     draw();
   });
@@ -122,6 +128,7 @@ function buildUi() {
   resetButton.addEventListener('click', async () => {
     rebuildFaces();
     await syncTexture();
+    layoutFacesInImageSpace();
     updateExportOutput();
     draw();
     setStatus('Reset to generated unwrap.');
@@ -161,6 +168,7 @@ async function initialize() {
 
   rebuildFaces();
   await syncTexture();
+  layoutFacesInImageSpace();
   updateExportOutput();
   draw();
   setStatus('Drag UV points to line up faces on the texture.');
@@ -245,6 +253,9 @@ function rebuildFaces() {
 }
 
 async function syncTexture() {
+  const previousWidth = state.imageWidth;
+  const previousHeight = state.imageHeight;
+
   if (!state.texturePath) {
     state.textureImage = null;
     return;
@@ -256,7 +267,60 @@ async function syncTexture() {
     state.imageHeight = state.textureImage.naturalHeight || state.imageHeight;
     controls.imageWidthInput.input.value = String(state.imageWidth);
     controls.imageHeightInput.input.value = String(state.imageHeight);
+
+    scaleFacesToImageResize(previousWidth, previousHeight, state.imageWidth, state.imageHeight);
   }
+}
+
+function scaleFacesToImageResize(previousWidth, previousHeight, nextWidth, nextHeight) {
+  if (!state.faces.length) return;
+  if (previousWidth <= 0 || previousHeight <= 0) return;
+
+  const scaleX = nextWidth / previousWidth;
+  const scaleY = nextHeight / previousHeight;
+
+  state.faces.forEach((face) => {
+    face.points.forEach((point) => {
+      point.x *= scaleX;
+      point.y *= scaleY;
+    });
+  });
+}
+
+function layoutFacesInImageSpace() {
+  if (!state.faces.length) return;
+
+  const bounds = getFaceBounds(state.faces);
+  const faceWidth = Math.max(0.00001, bounds.maxX - bounds.minX);
+  const faceHeight = Math.max(0.00001, bounds.maxY - bounds.minY);
+
+  const horizontalPadding = state.imageWidth * 0.08;
+  const verticalPadding = state.imageHeight * 0.08;
+  const targetWidth = Math.max(0.00001, state.imageWidth - (2 * horizontalPadding));
+  const targetHeight = Math.max(0.00001, state.imageHeight - (2 * verticalPadding));
+  const scale = Math.min(targetWidth / faceWidth, targetHeight / faceHeight);
+
+  const scaledWidth = faceWidth * scale;
+  const scaledHeight = faceHeight * scale;
+  const offsetX = ((state.imageWidth - scaledWidth) / 2) - (bounds.minX * scale);
+  const offsetY = ((state.imageHeight - scaledHeight) / 2) - (bounds.minY * scale);
+
+  state.faces.forEach((face) => {
+    face.points = face.points.map((point) => ({
+      x: (point.x * scale) + offsetX,
+      y: (point.y * scale) + offsetY,
+    }));
+  });
+}
+
+function getFaceBounds(faces) {
+  const points = faces.flatMap((face) => face.points);
+  return {
+    minX: Math.min(...points.map((point) => point.x)),
+    maxX: Math.max(...points.map((point) => point.x)),
+    minY: Math.min(...points.map((point) => point.y)),
+    maxY: Math.max(...points.map((point) => point.y)),
+  };
 }
 
 function updateSceneBounds() {
