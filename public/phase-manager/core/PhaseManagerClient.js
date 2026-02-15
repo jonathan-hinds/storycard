@@ -238,11 +238,7 @@ export class PhaseManagerClient {
 
     overlayEl.hidden = true;
     overlayEl.style.pointerEvents = 'auto';
-    if (this.match.phase === 2) {
-      overlayEl.hidden = false;
-      overlayEl.textContent = 'Commit phase: click each die overlay to roll and continue.';
-      overlayEl.style.pointerEvents = 'none';
-    } else if (this.match.youAreReady) {
+    if (this.match.youAreReady && this.match.phase !== 2) {
       overlayEl.hidden = false;
       overlayEl.textContent = 'Waiting for opponent to ready…';
     }
