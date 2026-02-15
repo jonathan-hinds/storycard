@@ -28,6 +28,11 @@ export class DieRollerClient {
     this.animationFrame = null;
     this.rollQueue = [];
     this.currentRoll = null;
+    this.renderTuning = {
+      ambientLightIntensity: Number.isFinite(options.ambientLightIntensity) ? options.ambientLightIntensity : 1,
+      topLightIntensity: Number.isFinite(options.topLightIntensity) ? options.topLightIntensity : 0.75,
+      dieRoughness: Number.isFinite(options.dieRoughness) ? options.dieRoughness : 0.82,
+    };
   }
 
 
@@ -36,6 +41,26 @@ export class DieRollerClient {
     if (this.visual?.renderer) this.visual.renderer.dispose();
     this.visual = createSceneForCanvas(this.canvas, sides);
     this.visualSides = sides;
+    this.#applyRenderTuning();
+  }
+
+  setRenderTuning(partialTuning = {}) {
+    this.renderTuning = {
+      ...this.renderTuning,
+      ...partialTuning,
+    };
+    this.#applyRenderTuning();
+  }
+
+  #applyRenderTuning() {
+    if (!this.visual) return;
+    const { ambientLightIntensity, topLightIntensity, dieRoughness } = this.renderTuning;
+    if (Number.isFinite(ambientLightIntensity)) this.visual.lights.ambient.intensity = ambientLightIntensity;
+    if (Number.isFinite(topLightIntensity)) this.visual.lights.topLight.intensity = topLightIntensity;
+    if (Number.isFinite(dieRoughness) && this.visual.mesh?.material) {
+      this.visual.mesh.material.roughness = dieRoughness;
+      this.visual.mesh.material.needsUpdate = true;
+    }
   }
 
   renderStaticPreview(sides = 6) {

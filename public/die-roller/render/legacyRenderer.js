@@ -1142,6 +1142,10 @@ function createSceneForCanvas(canvas, sides) {
     debugHelpers,
     debugFloor,
     diagnostics: null,
+    lights: {
+      ambient,
+      topLight,
+    },
   };
 }
 
