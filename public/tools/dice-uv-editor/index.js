@@ -15,8 +15,16 @@ const state = {
   imageWidth: 1,
   imageHeight: 1,
   sceneBounds: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
-  sceneTransform: { offsetX: 0, offsetY: 0, scale: 1 },
+  sceneTransform: { centerX: 0, centerY: 0, scale: 1 },
+  view: {
+    zoom: 1,
+    minZoom: 1,
+    maxZoom: 24,
+    centerX: null,
+    centerY: null,
+  },
   drag: null,
+  zoomDrag: null,
   status: 'Loading die + assets...',
 };
 
@@ -45,6 +53,7 @@ function buildUi() {
     rebuildFaces();
     await syncTexture();
     layoutFacesInImageSpace();
+    resetView();
     updateExportOutput();
     draw();
   });
@@ -59,6 +68,7 @@ function buildUi() {
       rebuildFaces();
       await syncTexture();
       layoutFacesInImageSpace();
+      resetView();
       updateExportOutput();
       draw();
     }
@@ -67,6 +77,7 @@ function buildUi() {
   controls.textureSelect.select.addEventListener('change', async () => {
     state.texturePath = controls.textureSelect.select.value;
     await syncTexture();
+    resetView();
     updateExportOutput();
     draw();
   });
@@ -129,6 +140,7 @@ function buildUi() {
     rebuildFaces();
     await syncTexture();
     layoutFacesInImageSpace();
+    resetView();
     updateExportOutput();
     draw();
     setStatus('Reset to generated unwrap.');
@@ -161,6 +173,7 @@ function buildUi() {
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointerleave', onPointerUp);
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 }
 
 async function initialize() {
@@ -169,6 +182,7 @@ async function initialize() {
   rebuildFaces();
   await syncTexture();
   layoutFacesInImageSpace();
+  resetView();
   updateExportOutput();
   draw();
   setStatus('Drag UV points to line up faces on the texture.');
@@ -405,6 +419,18 @@ function draw() {
 }
 
 function onPointerDown(event) {
+  if (event.button === 1) {
+    state.zoomDrag = {
+      pointerId: event.pointerId,
+      startClientY: event.clientY,
+      startZoom: state.view.zoom,
+      anchor: getPointer(event),
+    };
+    canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    return;
+  }
+
   if (event.button !== 0) return;
 
   const pointer = getPointer(event);
@@ -421,6 +447,15 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
+  if (state.zoomDrag && state.zoomDrag.pointerId === event.pointerId) {
+    const delta = (state.zoomDrag.startClientY - event.clientY) * 0.01;
+    const desiredZoom = state.zoomDrag.startZoom * Math.exp(delta);
+    applyZoomAtPoint(desiredZoom, state.zoomDrag.anchor);
+    draw();
+    event.preventDefault();
+    return;
+  }
+
   if (!state.drag) return;
   const pointer = getPointer(event);
   const world = canvasToWorld(pointer);
@@ -434,6 +469,14 @@ function onPointerMove(event) {
 }
 
 function onPointerUp(event) {
+  if (state.zoomDrag && state.zoomDrag.pointerId === event.pointerId) {
+    state.zoomDrag = null;
+    if (canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    return;
+  }
+
   if (!state.drag) return;
   state.drag = null;
   if (canvas.hasPointerCapture(event.pointerId)) {
@@ -462,33 +505,55 @@ function findNearestPoint(pointer) {
 }
 
 function worldToCanvas(point) {
-  const { minX, maxY } = state.sceneBounds;
-  const { offsetX, offsetY, scale } = state.sceneTransform;
-  const x = ((point.x - minX) * scale) + offsetX;
-  const y = (((maxY - point.y) * scale) + offsetY);
+  const { centerX, centerY, scale } = state.sceneTransform;
+  const x = ((point.x - centerX) * scale) + (canvas.width / 2);
+  const y = ((centerY - point.y) * scale) + (canvas.height / 2);
   return { x, y };
 }
 
 function canvasToWorld(point) {
-  const { minX, maxY } = state.sceneBounds;
-  const { offsetX, offsetY, scale } = state.sceneTransform;
-  const x = minX + ((point.x - offsetX) / scale);
-  const y = maxY - ((point.y - offsetY) / scale);
+  const { centerX, centerY, scale } = state.sceneTransform;
+  const x = centerX + ((point.x - (canvas.width / 2)) / scale);
+  const y = centerY - ((point.y - (canvas.height / 2)) / scale);
   return { x, y };
 }
 
 function updateSceneTransform() {
   const width = Math.max(0.00001, state.sceneBounds.maxX - state.sceneBounds.minX);
   const height = Math.max(0.00001, state.sceneBounds.maxY - state.sceneBounds.minY);
-  const scale = Math.min(canvas.width / width, canvas.height / height);
-  const drawWidth = width * scale;
-  const drawHeight = height * scale;
+  const baseScale = Math.min(canvas.width / width, canvas.height / height);
+  const scale = baseScale * state.view.zoom;
+
+  if (!Number.isFinite(state.view.centerX) || !Number.isFinite(state.view.centerY)) {
+    state.view.centerX = (state.sceneBounds.minX + state.sceneBounds.maxX) / 2;
+    state.view.centerY = (state.sceneBounds.minY + state.sceneBounds.maxY) / 2;
+  }
 
   state.sceneTransform = {
     scale,
-    offsetX: (canvas.width - drawWidth) / 2,
-    offsetY: (canvas.height - drawHeight) / 2,
+    centerX: state.view.centerX,
+    centerY: state.view.centerY,
   };
+}
+
+function applyZoomAtPoint(nextZoom, anchorCanvasPoint) {
+  updateSceneTransform();
+  const anchorWorldBeforeZoom = canvasToWorld(anchorCanvasPoint);
+  const clampedZoom = Math.min(state.view.maxZoom, Math.max(state.view.minZoom, nextZoom));
+  if (Math.abs(clampedZoom - state.view.zoom) < 0.00001) return;
+
+  state.view.zoom = clampedZoom;
+  updateSceneTransform();
+
+  const anchorWorldAfterZoom = canvasToWorld(anchorCanvasPoint);
+  state.view.centerX += anchorWorldBeforeZoom.x - anchorWorldAfterZoom.x;
+  state.view.centerY += anchorWorldBeforeZoom.y - anchorWorldAfterZoom.y;
+}
+
+function resetView() {
+  state.view.zoom = state.view.minZoom;
+  state.view.centerX = null;
+  state.view.centerY = null;
 }
 
 function getPointer(event) {
