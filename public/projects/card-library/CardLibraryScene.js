@@ -10,6 +10,8 @@ import {
   loadPreviewTuning,
 } from '/public/card-game/index.js';
 
+export { DEFAULT_CARD_LABEL_LAYOUT };
+
 const DEFAULT_GRID_COLUMNS = 5;
 const BASE_CARD_WIDTH = 1.8;
 const BASE_CARD_HEIGHT = 2.5;
