@@ -12,12 +12,11 @@ const state = {
   texturePath: '',
   textureImage: null,
   faces: [],
-  bounds: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
-  viewBox: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
-  viewCenter: { x: 0, y: 0 },
-  zoom: 1,
+  imageWidth: 1,
+  imageHeight: 1,
+  sceneBounds: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
+  sceneTransform: { offsetX: 0, offsetY: 0, scale: 1 },
   drag: null,
-  pan: null,
   status: 'Loading die + assets...',
 };
 
@@ -25,8 +24,8 @@ const controls = {
   dieSelect: null,
   sidesSelect: null,
   textureSelect: null,
-  zoomInput: null,
-  zoomLabel: null,
+  imageWidthInput: null,
+  imageHeightInput: null,
   output: null,
   status: null,
 };
@@ -70,24 +69,17 @@ function buildUi() {
     draw();
   });
 
-  const zoomRow = document.createElement('label');
-  zoomRow.className = 'tools-slider-row';
-
-  controls.zoomLabel = document.createElement('span');
-  controls.zoomLabel.className = 'tools-slider-value';
-  controls.zoomLabel.textContent = 'Zoom (1.0x)';
-
-  controls.zoomInput = document.createElement('input');
-  controls.zoomInput.type = 'range';
-  controls.zoomInput.min = '1';
-  controls.zoomInput.max = '8';
-  controls.zoomInput.step = '0.1';
-  controls.zoomInput.value = String(state.zoom);
-  controls.zoomInput.addEventListener('input', () => {
-    setZoom(Number.parseFloat(controls.zoomInput.value));
+  controls.imageWidthInput = buildNumberControl('Image Width', state.imageWidth, (value) => {
+    state.imageWidth = Math.max(0.00001, value);
+    updateExportOutput();
+    draw();
   });
 
-  zoomRow.append(controls.zoomLabel, controls.zoomInput);
+  controls.imageHeightInput = buildNumberControl('Image Height', state.imageHeight, (value) => {
+    state.imageHeight = Math.max(0.00001, value);
+    updateExportOutput();
+    draw();
+  });
 
   const buttons = document.createElement('div');
   buttons.className = 'tools-export-buttons';
@@ -135,14 +127,7 @@ function buildUi() {
     setStatus('Reset to generated unwrap.');
   });
 
-  const resetZoomButton = document.createElement('button');
-  resetZoomButton.type = 'button';
-  resetZoomButton.textContent = 'Reset Zoom';
-  resetZoomButton.addEventListener('click', () => {
-    setZoom(1);
-  });
-
-  buttons.append(exportButton, copyButton, resetButton, resetZoomButton);
+  buttons.append(exportButton, copyButton, resetButton);
 
   controls.output = document.createElement('textarea');
   controls.output.className = 'tools-export-output';
@@ -160,7 +145,8 @@ function buildUi() {
     controls.dieSelect.row,
     controls.sidesSelect.row,
     controls.textureSelect.row,
-    zoomRow,
+    controls.imageWidthInput.row,
+    controls.imageHeightInput.row,
     exportGroup
   );
 
@@ -168,7 +154,6 @@ function buildUi() {
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointerleave', onPointerUp);
-  canvas.addEventListener('wheel', onWheel, { passive: false });
 }
 
 async function initialize() {
@@ -256,7 +241,7 @@ function rebuildFaces() {
     points: face.points.map((point) => ({ x: point.x, y: point.y })),
   }));
 
-  updateViewBox();
+  updateSceneBounds();
 }
 
 async function syncTexture() {
@@ -266,10 +251,23 @@ async function syncTexture() {
   }
 
   state.textureImage = await loadImage(state.texturePath).catch(() => null);
+  if (state.textureImage) {
+    state.imageWidth = state.textureImage.naturalWidth || state.imageWidth;
+    state.imageHeight = state.textureImage.naturalHeight || state.imageHeight;
+    controls.imageWidthInput.input.value = String(state.imageWidth);
+    controls.imageHeightInput.input.value = String(state.imageHeight);
+  }
 }
 
-function updateViewBox({ recenter = true } = {}) {
+function updateSceneBounds() {
   const allPoints = state.faces.flatMap((face) => face.points);
+  allPoints.push(
+    { x: 0, y: 0 },
+    { x: state.imageWidth, y: 0 },
+    { x: 0, y: state.imageHeight },
+    { x: state.imageWidth, y: state.imageHeight }
+  );
+
   if (allPoints.length === 0) return;
 
   const minX = Math.min(...allPoints.map((point) => point.x));
@@ -277,61 +275,22 @@ function updateViewBox({ recenter = true } = {}) {
   const minY = Math.min(...allPoints.map((point) => point.y));
   const maxY = Math.max(...allPoints.map((point) => point.y));
   const pad = 0.2;
-  state.bounds = {
+  state.sceneBounds = {
     minX: minX - pad,
     maxX: maxX + pad,
     minY: minY - pad,
     maxY: maxY + pad,
   };
-
-  if (recenter) {
-    state.viewCenter = {
-      x: (state.bounds.minX + state.bounds.maxX) / 2,
-      y: (state.bounds.minY + state.bounds.maxY) / 2,
-    };
-  }
-
-  recomputeViewBox();
-}
-
-function recomputeViewBox() {
-  const width = (state.bounds.maxX - state.bounds.minX) / state.zoom;
-  const height = (state.bounds.maxY - state.bounds.minY) / state.zoom;
-
-  state.viewBox = {
-    minX: state.viewCenter.x - (width / 2),
-    maxX: state.viewCenter.x + (width / 2),
-    minY: state.viewCenter.y - (height / 2),
-    maxY: state.viewCenter.y + (height / 2),
-  };
-}
-
-function setZoom(nextZoom, anchorPointer = null) {
-  const safeZoom = Number.isFinite(nextZoom) ? Math.min(8, Math.max(1, nextZoom)) : 1;
-  const anchorWorldBefore = anchorPointer ? canvasToWorld(anchorPointer) : null;
-
-  state.zoom = safeZoom;
-  controls.zoomInput.value = safeZoom.toFixed(1);
-  controls.zoomLabel.textContent = `Zoom (${safeZoom.toFixed(1)}x)`;
-
-  recomputeViewBox();
-
-  if (anchorWorldBefore) {
-    const anchorWorldAfter = canvasToWorld(anchorPointer);
-    state.viewCenter.x += anchorWorldBefore.x - anchorWorldAfter.x;
-    state.viewCenter.y += anchorWorldBefore.y - anchorWorldAfter.y;
-    recomputeViewBox();
-  }
-
-  draw();
 }
 
 function draw() {
+  updateSceneBounds();
+  updateSceneTransform();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (state.textureImage) {
-    const topLeft = worldToCanvas({ x: 0, y: 1 });
-    const bottomRight = worldToCanvas({ x: 1, y: 0 });
+    const topLeft = worldToCanvas({ x: 0, y: state.imageHeight });
+    const bottomRight = worldToCanvas({ x: state.imageWidth, y: 0 });
     const drawX = Math.min(topLeft.x, bottomRight.x);
     const drawY = Math.min(topLeft.y, bottomRight.y);
     const drawWidth = Math.abs(bottomRight.x - topLeft.x);
@@ -382,17 +341,6 @@ function draw() {
 }
 
 function onPointerDown(event) {
-  if (event.button === 1) {
-    event.preventDefault();
-    state.pan = {
-      pointerStart: getPointer(event),
-      centerStart: { ...state.viewCenter },
-    };
-    canvas.setPointerCapture(event.pointerId);
-    canvas.style.cursor = 'grabbing';
-    return;
-  }
-
   if (event.button !== 0) return;
 
   const pointer = getPointer(event);
@@ -409,20 +357,6 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
-  if (state.pan) {
-    const pointer = getPointer(event);
-    const width = state.viewBox.maxX - state.viewBox.minX;
-    const height = state.viewBox.maxY - state.viewBox.minY;
-    const dx = ((pointer.x - state.pan.pointerStart.x) / canvas.width) * width;
-    const dy = ((pointer.y - state.pan.pointerStart.y) / canvas.height) * height;
-
-    state.viewCenter.x = state.pan.centerStart.x - dx;
-    state.viewCenter.y = state.pan.centerStart.y + dy;
-    recomputeViewBox();
-    draw();
-    return;
-  }
-
   if (!state.drag) return;
   const pointer = getPointer(event);
   const world = canvasToWorld(pointer);
@@ -430,28 +364,12 @@ function onPointerMove(event) {
   if (!face) return;
   face.points[state.drag.pointIndex] = world;
 
-  updateViewBox({ recenter: false });
+  updateSceneBounds();
   updateExportOutput();
   draw();
 }
 
-function onWheel(event) {
-  event.preventDefault();
-  const direction = Math.sign(event.deltaY);
-  const delta = direction > 0 ? -0.2 : 0.2;
-  setZoom(state.zoom + delta, getPointer(event));
-}
-
 function onPointerUp(event) {
-  if (state.pan) {
-    state.pan = null;
-    canvas.style.cursor = '';
-    if (canvas.hasPointerCapture(event.pointerId)) {
-      canvas.releasePointerCapture(event.pointerId);
-    }
-    return;
-  }
-
   if (!state.drag) return;
   state.drag = null;
   if (canvas.hasPointerCapture(event.pointerId)) {
@@ -480,19 +398,33 @@ function findNearestPoint(pointer) {
 }
 
 function worldToCanvas(point) {
-  const width = state.viewBox.maxX - state.viewBox.minX;
-  const height = state.viewBox.maxY - state.viewBox.minY;
-  const x = ((point.x - state.viewBox.minX) / width) * canvas.width;
-  const y = canvas.height - (((point.y - state.viewBox.minY) / height) * canvas.height);
+  const { minX, maxY } = state.sceneBounds;
+  const { offsetX, offsetY, scale } = state.sceneTransform;
+  const x = ((point.x - minX) * scale) + offsetX;
+  const y = (((maxY - point.y) * scale) + offsetY);
   return { x, y };
 }
 
 function canvasToWorld(point) {
-  const width = state.viewBox.maxX - state.viewBox.minX;
-  const height = state.viewBox.maxY - state.viewBox.minY;
-  const x = state.viewBox.minX + ((point.x / canvas.width) * width);
-  const y = state.viewBox.minY + (((canvas.height - point.y) / canvas.height) * height);
+  const { minX, maxY } = state.sceneBounds;
+  const { offsetX, offsetY, scale } = state.sceneTransform;
+  const x = minX + ((point.x - offsetX) / scale);
+  const y = maxY - ((point.y - offsetY) / scale);
   return { x, y };
+}
+
+function updateSceneTransform() {
+  const width = Math.max(0.00001, state.sceneBounds.maxX - state.sceneBounds.minX);
+  const height = Math.max(0.00001, state.sceneBounds.maxY - state.sceneBounds.minY);
+  const scale = Math.min(canvas.width / width, canvas.height / height);
+  const drawWidth = width * scale;
+  const drawHeight = height * scale;
+
+  state.sceneTransform = {
+    scale,
+    offsetX: (canvas.width - drawWidth) / 2,
+    offsetY: (canvas.height - drawHeight) / 2,
+  };
 }
 
 function getPointer(event) {
@@ -512,6 +444,8 @@ function buildExportPayload() {
     dieId: state.dieId || null,
     sides: state.sides,
     texturePath: state.texturePath || null,
+    imageWidth: roundNumber(state.imageWidth),
+    imageHeight: roundNumber(state.imageHeight),
     exportedAt: new Date().toISOString(),
     faces: state.faces.map((face) => ({
       value: face.value,
@@ -548,6 +482,35 @@ function buildSelectControl(label, options) {
 
   row.append(valueLabel, select);
   return { row, select };
+}
+
+function buildNumberControl(label, initialValue, onChange) {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+  valueLabel.textContent = label;
+
+  const input = document.createElement('input');
+  let lastValidValue = initialValue;
+  input.type = 'number';
+  input.className = 'tools-select';
+  input.min = '0.00001';
+  input.step = '1';
+  input.value = String(initialValue);
+  input.addEventListener('change', () => {
+    const value = Number.parseFloat(input.value);
+    if (!Number.isFinite(value) || value <= 0) {
+      input.value = String(lastValidValue);
+      return;
+    }
+    lastValidValue = value;
+    onChange(value);
+  });
+
+  row.append(valueLabel, input);
+  return { row, input };
 }
 
 function loadImage(path) {
