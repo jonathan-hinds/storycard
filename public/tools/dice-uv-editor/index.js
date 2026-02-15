@@ -237,7 +237,7 @@ async function initialize() {
   layoutFacesInImageSpace();
   updateExportOutput();
   draw();
-  setStatus('Drag UV points to line up faces on the texture.');
+  setStatus('Drag UV points to line up faces on the texture. Hold middle mouse to pan the view.');
 }
 
 async function loadDiceOptions() {
@@ -478,6 +478,14 @@ function draw() {
 function onPointerDown(event) {
   if (event.button === 1) {
     event.preventDefault();
+    state.drag = {
+      mode: 'viewport',
+      pointerOrigin: getPointer(event),
+      panOriginX: state.view.panX,
+      panOriginY: state.view.panY,
+    };
+    canvas.setPointerCapture(event.pointerId);
+    draw();
     return;
   }
   if (event.button !== 0) return;
@@ -516,6 +524,15 @@ function onPointerDown(event) {
 function onPointerMove(event) {
   if (!state.drag) return;
   const pointer = getPointer(event);
+  if (state.drag.mode === 'viewport') {
+    const dx = pointer.x - state.drag.pointerOrigin.x;
+    const dy = pointer.y - state.drag.pointerOrigin.y;
+    state.view.panX = state.drag.panOriginX + dx;
+    state.view.panY = state.drag.panOriginY + dy;
+    draw();
+    return;
+  }
+
   const world = canvasToWorld(pointer);
   if (state.drag.mode === 'point') {
     const face = state.faces[state.drag.faceIndex];
