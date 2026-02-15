@@ -32,6 +32,7 @@ const PLACED_CARD_SWIRL_AMPLITUDE = 0.024;
 const PLACED_CARD_VERTICAL_SWAY_AMPLITUDE = 0.028;
 const PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE = 0.032;
 const ATTACK_TARGET_SCALE = 1.12;
+const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -56,6 +57,7 @@ export class CardGameClient {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x000000);
+    this.cardBackTexture = new THREE.TextureLoader().load(CARD_BACK_TEXTURE_URL);
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
     this.camera.position.set(0, 8.2, 4.8);
@@ -190,18 +192,18 @@ export class CardGameClient {
     });
 
     this.template.deckSlotLayout.forEach((slot) => {
-      const zoneColor = slot.side === this.template.playerSide ? 0x5f83c7 : 0xa06085;
-      const slotMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 2.65), new THREE.MeshStandardMaterial({ color: zoneColor, transparent: true, opacity: 0.26, roughness: 0.86, metalness: 0.07 }));
+      const slotMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 2.65), new THREE.MeshStandardMaterial({ color: 0x000000, transparent: true, opacity: 0.26, roughness: 0.86, metalness: 0.07 }));
       slotMesh.rotation.x = -Math.PI / 2;
       slotMesh.position.set(slot.x, -0.694, slot.z);
       this.scene.add(slotMesh);
 
       const deck = CardMeshFactory.createCard({
         id: `${slot.side}-deck`, width: 1.8, height: 2.5, thickness: 0.42, cornerRadius: 0.15,
-        color: slot.side === this.template.playerSide ? 0x2e436a : 0x5d3653,
+        color: 0x000000,
+        faceTexture: this.cardBackTexture,
       });
       deck.position.set(slot.x, 0.17, slot.z);
-      deck.rotation.set(-Math.PI / 2, 0, 0);
+      deck.rotation.set(-Math.PI / 2, 0, slot.side === this.template.playerSide ? 0 : OPPONENT_BOARD_ROTATION_Z);
       deck.userData.zone = CARD_ZONE_TYPES.DECK;
       deck.userData.owner = slot.side;
       deck.userData.locked = true;
@@ -1067,6 +1069,7 @@ export class CardGameClient {
     this.canvasContainer.removeEventListener('pointercancel', this.handlePointerCancel);
     window.removeEventListener('resize', this.updateSize);
     this.resetBtn?.removeEventListener('click', this.resetDemo);
+    this.cardBackTexture?.dispose?.();
     this.renderer.dispose();
   }
 }
