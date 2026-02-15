@@ -11,7 +11,7 @@ const DIE_FACE_LAYOUTS = {
   20: Array.from({ length: 20 }, (_, i) => i + 1),
 };
 
-const BASE_DIE_COLOR = new THREE.Color(0xe2e8f0);
+const BASE_DIE_COLOR = new THREE.Color(0xffffff);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
 const UV_PRECISION = 100000;
@@ -991,8 +991,8 @@ function createDieMesh(sides) {
   const material = new THREE.MeshStandardMaterial({
     color: BASE_DIE_COLOR,
     map: templateTexture,
-    metalness: 0.16,
-    roughness: 0.45,
+    metalness: 0.02,
+    roughness: 0.82,
   });
   const mesh = new THREE.Mesh(geometry, material);
   return { mesh, faceValueMap };
