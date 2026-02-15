@@ -604,8 +604,21 @@ button {
   padding: 1rem;
 }
 
+.dice-uv-preview-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(260px, 0.72fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.dice-uv-preview-grid h2 {
+  margin: 0 0 0.45rem;
+  font-size: 0.95rem;
+  color: #c6d0e7;
+}
+
 .dice-uv-canvas {
-  width: min(100%, 900px);
+  width: 100%;
   aspect-ratio: 1 / 1;
   border: 1px solid #33405f;
   border-radius: 0.5rem;
@@ -615,9 +628,22 @@ button {
   touch-action: none;
 }
 
+.dice-preview-canvas {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid #33405f;
+  border-radius: 0.5rem;
+  background: #0b1222;
+  display: block;
+}
+
 @media (max-width: 900px) {
   .dice-uv-stage-wrap {
     border-left: 0;
     border-top: 1px solid #252b3a;
+  }
+
+  .dice-uv-preview-grid {
+    grid-template-columns: 1fr;
   }
 }
