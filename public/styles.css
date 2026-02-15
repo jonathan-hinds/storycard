@@ -192,6 +192,10 @@ button {
   gap: 0.5rem;
 }
 
+.die-tuning-controls {
+  padding: 0.35rem 0;
+}
+
 .die-canvas {
   width: 300px;
   height: 300px;
