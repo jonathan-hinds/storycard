@@ -29,9 +29,9 @@ export class DieRollerClient {
     this.rollQueue = [];
     this.currentRoll = null;
     this.renderTuning = {
-      ambientLightIntensity: Number.isFinite(options.ambientLightIntensity) ? options.ambientLightIntensity : 1,
-      topLightIntensity: Number.isFinite(options.topLightIntensity) ? options.topLightIntensity : 0.75,
-      dieRoughness: Number.isFinite(options.dieRoughness) ? options.dieRoughness : 0.82,
+      ambientLightIntensity: Number.isFinite(options.ambientLightIntensity) ? options.ambientLightIntensity : 2,
+      topLightIntensity: Number.isFinite(options.topLightIntensity) ? options.topLightIntensity : 2,
+      dieRoughness: Number.isFinite(options.dieRoughness) ? options.dieRoughness : 1,
     };
   }
 
