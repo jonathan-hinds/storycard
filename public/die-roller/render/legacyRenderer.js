@@ -1059,7 +1059,7 @@ function createSceneForCanvas(canvas, sides) {
   renderer.setSize(canvas.clientWidth || 300, canvas.clientHeight || 300, false);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+  scene.background = null;
 
   const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 100);
   const cameraOffset = new THREE.Vector3(0, 5.8, 0);
@@ -1075,7 +1075,7 @@ function createSceneForCanvas(canvas, sides) {
   const areaSize = 7.1;
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(areaSize, areaSize),
-    new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 1, metalness: 0.02, transparent: true, opacity: 0.35 })
+    new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 1, metalness: 0.02, transparent: true, opacity: 0 })
   );
   floor.rotation.x = -Math.PI / 2;
   group.add(floor);
@@ -1096,7 +1096,7 @@ function createSceneForCanvas(canvas, sides) {
   debugFloor.visible = Boolean(debugPhysicsToggle?.checked);
   group.add(debugFloor);
 
-  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.95, metalness: 0.04, transparent: true, opacity: 0.18 });
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.95, metalness: 0.04, transparent: true, opacity: 0 });
   const wallHeight = 0.52;
   const wallThickness = 0.2;
   const half = areaSize / 2;
