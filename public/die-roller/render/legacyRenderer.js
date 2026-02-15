@@ -19,8 +19,85 @@ const TEMPLATE_PADDING = 32;
 const TEMPLATE_MAX_SIZE = 2048;
 const D6_SKIN_TEXTURE_PATH = '/public/assets/d6skin.png';
 const textureLoader = new THREE.TextureLoader();
-const D6_SKIN_TEXTURE = textureLoader.load(D6_SKIN_TEXTURE_PATH);
-D6_SKIN_TEXTURE.colorSpace = THREE.SRGBColorSpace;
+const textureCache = new Map();
+
+const DIE_UV_EXPORTS = {
+  6: {
+    dieId: null,
+    sides: 6,
+    texturePath: '/public/assets/d6skin2.png',
+    imageWidth: 1024,
+    imageHeight: 1344,
+    faces: [
+      {
+        value: 1,
+        points: [
+          { x: 345.7126, y: 1006.25255 },
+          { x: 687.39414, y: 1007.54072 },
+          { x: 686.39071, y: 1334.13579 },
+          { x: 345.778, y: 1334.56149 },
+        ],
+      },
+      {
+        value: 2,
+        points: [
+          { x: 345.7126, y: 674.17005 },
+          { x: 345.85819, y: 345.25249 },
+          { x: 685.8708, y: 345.75472 },
+          { x: 685.91967, y: 674.17005 },
+        ],
+      },
+      {
+        value: 3,
+        points: [
+          { x: 685.91967, y: 1006.27562 },
+          { x: 345.7126, y: 1006.32056 },
+          { x: 345.90316, y: 674.26164 },
+          { x: 685.75252, y: 674.39143 },
+        ],
+      },
+      {
+        value: 4,
+        points: [
+          { x: 345.77321, y: 674.26164 },
+          { x: 345.77321, y: 1006.32056 },
+          { x: 17.46879, y: 1006.79373 },
+          { x: 17.46879, y: 673.89408 },
+        ],
+      },
+      {
+        value: 5,
+        points: [
+          { x: 345.65734, y: 25.48231 },
+          { x: 686.42331, y: 25.73342 },
+          { x: 685.91967, y: 346.3037 },
+          { x: 345.7126, y: 346.3037 },
+        ],
+      },
+      {
+        value: 6,
+        points: [
+          { x: 1015.12495, y: 1006.32056 },
+          { x: 686.82053, y: 1006.32056 },
+          { x: 686.82053, y: 674.26164 },
+          { x: 1015.12495, y: 674.26164 },
+        ],
+      },
+    ],
+  },
+};
+
+function getTexture(path) {
+  if (!path) return null;
+  if (!textureCache.has(path)) {
+    const texture = textureLoader.load(path);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    textureCache.set(path, texture);
+  }
+  return textureCache.get(path);
+}
+
+const D6_SKIN_TEXTURE = getTexture(D6_SKIN_TEXTURE_PATH);
 
 function createDebugGroundTexture() {
   const size = 256;
@@ -414,6 +491,91 @@ function mapFaceValuesForTemplate(sideCount, faceCount) {
   return Array.from({ length: faceCount }, (_, i) => i + 1);
 }
 
+function deriveStableFaceId(face, index) {
+  if (face?.id != null) return String(face.id);
+  const valuePart = Number.isFinite(face?.value) ? `v:${face.value}` : `v:na`;
+  const pointPart = Array.isArray(face?.points)
+    ? face.points
+      .map((point) => `${Math.round((point.x || 0) * UV_PRECISION)}:${Math.round((point.y || 0) * UV_PRECISION)}`)
+      .sort()
+      .join('|')
+    : 'no-points';
+  return `${valuePart}|${pointPart}|idx:${index}`;
+}
+
+function normalizeUvExport(data) {
+  if (!data || !Array.isArray(data.faces) || data.faces.length === 0) return null;
+  const width = Number(data.imageWidth);
+  const height = Number(data.imageHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+
+  const faces = data.faces
+    .map((face, index) => {
+      if (!Array.isArray(face?.points) || face.points.length < 3) return null;
+      return {
+        id: deriveStableFaceId(face, index),
+        value: Number(face.value),
+        points: face.points.map((point) => new THREE.Vector2(Number(point.x), Number(point.y))),
+      };
+    })
+    .filter(Boolean);
+
+  if (faces.length === 0) return null;
+  return {
+    dieId: data.dieId ?? null,
+    sides: Number(data.sides) || faces.length,
+    texturePath: data.texturePath || null,
+    imageWidth: width,
+    imageHeight: height,
+    faces,
+  };
+}
+
+function buildUvNetFromExport(sideCount) {
+  const uvExport = normalizeUvExport(DIE_UV_EXPORTS[sideCount]);
+  if (!uvExport) return null;
+
+  // Keep physical/readout face mapping tied to DIE_FACE_LAYOUTS; UV JSON only drives texture placement.
+  const layoutValues = mapFaceValuesForTemplate(sideCount, uvExport.faces.length);
+  const facesByValue = new Map();
+  uvExport.faces.forEach((face) => {
+    if (!Number.isFinite(face.value)) return;
+    if (!facesByValue.has(face.value)) {
+      facesByValue.set(face.value, []);
+    }
+    facesByValue.get(face.value).push(face);
+  });
+
+  const sortedFallbackFaces = [...uvExport.faces].sort((a, b) => a.id.localeCompare(b.id));
+  const usedFaceIds = new Set();
+  const orderedFaces = layoutValues.map((value, index) => {
+    const matching = facesByValue.get(value) || [];
+    const byValue = matching.find((face) => !usedFaceIds.has(face.id));
+    const fallback = sortedFallbackFaces.find((face) => !usedFaceIds.has(face.id));
+    const selected = byValue || fallback;
+    if (!selected) return null;
+    usedFaceIds.add(selected.id);
+    return {
+      id: index,
+      sourceId: selected.id,
+      value,
+      points: selected.points.map((point) => point.clone()),
+    };
+  }).filter(Boolean);
+
+  if (orderedFaces.length === 0) return null;
+  return {
+    texturePath: uvExport.texturePath,
+    bounds: {
+      minX: 0,
+      minY: 0,
+      width: uvExport.imageWidth,
+      height: uvExport.imageHeight,
+    },
+    net: orderedFaces,
+  };
+}
+
 function signedDistanceToLine(point, a, b) {
   const edge = new THREE.Vector2().subVectors(b, a);
   const rel = new THREE.Vector2().subVectors(point, a);
@@ -577,7 +739,7 @@ function downloadUvTemplate(sides) {
   link.click();
 }
 
-function downloadD6SkinTemplate() {
+function downloadD6SkinTemplate(path = D6_SKIN_TEXTURE_PATH) {
   const image = new Image();
   image.onload = () => {
     const canvas = document.createElement('canvas');
@@ -591,11 +753,16 @@ function downloadD6SkinTemplate() {
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
-  image.src = D6_SKIN_TEXTURE_PATH;
+  image.src = path;
 }
 
 function downloadDieSkinTemplate(sides) {
   const sideCount = Number.parseInt(sides, 10);
+  const exportedUv = buildUvNetFromExport(sideCount);
+  if (exportedUv?.texturePath) {
+    downloadD6SkinTemplate(exportedUv.texturePath);
+    return;
+  }
   if (sideCount === 6) {
     downloadD6SkinTemplate();
     return;
@@ -603,19 +770,25 @@ function downloadDieSkinTemplate(sides) {
   downloadUvTemplate(sideCount);
 }
 
-function mapGeometryToNetUvs(geometry, net) {
+function mapGeometryToNetUvs(geometry, net, options = {}) {
   const faces = extractFacePolygons3D(geometry, net.length);
   const netById = new Map(net.map((face) => [face.id, face]));
   const uvs = [];
   const nonIndexed = geometry.index ? geometry.toNonIndexed() : geometry;
   const positions = nonIndexed.attributes.position;
 
-  const minX = Math.min(...net.flatMap((face) => face.points.map((point) => point.x)));
-  const maxX = Math.max(...net.flatMap((face) => face.points.map((point) => point.x)));
-  const minY = Math.min(...net.flatMap((face) => face.points.map((point) => point.y)));
-  const maxY = Math.max(...net.flatMap((face) => face.points.map((point) => point.y)));
-  const width = Math.max(1e-6, maxX - minX);
-  const height = Math.max(1e-6, maxY - minY);
+  const computedMinX = Math.min(...net.flatMap((face) => face.points.map((point) => point.x)));
+  const computedMaxX = Math.max(...net.flatMap((face) => face.points.map((point) => point.x)));
+  const computedMinY = Math.min(...net.flatMap((face) => face.points.map((point) => point.y)));
+  const computedMaxY = Math.max(...net.flatMap((face) => face.points.map((point) => point.y)));
+  const minX = Number.isFinite(options.bounds?.minX) ? options.bounds.minX : computedMinX;
+  const minY = Number.isFinite(options.bounds?.minY) ? options.bounds.minY : computedMinY;
+  const width = Number.isFinite(options.bounds?.width)
+    ? Math.max(1e-6, options.bounds.width)
+    : Math.max(1e-6, computedMaxX - computedMinX);
+  const height = Number.isFinite(options.bounds?.height)
+    ? Math.max(1e-6, options.bounds.height)
+    : Math.max(1e-6, computedMaxY - computedMinY);
 
   for (let i = 0; i < positions.count; i += 3) {
     const triangle = [
@@ -790,7 +963,9 @@ function createDieGeometry(sideCount) {
 function createDieMesh(sides) {
   const sideCount = Number.parseInt(sides, 10);
   const baseGeometry = createDieGeometry(sideCount);
-  const net = generateUnwrappedNet(baseGeometry, sideCount);
+  const generatedNet = generateUnwrappedNet(baseGeometry, sideCount);
+  const exportedUv = buildUvNetFromExport(sideCount);
+  const net = exportedUv?.net || generatedNet;
   const numberedFaces = selectNumberedFaces(extractPlanarFaces(baseGeometry), sideCount)
     .sort((a, b) => {
       if (Math.abs(a.center.y - b.center.y) > 1e-4) return b.center.y - a.center.y;
@@ -804,11 +979,15 @@ function createDieMesh(sides) {
     value: values[index] ?? index + 1,
   }));
 
-  const geometry = mapGeometryToNetUvs(baseGeometry, net);
+  const geometry = mapGeometryToNetUvs(baseGeometry, net, { bounds: exportedUv?.bounds });
   if (geometry !== baseGeometry) {
     baseGeometry.dispose();
   }
-  const templateTexture = sideCount === 6 ? D6_SKIN_TEXTURE : createDieTemplateTexture(sideCount, net);
+  const templateTexture = exportedUv?.texturePath
+    ? getTexture(exportedUv.texturePath)
+    : sideCount === 6
+      ? D6_SKIN_TEXTURE
+      : createDieTemplateTexture(sideCount, net);
   const material = new THREE.MeshStandardMaterial({
     color: BASE_DIE_COLOR,
     map: templateTexture,
