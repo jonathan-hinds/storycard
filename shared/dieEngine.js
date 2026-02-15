@@ -561,6 +561,8 @@
       const outputDt = 1 / 60;
       const maxFrames = 900;
       let belowThresholdFrames = 0;
+      let stableFaceFrames = 0;
+      let stableOutcomeFrames = 0;
       let settled = false;
 
       for (let i = 0; i < maxFrames; i += 1) {
@@ -569,10 +571,19 @@
 
         const linearSpeed = Math.hypot(this.die.body.velocity.x, this.die.body.velocity.y, this.die.body.velocity.z);
         const angularSpeed = Math.hypot(this.die.body.angularVelocity.x, this.die.body.angularVelocity.y, this.die.body.angularVelocity.z);
+        const topFace = this.die.getTopFace();
         const atRest = linearSpeed < 0.16 && angularSpeed < 0.28;
         const shouldForceSleep = i > 120 && linearSpeed < 0.25 && angularSpeed < 0.5;
+        const hasStableTopFace = topFace.alignment > 0.988 && linearSpeed < 0.12;
+        const shouldSettleStableFace = hasStableTopFace && angularSpeed < 1.1;
+        const shouldSettleStableOutcome = topFace.alignment > 0.997 && linearSpeed < 0.75 && angularSpeed < 2.2;
         belowThresholdFrames = atRest ? belowThresholdFrames + 1 : 0;
-        if ((belowThresholdFrames >= 18 && i > 45) || shouldForceSleep) {
+        stableFaceFrames = shouldSettleStableFace ? stableFaceFrames + 1 : 0;
+        stableOutcomeFrames = shouldSettleStableOutcome ? stableOutcomeFrames + 1 : 0;
+        if ((belowThresholdFrames >= 18 && i > 45)
+          || (stableFaceFrames >= 10 && i > 35)
+          || (stableOutcomeFrames >= 32 && i > 60)
+          || shouldForceSleep) {
           this.die.body.velocity.x = 0;
           this.die.body.velocity.y = 0;
           this.die.body.velocity.z = 0;
