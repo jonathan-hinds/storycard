@@ -18,6 +18,7 @@ const state = {
   sceneTransform: { offsetX: 0, offsetY: 0, scale: 1 },
   view: { zoom: 1, panX: 0, panY: 0 },
   drag: null,
+  selectedFaceIndex: null,
   status: 'Loading die + assets...',
 };
 
@@ -27,6 +28,11 @@ const controls = {
   textureSelect: null,
   imageWidthInput: null,
   imageHeightInput: null,
+  selectedFaceLabel: null,
+  faceXInput: null,
+  faceYInput: null,
+  faceWidthInput: null,
+  faceHeightInput: null,
   output: null,
   status: null,
 };
@@ -87,6 +93,54 @@ function buildUi() {
     updateExportOutput();
     draw();
   });
+
+  controls.selectedFaceLabel = document.createElement('p');
+  controls.selectedFaceLabel.className = 'tools-slider-value';
+  controls.selectedFaceLabel.textContent = 'Selected Face: none';
+
+  controls.faceXInput = buildNumberControl('Face X', 0, (value) => {
+    const face = getSelectedFace();
+    if (!face) return;
+    const bounds = getFaceBounds([face]);
+    translateFace(face, value - bounds.minX, 0);
+    updateExportOutput();
+    syncSelectedFaceInputs();
+    draw();
+  }, { min: undefined, step: '0.1' });
+
+  controls.faceYInput = buildNumberControl('Face Y', 0, (value) => {
+    const face = getSelectedFace();
+    if (!face) return;
+    const bounds = getFaceBounds([face]);
+    translateFace(face, 0, value - bounds.minY);
+    updateExportOutput();
+    syncSelectedFaceInputs();
+    draw();
+  }, { min: undefined, step: '0.1' });
+
+  controls.faceWidthInput = buildNumberControl('Face Width', 1, (value) => {
+    const face = getSelectedFace();
+    if (!face) return;
+    const bounds = getFaceBounds([face]);
+    const currentWidth = Math.max(0.00001, bounds.maxX - bounds.minX);
+    const scale = value / currentWidth;
+    scaleFace(face, scale, 1, bounds.minX, bounds.minY);
+    updateExportOutput();
+    syncSelectedFaceInputs();
+    draw();
+  }, { min: '0.00001', step: '0.1' });
+
+  controls.faceHeightInput = buildNumberControl('Face Height', 1, (value) => {
+    const face = getSelectedFace();
+    if (!face) return;
+    const bounds = getFaceBounds([face]);
+    const currentHeight = Math.max(0.00001, bounds.maxY - bounds.minY);
+    const scale = value / currentHeight;
+    scaleFace(face, 1, scale, bounds.minX, bounds.minY);
+    updateExportOutput();
+    syncSelectedFaceInputs();
+    draw();
+  }, { min: '0.00001', step: '0.1' });
 
   const buttons = document.createElement('div');
   buttons.className = 'tools-export-buttons';
@@ -155,6 +209,11 @@ function buildUi() {
     controls.textureSelect.row,
     controls.imageWidthInput.row,
     controls.imageHeightInput.row,
+    controls.selectedFaceLabel,
+    controls.faceXInput.row,
+    controls.faceYInput.row,
+    controls.faceWidthInput.row,
+    controls.faceHeightInput.row,
     exportGroup
   );
 
@@ -166,6 +225,8 @@ function buildUi() {
     if (event.button === 1) event.preventDefault();
   });
   canvas.addEventListener('wheel', onCanvasWheel, { passive: false });
+
+  syncSelectedFaceInputs();
 }
 
 async function initialize() {
@@ -253,6 +314,9 @@ function rebuildFaces() {
     value: face.value,
     points: face.points.map((point) => ({ x: point.x, y: point.y })),
   }));
+
+  state.selectedFaceIndex = null;
+  syncSelectedFaceInputs();
 
   updateSceneBounds();
 }
@@ -375,7 +439,9 @@ function draw() {
   }
 
   state.faces.forEach((face) => {
+    const faceIndex = state.faces.indexOf(face);
     const polygon = face.points.map((point) => worldToCanvas(point));
+    const isSelected = state.selectedFaceIndex === faceIndex;
 
     ctx.beginPath();
     polygon.forEach((point, index) => {
@@ -383,10 +449,10 @@ function draw() {
       else ctx.lineTo(point.x, point.y);
     });
     ctx.closePath();
-    ctx.fillStyle = 'rgba(2, 132, 199, 0.14)';
+    ctx.fillStyle = isSelected ? 'rgba(249, 115, 22, 0.24)' : 'rgba(2, 132, 199, 0.14)';
     ctx.fill();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = isSelected ? '#f97316' : '#38bdf8';
+    ctx.lineWidth = isSelected ? 3 : 2;
     ctx.stroke();
 
     const centroid = getCentroid(polygon);
@@ -397,7 +463,7 @@ function draw() {
     ctx.fillText(String(face.value), centroid.x, centroid.y);
 
     polygon.forEach((point, pointIndex) => {
-      const isActive = state.drag && state.drag.faceIndex === state.faces.indexOf(face) && state.drag.pointIndex === pointIndex;
+      const isActive = state.drag && state.drag.faceIndex === faceIndex && state.drag.pointIndex === pointIndex;
       ctx.beginPath();
       ctx.arc(point.x, point.y, isActive ? 7 : 5, 0, Math.PI * 2);
       ctx.fillStyle = isActive ? '#f97316' : '#facc15';
@@ -418,11 +484,29 @@ function onPointerDown(event) {
 
   const pointer = getPointer(event);
   const nearest = findNearestPoint(pointer);
-  if (!nearest || nearest.distance > 18) return;
+  if (nearest && nearest.distance <= 18) {
+    setSelectedFace(null);
+    state.drag = {
+      mode: 'point',
+      faceIndex: nearest.faceIndex,
+      pointIndex: nearest.pointIndex,
+    };
 
+    canvas.setPointerCapture(event.pointerId);
+    draw();
+    return;
+  }
+
+  const faceIndex = findFaceAtCanvasPoint(pointer);
+  if (faceIndex == null) return;
+
+  setSelectedFace(faceIndex);
+  const world = canvasToWorld(pointer);
   state.drag = {
-    faceIndex: nearest.faceIndex,
-    pointIndex: nearest.pointIndex,
+    mode: 'face',
+    faceIndex,
+    origin: world,
+    movedPoints: collectFacePointRefs(faceIndex).map((point) => ({ point, x: point.x, y: point.y })),
   };
 
   canvas.setPointerCapture(event.pointerId);
@@ -433,9 +517,19 @@ function onPointerMove(event) {
   if (!state.drag) return;
   const pointer = getPointer(event);
   const world = canvasToWorld(pointer);
-  const face = state.faces[state.drag.faceIndex];
-  if (!face) return;
-  face.points[state.drag.pointIndex] = world;
+  if (state.drag.mode === 'point') {
+    const face = state.faces[state.drag.faceIndex];
+    if (!face) return;
+    face.points[state.drag.pointIndex] = world;
+  } else if (state.drag.mode === 'face') {
+    const dx = world.x - state.drag.origin.x;
+    const dy = world.y - state.drag.origin.y;
+    state.drag.movedPoints.forEach((entry) => {
+      entry.point.x = entry.x + dx;
+      entry.point.y = entry.y + dy;
+    });
+    syncSelectedFaceInputs();
+  }
 
   updateSceneBounds();
   updateExportOutput();
@@ -490,6 +584,84 @@ function findNearestPoint(pointer) {
   });
 
   return winner;
+}
+
+function findFaceAtCanvasPoint(pointer) {
+  for (let faceIndex = state.faces.length - 1; faceIndex >= 0; faceIndex -= 1) {
+    const polygon = state.faces[faceIndex].points.map((point) => worldToCanvas(point));
+    if (isPointInsidePolygon(pointer, polygon)) {
+      return faceIndex;
+    }
+  }
+  return null;
+}
+
+function isPointInsidePolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+    const intersect = ((yi > point.y) !== (yj > point.y))
+      && (point.x < (((xj - xi) * (point.y - yi)) / ((yj - yi) || 0.00001)) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function collectFacePointRefs(faceIndex) {
+  const face = state.faces[faceIndex];
+  return face ? [...face.points] : [];
+}
+
+function getSelectedFace() {
+  if (state.selectedFaceIndex == null) return null;
+  return state.faces[state.selectedFaceIndex] || null;
+}
+
+function setSelectedFace(faceIndex) {
+  state.selectedFaceIndex = faceIndex;
+  syncSelectedFaceInputs();
+}
+
+function syncSelectedFaceInputs() {
+  const face = getSelectedFace();
+  const inputs = [controls.faceXInput?.input, controls.faceYInput?.input, controls.faceWidthInput?.input, controls.faceHeightInput?.input];
+  if (!face) {
+    if (controls.selectedFaceLabel) controls.selectedFaceLabel.textContent = 'Selected Face: none';
+    inputs.forEach((input) => {
+      if (!input) return;
+      input.disabled = true;
+      input.value = '';
+    });
+    return;
+  }
+
+  const bounds = getFaceBounds([face]);
+  if (controls.selectedFaceLabel) controls.selectedFaceLabel.textContent = `Selected Face: ${face.value}`;
+  controls.faceXInput.input.disabled = false;
+  controls.faceYInput.input.disabled = false;
+  controls.faceWidthInput.input.disabled = false;
+  controls.faceHeightInput.input.disabled = false;
+  controls.faceXInput.input.value = String(roundNumber(bounds.minX));
+  controls.faceYInput.input.value = String(roundNumber(bounds.minY));
+  controls.faceWidthInput.input.value = String(roundNumber(Math.max(0.00001, bounds.maxX - bounds.minX)));
+  controls.faceHeightInput.input.value = String(roundNumber(Math.max(0.00001, bounds.maxY - bounds.minY)));
+}
+
+function translateFace(face, dx, dy) {
+  face.points.forEach((point) => {
+    point.x += dx;
+    point.y += dy;
+  });
+}
+
+function scaleFace(face, scaleX, scaleY, anchorX, anchorY) {
+  face.points.forEach((point) => {
+    point.x = anchorX + ((point.x - anchorX) * scaleX);
+    point.y = anchorY + ((point.y - anchorY) * scaleY);
+  });
 }
 
 function worldToCanvas(point) {
@@ -597,7 +769,7 @@ function buildSelectControl(label, options) {
   return { row, select };
 }
 
-function buildNumberControl(label, initialValue, onChange) {
+function buildNumberControl(label, initialValue, onChange, options = {}) {
   const row = document.createElement('label');
   row.className = 'tools-slider-row';
 
@@ -609,12 +781,14 @@ function buildNumberControl(label, initialValue, onChange) {
   let lastValidValue = initialValue;
   input.type = 'number';
   input.className = 'tools-select';
-  input.min = '0.00001';
-  input.step = '1';
+  if (options.min !== undefined) input.min = options.min;
+  else input.min = '0.00001';
+  input.step = options.step || '1';
   input.value = String(initialValue);
   input.addEventListener('change', () => {
     const value = Number.parseFloat(input.value);
-    if (!Number.isFinite(value) || value <= 0) {
+    const min = options.min !== undefined ? Number.parseFloat(options.min) : 0.00001;
+    if (!Number.isFinite(value) || (Number.isFinite(min) && value < min)) {
       input.value = String(lastValidValue);
       return;
     }
