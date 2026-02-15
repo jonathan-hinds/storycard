@@ -16,6 +16,7 @@ const state = {
   imageHeight: 1,
   sceneBounds: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
   sceneTransform: { offsetX: 0, offsetY: 0, scale: 1 },
+  view: { zoom: 1, panX: 0, panY: 0 },
   drag: null,
   status: 'Loading die + assets...',
 };
@@ -161,6 +162,10 @@ function buildUi() {
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointerleave', onPointerUp);
+  canvas.addEventListener('auxclick', (event) => {
+    if (event.button === 1) event.preventDefault();
+  });
+  canvas.addEventListener('wheel', onCanvasWheel, { passive: false });
 }
 
 async function initialize() {
@@ -405,6 +410,10 @@ function draw() {
 }
 
 function onPointerDown(event) {
+  if (event.button === 1) {
+    event.preventDefault();
+    return;
+  }
   if (event.button !== 0) return;
 
   const pointer = getPointer(event);
@@ -439,6 +448,28 @@ function onPointerUp(event) {
   if (canvas.hasPointerCapture(event.pointerId)) {
     canvas.releasePointerCapture(event.pointerId);
   }
+  draw();
+}
+
+function onCanvasWheel(event) {
+  event.preventDefault();
+
+  const pointer = getPointer(event);
+  const worldUnderPointer = canvasToWorld(pointer);
+  const zoomFactor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+  const nextZoom = Math.max(1, Math.min(30, state.view.zoom * zoomFactor));
+
+  if (Math.abs(nextZoom - state.view.zoom) < 0.00001) {
+    return;
+  }
+
+  state.view.zoom = nextZoom;
+  updateSceneTransform();
+
+  const projectedPointer = worldToCanvas(worldUnderPointer);
+  state.view.panX += pointer.x - projectedPointer.x;
+  state.view.panY += pointer.y - projectedPointer.y;
+
   draw();
 }
 
@@ -478,17 +509,35 @@ function canvasToWorld(point) {
 }
 
 function updateSceneTransform() {
-  const width = Math.max(0.00001, state.sceneBounds.maxX - state.sceneBounds.minX);
-  const height = Math.max(0.00001, state.sceneBounds.maxY - state.sceneBounds.minY);
-  const scale = Math.min(canvas.width / width, canvas.height / height);
+  const bounds = getViewportBounds();
+  const width = Math.max(0.00001, bounds.maxX - bounds.minX);
+  const height = Math.max(0.00001, bounds.maxY - bounds.minY);
+  const baseScale = Math.min(canvas.width / width, canvas.height / height);
+  const scale = baseScale * state.view.zoom;
   const drawWidth = width * scale;
   const drawHeight = height * scale;
 
   state.sceneTransform = {
     scale,
-    offsetX: (canvas.width - drawWidth) / 2,
-    offsetY: (canvas.height - drawHeight) / 2,
+    offsetX: ((canvas.width - drawWidth) / 2) + state.view.panX,
+    offsetY: ((canvas.height - drawHeight) / 2) + state.view.panY,
   };
+
+  state.sceneBounds = bounds;
+}
+
+function getViewportBounds() {
+  if (state.textureImage) {
+    const pad = 0.2;
+    return {
+      minX: -pad,
+      maxX: state.imageWidth + pad,
+      minY: -pad,
+      maxY: state.imageHeight + pad,
+    };
+  }
+
+  return state.sceneBounds;
 }
 
 function getPointer(event) {
