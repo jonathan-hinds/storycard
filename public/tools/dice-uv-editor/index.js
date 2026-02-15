@@ -14,8 +14,10 @@ const state = {
   faces: [],
   bounds: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
   viewBox: { minX: -1, maxX: 1, minY: -1, maxY: 1 },
+  viewCenter: { x: 0, y: 0 },
   zoom: 1,
   drag: null,
+  pan: null,
   status: 'Loading die + assets...',
 };
 
@@ -266,7 +268,7 @@ async function syncTexture() {
   state.textureImage = await loadImage(state.texturePath).catch(() => null);
 }
 
-function updateViewBox() {
+function updateViewBox({ recenter = true } = {}) {
   const allPoints = state.faces.flatMap((face) => face.points);
   if (allPoints.length === 0) return;
 
@@ -282,24 +284,45 @@ function updateViewBox() {
     maxY: maxY + pad,
   };
 
-  const centerX = (state.bounds.minX + state.bounds.maxX) / 2;
-  const centerY = (state.bounds.minY + state.bounds.maxY) / 2;
+  if (recenter) {
+    state.viewCenter = {
+      x: (state.bounds.minX + state.bounds.maxX) / 2,
+      y: (state.bounds.minY + state.bounds.maxY) / 2,
+    };
+  }
+
+  recomputeViewBox();
+}
+
+function recomputeViewBox() {
   const width = (state.bounds.maxX - state.bounds.minX) / state.zoom;
   const height = (state.bounds.maxY - state.bounds.minY) / state.zoom;
+
   state.viewBox = {
-    minX: centerX - (width / 2),
-    maxX: centerX + (width / 2),
-    minY: centerY - (height / 2),
-    maxY: centerY + (height / 2),
+    minX: state.viewCenter.x - (width / 2),
+    maxX: state.viewCenter.x + (width / 2),
+    minY: state.viewCenter.y - (height / 2),
+    maxY: state.viewCenter.y + (height / 2),
   };
 }
 
-function setZoom(nextZoom) {
+function setZoom(nextZoom, anchorPointer = null) {
   const safeZoom = Number.isFinite(nextZoom) ? Math.min(8, Math.max(1, nextZoom)) : 1;
+  const anchorWorldBefore = anchorPointer ? canvasToWorld(anchorPointer) : null;
+
   state.zoom = safeZoom;
   controls.zoomInput.value = safeZoom.toFixed(1);
   controls.zoomLabel.textContent = `Zoom (${safeZoom.toFixed(1)}x)`;
-  updateViewBox();
+
+  recomputeViewBox();
+
+  if (anchorWorldBefore) {
+    const anchorWorldAfter = canvasToWorld(anchorPointer);
+    state.viewCenter.x += anchorWorldBefore.x - anchorWorldAfter.x;
+    state.viewCenter.y += anchorWorldBefore.y - anchorWorldAfter.y;
+    recomputeViewBox();
+  }
+
   draw();
 }
 
@@ -307,9 +330,16 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (state.textureImage) {
+    const topLeft = worldToCanvas({ x: 0, y: 1 });
+    const bottomRight = worldToCanvas({ x: 1, y: 0 });
+    const drawX = Math.min(topLeft.x, bottomRight.x);
+    const drawY = Math.min(topLeft.y, bottomRight.y);
+    const drawWidth = Math.abs(bottomRight.x - topLeft.x);
+    const drawHeight = Math.abs(bottomRight.y - topLeft.y);
+
     ctx.save();
     ctx.globalAlpha = 0.96;
-    ctx.drawImage(state.textureImage, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(state.textureImage, drawX, drawY, drawWidth, drawHeight);
     ctx.restore();
   } else {
     ctx.fillStyle = '#0d111b';
@@ -352,6 +382,19 @@ function draw() {
 }
 
 function onPointerDown(event) {
+  if (event.button === 1) {
+    event.preventDefault();
+    state.pan = {
+      pointerStart: getPointer(event),
+      centerStart: { ...state.viewCenter },
+    };
+    canvas.setPointerCapture(event.pointerId);
+    canvas.style.cursor = 'grabbing';
+    return;
+  }
+
+  if (event.button !== 0) return;
+
   const pointer = getPointer(event);
   const nearest = findNearestPoint(pointer);
   if (!nearest || nearest.distance > 18) return;
@@ -366,6 +409,20 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
+  if (state.pan) {
+    const pointer = getPointer(event);
+    const width = state.viewBox.maxX - state.viewBox.minX;
+    const height = state.viewBox.maxY - state.viewBox.minY;
+    const dx = ((pointer.x - state.pan.pointerStart.x) / canvas.width) * width;
+    const dy = ((pointer.y - state.pan.pointerStart.y) / canvas.height) * height;
+
+    state.viewCenter.x = state.pan.centerStart.x - dx;
+    state.viewCenter.y = state.pan.centerStart.y + dy;
+    recomputeViewBox();
+    draw();
+    return;
+  }
+
   if (!state.drag) return;
   const pointer = getPointer(event);
   const world = canvasToWorld(pointer);
@@ -373,7 +430,7 @@ function onPointerMove(event) {
   if (!face) return;
   face.points[state.drag.pointIndex] = world;
 
-  updateViewBox();
+  updateViewBox({ recenter: false });
   updateExportOutput();
   draw();
 }
@@ -382,10 +439,19 @@ function onWheel(event) {
   event.preventDefault();
   const direction = Math.sign(event.deltaY);
   const delta = direction > 0 ? -0.2 : 0.2;
-  setZoom(state.zoom + delta);
+  setZoom(state.zoom + delta, getPointer(event));
 }
 
 function onPointerUp(event) {
+  if (state.pan) {
+    state.pan = null;
+    canvas.style.cursor = '';
+    if (canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    return;
+  }
+
   if (!state.drag) return;
   state.drag = null;
   if (canvas.hasPointerCapture(event.pointerId)) {
