@@ -1057,6 +1057,7 @@ function createSceneForCanvas(canvas, sides) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(canvas.clientWidth || 300, canvas.clientHeight || 300, false);
+  renderer.setClearColor(0x000000, 0);
 
   const scene = new THREE.Scene();
   scene.background = null;
