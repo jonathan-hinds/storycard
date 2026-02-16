@@ -272,7 +272,7 @@ export class CardLibraryScene {
       const card = root.userData.catalogCard;
       if (!face || !card) return;
       const previousTexture = face.material.map;
-      face.material.map = createCardLabelTexture(card, this.cardLabelLayout);
+      face.material.map = createCardLabelTexture(card, { cardLabelLayout: this.cardLabelLayout });
       face.material.needsUpdate = true;
       previousTexture?.dispose?.();
     });
@@ -416,7 +416,7 @@ export class CardLibraryScene {
         color: colorFromHexString(card.meshColor, DEFAULT_CARD_MESH_COLOR),
       });
 
-      const texture = createCardLabelTexture(card, this.cardLabelLayout);
+      const texture = createCardLabelTexture(card, { cardLabelLayout: this.cardLabelLayout });
       const face = new THREE.Mesh(
         new THREE.PlaneGeometry(cardWidth * 0.92, cardHeight * 0.92),
         new THREE.MeshStandardMaterial({
