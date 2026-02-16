@@ -18,6 +18,7 @@ const defaultCard = {
 const previewCard = { ...defaultCard };
 const imageCache = new Map();
 let selectedBackgroundImagePath = '/public/assets/CardFront2.png';
+let selectedArtworkImagePath = '';
 
 const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUT);
 
@@ -47,6 +48,24 @@ loadImage(selectedBackgroundImagePath)
   .catch((error) => {
     console.warn(error);
   });
+
+const updatePreviewArtwork = async (assetPath) => {
+  selectedArtworkImagePath = assetPath || '';
+  previewCard.artworkImagePath = selectedArtworkImagePath || null;
+
+  if (!selectedArtworkImagePath) {
+    delete previewCard.artworkImage;
+    scene.setCards([previewCard]);
+    return;
+  }
+
+  try {
+    previewCard.artworkImage = await loadImage(selectedArtworkImagePath);
+    scene.setCards([previewCard]);
+  } catch (error) {
+    console.warn(error);
+  }
+};
 
 const sections = [
   { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
@@ -196,6 +215,7 @@ function buildExportControls() {
       type: previewCard.type,
       meshColor: previewCard.meshColor,
       backgroundImagePath: selectedBackgroundImagePath || null,
+      artworkImagePath: selectedArtworkImagePath || null,
     },
   }, null, 2);
 
@@ -301,6 +321,47 @@ function buildBackgroundSelectControl() {
   return row;
 }
 
+function buildArtworkSelectControl() {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+  valueLabel.textContent = 'Card Artwork';
+
+  const select = document.createElement('select');
+  select.className = 'tools-select';
+  select.disabled = true;
+
+  const noneOption = document.createElement('option');
+  noneOption.value = '';
+  noneOption.textContent = 'None';
+  select.append(noneOption);
+
+  select.addEventListener('change', () => {
+    updatePreviewArtwork(select.value);
+  });
+
+  fetch('/api/assets')
+    .then((response) => response.json())
+    .then(({ assets = [] }) => {
+      assets.forEach((asset) => {
+        const option = document.createElement('option');
+        option.value = asset.path;
+        option.textContent = asset.name;
+        select.append(option);
+      });
+      select.value = selectedArtworkImagePath;
+      select.disabled = false;
+    })
+    .catch(() => {
+      valueLabel.textContent = 'Card Artwork (assets unavailable)';
+    });
+
+  row.append(valueLabel, select);
+  return row;
+}
+
 function buildMeshColorControl() {
   const row = document.createElement('label');
   row.className = 'tools-slider-row';
@@ -337,10 +398,24 @@ textPreviewGroup.append(
   buildTextInputControl({ cardProp: 'type', label: 'Type Text' }),
   buildMeshColorControl(),
   buildBackgroundSelectControl(),
+  buildArtworkSelectControl(),
   buildExportControls(),
 );
 
 controlsRoot.append(textPreviewGroup);
+
+const artworkGroup = document.createElement('div');
+artworkGroup.className = 'card tools-group';
+const artworkHeading = document.createElement('h2');
+artworkHeading.textContent = 'Artwork';
+artworkGroup.append(artworkHeading);
+artworkGroup.append(
+  buildSlider({ elementKey: 'artwork', prop: 'x', label: 'Left / Right', min: 120, max: 904, step: 1 }),
+  buildSlider({ elementKey: 'artwork', prop: 'y', label: 'Up / Down', min: 110, max: 930, step: 1 }),
+  buildSlider({ elementKey: 'artwork', prop: 'width', label: 'Width', min: 80, max: 900, step: 1 }),
+  buildSlider({ elementKey: 'artwork', prop: 'height', label: 'Height', min: 80, max: 900, step: 1 }),
+);
+controlsRoot.append(artworkGroup);
 
 sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, supportsStatBoxStyle }) => {
   const group = document.createElement('div');

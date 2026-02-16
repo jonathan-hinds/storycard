@@ -8,6 +8,7 @@ const damageSelect = document.getElementById('card-damage');
 const speedSelect = document.getElementById('card-speed');
 const defenseSelect = document.getElementById('card-defense');
 const saveCardButton = document.getElementById('save-card-button');
+const artworkImageSelect = document.getElementById('card-artwork-image');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
 const GRID_LAYOUT_DEFAULTS = Object.freeze({
@@ -101,10 +102,46 @@ cardLibraryScene = new CardLibraryScene({
     form.elements.speed.value = card.speed ?? '';
     form.elements.defense.value = card.defense ?? '';
     typeSelect.value = card.type;
+    artworkImageSelect.value = card.artworkImagePath ?? '';
     saveCardButton.disabled = false;
     setStatus(`Editing "${card.name}". Update fields and click Save Card.`);
   },
 });
+
+
+function buildArtworkSelectOptions(assets = []) {
+  const currentValue = artworkImageSelect.value;
+  artworkImageSelect.innerHTML = '';
+
+  const noneOption = document.createElement('option');
+  noneOption.value = '';
+  noneOption.textContent = 'No artwork';
+  artworkImageSelect.append(noneOption);
+
+  assets.forEach((asset) => {
+    const option = document.createElement('option');
+    option.value = asset.path;
+    option.textContent = asset.name;
+    artworkImageSelect.append(option);
+  });
+
+  if (currentValue && !assets.some((asset) => asset.path === currentValue)) {
+    const fallbackOption = document.createElement('option');
+    fallbackOption.value = currentValue;
+    fallbackOption.textContent = `${currentValue} (missing)`;
+    artworkImageSelect.append(fallbackOption);
+  }
+
+  artworkImageSelect.value = currentValue;
+}
+
+async function fetchArtworkAssets() {
+  const response = await fetch('/api/assets');
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Unable to load artwork assets');
+  const assets = Array.isArray(payload.assets) ? payload.assets : [];
+  buildArtworkSelectOptions(assets);
+}
 
 function applyResponsivePreviewPosition() {
   const position = getResponsivePreviewPosition();
@@ -139,6 +176,7 @@ function resetFormToCreateMode() {
   selectedCardId = null;
   saveCardButton.disabled = true;
   form.reset();
+  artworkImageSelect.value = '';
 }
 
 function setStatus(message, isError = false) {
@@ -149,6 +187,7 @@ function setStatus(message, isError = false) {
 async function fetchCards() {
   setStatus('Loading cards...');
   try {
+    await fetchArtworkAssets();
     const response = await fetch('/api/projects/cards');
     const payload = await response.json();
 
@@ -195,6 +234,7 @@ form.addEventListener('submit', async (event) => {
     speed: formData.get('speed'),
     defense: formData.get('defense'),
     type: formData.get('type'),
+    artworkImagePath: formData.get('artworkImagePath') || null,
   };
 
   setStatus('Saving card...');
@@ -233,6 +273,7 @@ saveCardButton.addEventListener('click', async () => {
     speed: formData.get('speed'),
     defense: formData.get('defense'),
     type: formData.get('type'),
+    artworkImagePath: formData.get('artworkImagePath') || null,
   };
 
   setStatus('Updating card...');
@@ -259,6 +300,7 @@ saveCardButton.addEventListener('click', async () => {
       form.elements.speed.value = updatedCard.speed ?? '';
       form.elements.defense.value = updatedCard.defense ?? '';
       typeSelect.value = updatedCard.type;
+      artworkImageSelect.value = updatedCard.artworkImagePath ?? '';
     }
   } catch (error) {
     setStatus(error.message, true);

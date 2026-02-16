@@ -82,6 +82,7 @@ function toCardRecord(document) {
     speed: document.speed,
     defense: document.defense,
     type: document.type,
+    artworkImagePath: document.artworkImagePath ?? null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
   };
@@ -107,6 +108,22 @@ function normalizeDieValue(value, fieldName) {
   return normalized;
 }
 
+
+function normalizeArtworkImagePath(value) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new Error('artworkImagePath must be a string path or null');
+  }
+
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (!normalized.startsWith('/public/assets/')) {
+    throw new Error('artworkImagePath must reference /public/assets');
+  }
+
+  return normalized;
+}
+
 function validateCardInput(input = {}) {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const type = typeof input.type === 'string' ? input.type : '';
@@ -126,6 +143,7 @@ function validateCardInput(input = {}) {
     speed: normalizeDieValue(input.speed, 'speed'),
     defense: normalizeDieValue(input.defense, 'defense'),
     type,
+    artworkImagePath: normalizeArtworkImagePath(input.artworkImagePath),
   };
 }
 

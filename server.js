@@ -201,7 +201,10 @@ async function handleApi(req, res, pathname) {
       sendJson(res, 201, { card });
     } catch (error) {
       const isValidationError =
-        error.message.includes('required') || error.message.includes('must be an integer') || error.message.includes('must be one of');
+        error.message.includes('required')
+        || error.message.includes('must be an integer')
+        || error.message.includes('must be one of')
+        || error.message.includes('artworkImagePath must');
       sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create card' });
     }
     return true;
@@ -215,7 +218,10 @@ async function handleApi(req, res, pathname) {
       sendJson(res, 200, { card });
     } catch (error) {
       const isValidationError =
-        error.message.includes('required') || error.message.includes('must be an integer') || error.message.includes('must be one of');
+        error.message.includes('required')
+        || error.message.includes('must be an integer')
+        || error.message.includes('must be one of')
+        || error.message.includes('artworkImagePath must');
       const isNotFound = error.message === 'Card not found';
       const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to update card' });
