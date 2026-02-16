@@ -12,6 +12,7 @@ export const DEFAULT_CARD_BACKGROUND_IMAGE_PATH = '/public/assets/CardFront2.png
 
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   name: Object.freeze({ x: 335, y: 110, size: 52, color: '#000000', align: 'left' }),
+  artwork: Object.freeze({ x: 512, y: 385, width: 575, height: 450 }),
   type: Object.freeze({ x: 512, y: 644, size: 48, color: '#ffffff', align: 'center' }),
   damage: Object.freeze({ x: 170, y: 802, size: 0.85, boxWidth: 264, boxHeight: 216, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 120, textColor: '#ffffff', iconWidth: 200, iconHeight: 175, iconOffsetX: 0, iconOffsetY: 0 }),
   health: Object.freeze({ x: 202, y: 114, size: 0.85, boxWidth: 264, boxHeight: 216, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 100, textColor: '#ffffff' }),
@@ -23,6 +24,8 @@ const dieIconCache = new Map();
 const dieIconLoadPromises = new Map();
 const backgroundImageCache = new Map();
 const backgroundImageLoadPromises = new Map();
+const artworkImageCache = new Map();
+const artworkImageLoadPromises = new Map();
 
 function drawRoundedRect(ctx, x, y, width, height, radius) {
   const r = Math.min(radius, width / 2, height / 2);
@@ -84,6 +87,9 @@ export function createCardLabelTexture(card, { backgroundImagePath = DEFAULT_CAR
   canvas.height = CARD_LABEL_CANVAS_SIZE;
   const ctx = canvas.getContext('2d');
   const resolvedBackgroundPath = card.backgroundImagePath || backgroundImagePath;
+  const resolvedArtworkPath = typeof card.artworkImagePath === 'string' && card.artworkImagePath.trim()
+    ? card.artworkImagePath.trim()
+    : null;
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -99,6 +105,16 @@ export function createCardLabelTexture(card, { backgroundImagePath = DEFAULT_CAR
       ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
     } else {
       drawGradientFallback(ctx);
+    }
+
+    const artworkLayout = cardLabelLayout.artwork ?? DEFAULT_CARD_LABEL_LAYOUT.artwork;
+    const artworkImage = card.artworkImage instanceof HTMLImageElement
+      ? card.artworkImage
+      : (resolvedArtworkPath ? (artworkImageCache.get(resolvedArtworkPath) ?? null) : null);
+    if (artworkImage && artworkLayout) {
+      const artworkLeft = artworkLayout.x - (artworkLayout.width / 2);
+      const artworkTop = artworkLayout.y - (artworkLayout.height / 2);
+      ctx.drawImage(artworkImage, artworkLeft, artworkTop, artworkLayout.width, artworkLayout.height);
     }
 
     ctx.fillStyle = cardLabelLayout.name.color;
@@ -160,6 +176,15 @@ export function createCardLabelTexture(card, { backgroundImagePath = DEFAULT_CAR
     backgroundImageLoadPromises.get(resolvedBackgroundPath)?.then((image) => {
       if (!image) return;
       card.backgroundImage = image;
+      drawCardFace();
+    });
+  }
+
+  if (resolvedArtworkPath && !(card.artworkImage instanceof HTMLImageElement)) {
+    ensureImageLoaded(artworkImageCache, artworkImageLoadPromises, resolvedArtworkPath, resolvedArtworkPath);
+    artworkImageLoadPromises.get(resolvedArtworkPath)?.then((image) => {
+      if (!image) return;
+      card.artworkImage = image;
       drawCardFace();
     });
   }

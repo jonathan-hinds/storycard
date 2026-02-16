@@ -159,11 +159,21 @@ function normalizeLabelElementLayout(layout, fallback) {
 function normalizeCardLabelLayout(cardLabelLayout = {}) {
   return {
     name: normalizeLabelElementLayout(cardLabelLayout.name, DEFAULT_CARD_LABEL_LAYOUT.name),
+    artwork: normalizeArtworkLayout(cardLabelLayout.artwork, DEFAULT_CARD_LABEL_LAYOUT.artwork),
     type: normalizeLabelElementLayout(cardLabelLayout.type, DEFAULT_CARD_LABEL_LAYOUT.type),
     damage: normalizeLabelElementLayout(cardLabelLayout.damage, DEFAULT_CARD_LABEL_LAYOUT.damage),
     health: normalizeLabelElementLayout(cardLabelLayout.health, DEFAULT_CARD_LABEL_LAYOUT.health),
     speed: normalizeLabelElementLayout(cardLabelLayout.speed, DEFAULT_CARD_LABEL_LAYOUT.speed),
     defense: normalizeLabelElementLayout(cardLabelLayout.defense, DEFAULT_CARD_LABEL_LAYOUT.defense),
+  };
+}
+
+function normalizeArtworkLayout(layout, fallback) {
+  return {
+    x: Number.isFinite(layout?.x) ? layout.x : fallback.x,
+    y: Number.isFinite(layout?.y) ? layout.y : fallback.y,
+    width: Number.isFinite(layout?.width) ? Math.max(40, layout.width) : fallback.width,
+    height: Number.isFinite(layout?.height) ? Math.max(40, layout.height) : fallback.height,
   };
 }
 
