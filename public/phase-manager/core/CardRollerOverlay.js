@@ -4,6 +4,7 @@ import { DieRollerClient } from '/public/die-roller/index.js';
 const DEFAULT_PANEL_SIZE_PX = 98;
 const DEFAULT_ROLL_DELAY_MS = 260;
 const ORTHO_OFFSET_Y = 0.62;
+const PANEL_STACK_GAP_PX = 8;
 
 function createDeferred() {
   let resolve;
@@ -75,11 +76,16 @@ export class CardRollerOverlay {
 
     const worldTarget = new THREE.Vector3(slot.x, ORTHO_OFFSET_Y, slot.z);
     const { x, y } = this.projectWorldToHost(worldTarget);
-    const panelSize = Math.max(72, Math.min(DEFAULT_PANEL_SIZE_PX, this.host.clientWidth * 0.14));
+    const maxPanelSize = this.host.clientWidth * 0.14;
+    const stackedMaxHeight = this.host.clientHeight * 0.34;
+    const stackHeightDivisor = Math.max(1, entry.stackSize);
+    const stackedPanelSize = (stackedMaxHeight - (Math.max(0, entry.stackSize - 1) * PANEL_STACK_GAP_PX)) / stackHeightDivisor;
+    const panelSize = Math.max(52, Math.min(DEFAULT_PANEL_SIZE_PX, maxPanelSize, stackedPanelSize));
+    const stackOffsetY = entry.stackIndex * (panelSize + PANEL_STACK_GAP_PX);
 
     entry.panel.style.width = `${panelSize}px`;
     entry.panel.style.height = `${panelSize}px`;
-    entry.panel.style.transform = `translate(${x - panelSize / 2}px, ${y - panelSize / 2}px)`;
+    entry.panel.style.transform = `translate(${x - panelSize / 2}px, ${y - panelSize / 2 + stackOffsetY}px)`;
   }
 
   updatePositions = () => {
@@ -92,7 +98,7 @@ export class CardRollerOverlay {
   };
 
   async rollForAttacks(attackPlan = [], {
-    rollType = 'damage',
+    rollTypes = ['damage'],
     canControlAttack = () => false,
     onAttackRoll = null,
     waitForRemoteRoll = null,
@@ -111,101 +117,108 @@ export class CardRollerOverlay {
       const card = this.getCardForBoardSlot(globalSlotIndex);
       if (!card) continue;
 
-      const { sides, statValue } = this.getRollTypeForCard(card, rollType);
-      const panel = document.createElement('div');
-      panel.className = 'card-roller-overlay-panel';
-      this.layer.append(panel);
-
-      const roller = new DieRollerClient({
-        container: panel,
-        assets: {},
-      });
-      roller.renderStaticPreview(sides);
-
-      const settled = createDeferred();
-      roller.handlers.onSettled = ({ value }) => settled.resolve(value ?? null);
-      roller.handlers.onError = (error) => settled.reject(error);
-
-      const entry = {
-        panel,
-        roller,
-        globalSlotIndex,
-        hasRolled: false,
-      };
-      this.activeRollers.push(entry);
-      this.positionRollerEntry(entry);
-
+      const normalizedRollTypes = Array.isArray(rollTypes) && rollTypes.length ? rollTypes : ['damage'];
       const controlsAttack = canControlAttack(step);
-      if (controlsAttack) {
-        panel.title = 'Click to roll';
-        panel.dataset.state = 'pending';
-        const triggerRoll = async (event) => {
-          event?.preventDefault?.();
-          event?.stopPropagation?.();
-          if (entry.hasRolled) return;
-          entry.hasRolled = true;
-          panel.dataset.state = 'rolling';
-          try {
-            const payload = await roller.roll({
-              dice: [{ id: `${card.userData.cardId}-${rollType}`, sides }],
-            });
-            const rolled = payload?.results?.[0]?.roll;
-            if (rolled && typeof onAttackRoll === 'function') {
-              await onAttackRoll({
-                attack: step,
-                rollType,
-                sides,
-                roll: rolled,
+
+      normalizedRollTypes.forEach((rollType, index) => {
+        const { sides, statValue } = this.getRollTypeForCard(card, rollType);
+        const panel = document.createElement('div');
+        panel.className = 'card-roller-overlay-panel';
+        panel.dataset.rollType = rollType;
+        this.layer.append(panel);
+
+        const roller = new DieRollerClient({
+          container: panel,
+          assets: {},
+        });
+        roller.renderStaticPreview(sides);
+
+        const settled = createDeferred();
+        roller.handlers.onSettled = ({ value }) => settled.resolve(value ?? null);
+        roller.handlers.onError = (error) => settled.reject(error);
+
+        const entry = {
+          panel,
+          roller,
+          globalSlotIndex,
+          hasRolled: false,
+          stackIndex: index,
+          stackSize: normalizedRollTypes.length,
+        };
+        this.activeRollers.push(entry);
+        this.positionRollerEntry(entry);
+
+        if (controlsAttack) {
+          panel.title = `Click to roll ${rollType}`;
+          panel.dataset.state = 'pending';
+          const triggerRoll = async (event) => {
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            if (entry.hasRolled) return;
+            entry.hasRolled = true;
+            panel.dataset.state = 'rolling';
+            try {
+              const payload = await roller.roll({
+                dice: [{ id: `${card.userData.cardId}-${step.id}-${rollType}`, sides }],
               });
+              const rolled = payload?.results?.[0]?.roll;
+              if (rolled && typeof onAttackRoll === 'function') {
+                await onAttackRoll({
+                  attack: step,
+                  rollType,
+                  sides,
+                  roll: rolled,
+                });
+              }
+            } catch (error) {
+              settled.reject(error);
             }
-          } catch (error) {
-            settled.reject(error);
-          }
-        };
+          };
 
-        const addRollTriggerListeners = (target) => {
-          if (!target) return;
-          target.addEventListener('pointerdown', triggerRoll);
-          target.addEventListener('click', triggerRoll);
-          target.addEventListener('touchstart', triggerRoll, { passive: false });
-        };
+          const addRollTriggerListeners = (target) => {
+            if (!target) return;
+            target.addEventListener('pointerdown', triggerRoll);
+            target.addEventListener('click', triggerRoll);
+            target.addEventListener('touchstart', triggerRoll, { passive: false });
+          };
 
-        addRollTriggerListeners(panel);
-        addRollTriggerListeners(roller.canvas);
-      } else {
-        panel.title = 'Waiting for attacker roll';
-        panel.dataset.state = 'waiting';
-        pendingRolls.push((async () => {
-          const remoteRoll = typeof waitForRemoteRoll === 'function' ? await waitForRemoteRoll(step) : null;
-          if (!remoteRoll) {
-            settled.resolve(null);
-            return null;
-          }
-          panel.dataset.state = 'rolling';
-          roller.playRoll({ roll: remoteRoll.roll, sides: remoteRoll.sides || sides });
-          return settled.promise;
-        })().then((outcome) => ({
-          cardId: card.userData.cardId,
-          attackId: step.id,
-          rollType,
-          statValue,
-          sides,
-          outcome,
-        })));
-        continue;
-      }
+          addRollTriggerListeners(panel);
+          addRollTriggerListeners(roller.canvas);
+        } else {
+          panel.title = `Waiting for attacker ${rollType} roll`;
+          panel.dataset.state = 'waiting';
+          pendingRolls.push((async () => {
+            const remoteRoll = typeof waitForRemoteRoll === 'function' ? await waitForRemoteRoll(step, rollType) : null;
+            if (!remoteRoll) {
+              settled.resolve(null);
+              return null;
+            }
+            panel.dataset.state = 'rolling';
+            roller.playRoll({ roll: remoteRoll.roll, sides: remoteRoll.sides || sides });
+            return settled.promise;
+          })().then((outcome) => ({
+            cardId: card.userData.cardId,
+            attackId: step.id,
+            rollType,
+            statValue,
+            sides,
+            outcome,
+          })));
+          return;
+        }
 
-      pendingRolls.push(settled.promise.then((outcome) => {
-        panel.dataset.state = 'settled';
-        return {
-          cardId: card.userData.cardId,
-          attackId: step.id,
-          rollType,
-          statValue,
-          sides,
-          outcome,
-        };
-      }));
+        pendingRolls.push(settled.promise.then((outcome) => {
+          panel.dataset.state = 'settled';
+          return {
+            cardId: card.userData.cardId,
+            attackId: step.id,
+            rollType,
+            statValue,
+            sides,
+            outcome,
+          };
+        }));
+      });
     }
 
     if (!pendingRolls.length) {
