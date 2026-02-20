@@ -304,10 +304,12 @@ class PhaseManagerServer {
       return { error: 'a roll payload with frames and outcome is required', statusCode: 400 };
     }
 
-    match.commitRollsByAttackId.set(attackId, {
+    const resolvedRollType = typeof rollType === 'string' && rollType.trim() ? rollType.trim() : 'damage';
+    const commitRollKey = `${attackId}:${resolvedRollType}`;
+    match.commitRollsByAttackId.set(commitRollKey, {
       attackId,
       attackerId: playerId,
-      rollType: typeof rollType === 'string' ? rollType : 'damage',
+      rollType: resolvedRollType,
       sides: Number.isFinite(sides) ? sides : null,
       roll,
       submittedAt: Date.now(),

@@ -355,10 +355,10 @@ export class PhaseManagerClient {
   }
 
 
-  getCommitRollByAttackId(attackId) {
+  getCommitRollByAttackId(attackId, rollType = 'damage') {
     if (!this.match || typeof attackId !== 'string') return null;
     const commitRolls = Array.isArray(this.match.meta?.commitRolls) ? this.match.meta.commitRolls : [];
-    return commitRolls.find((entry) => entry?.attackId === attackId) || null;
+    return commitRolls.find((entry) => entry?.attackId === attackId && entry?.rollType === rollType) || null;
   }
 
   async submitCommitRoll({ attackId, rollType, sides, roll }) {
@@ -371,10 +371,10 @@ export class PhaseManagerClient {
     });
   }
 
-  async waitForRemoteAttackRoll(attackId) {
+  async waitForRemoteAttackRoll(attackId, rollType = 'damage') {
     const maxAttempts = 120;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const existing = this.getCommitRollByAttackId(attackId);
+      const existing = this.getCommitRollByAttackId(attackId, rollType);
       if (existing?.roll) return existing;
 
       try {
@@ -383,7 +383,7 @@ export class PhaseManagerClient {
           this.applyMatchmakingStatus(status);
         }
         const remoteRolls = Array.isArray(status?.matchState?.meta?.commitRolls) ? status.matchState.meta.commitRolls : [];
-        const matched = remoteRolls.find((entry) => entry?.attackId === attackId);
+        const matched = remoteRolls.find((entry) => entry?.attackId === attackId && entry?.rollType === rollType);
         if (matched?.roll) return matched;
         if (status?.matchState?.phase !== 2) return null;
       } catch (error) {
@@ -405,7 +405,6 @@ export class PhaseManagerClient {
     if (this.cardRollerOverlay) {
       try {
         await this.cardRollerOverlay.rollForAttacks(commitAttacks, {
-          rollType: 'damage',
           canControlAttack: (attack) => attack?.attackerSide === PLAYER_SIDE,
           onAttackRoll: ({ attack, rollType, sides, roll }) => this.submitCommitRoll({
             attackId: attack?.id,
@@ -413,7 +412,7 @@ export class PhaseManagerClient {
             sides,
             roll,
           }),
-          waitForRemoteRoll: (attack) => this.waitForRemoteAttackRoll(attack?.id),
+          waitForRemoteRoll: (attack, rollType) => this.waitForRemoteAttackRoll(attack?.id, rollType),
         });
       } catch (error) {
         this.elements.statusEl.textContent = `Dice roll error: ${error.message}`;

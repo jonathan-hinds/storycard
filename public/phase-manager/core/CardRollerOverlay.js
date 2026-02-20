@@ -4,6 +4,9 @@ import { DieRollerClient } from '/public/die-roller/index.js';
 const DEFAULT_PANEL_SIZE_PX = 98;
 const DEFAULT_ROLL_DELAY_MS = 260;
 const ORTHO_OFFSET_Y = 0.62;
+const COMMIT_ROLL_TYPES = ['damage', 'speed', 'defense'];
+const MIN_PANEL_SIZE_PX = 46;
+const COLUMN_GAP_PX = 6;
 
 function createDeferred() {
   let resolve;
@@ -75,11 +78,27 @@ export class CardRollerOverlay {
 
     const worldTarget = new THREE.Vector3(slot.x, ORTHO_OFFSET_Y, slot.z);
     const { x, y } = this.projectWorldToHost(worldTarget);
-    const panelSize = Math.max(72, Math.min(DEFAULT_PANEL_SIZE_PX, this.host.clientWidth * 0.14));
+    const maxColumnHeight = this.host.clientWidth <= 760
+      ? this.host.clientHeight * 0.32
+      : this.host.clientHeight * 0.24;
+    const panelSize = Math.max(
+      MIN_PANEL_SIZE_PX,
+      Math.min(
+        DEFAULT_PANEL_SIZE_PX,
+        this.host.clientWidth * 0.125,
+        (maxColumnHeight - (COLUMN_GAP_PX * (COMMIT_ROLL_TYPES.length - 1))) / COMMIT_ROLL_TYPES.length,
+      ),
+    );
+    const columnHeight = (panelSize * COMMIT_ROLL_TYPES.length) + (COLUMN_GAP_PX * (COMMIT_ROLL_TYPES.length - 1));
 
-    entry.panel.style.width = `${panelSize}px`;
-    entry.panel.style.height = `${panelSize}px`;
-    entry.panel.style.transform = `translate(${x - panelSize / 2}px, ${y - panelSize / 2}px)`;
+    entry.column.style.width = `${panelSize}px`;
+    entry.column.style.height = `${columnHeight}px`;
+    entry.column.style.transform = `translate(${x - panelSize / 2}px, ${y - columnHeight / 2}px)`;
+
+    for (const panel of entry.panels) {
+      panel.style.width = `${panelSize}px`;
+      panel.style.height = `${panelSize}px`;
+    }
   }
 
   updatePositions = () => {
@@ -92,7 +111,7 @@ export class CardRollerOverlay {
   };
 
   async rollForAttacks(attackPlan = [], {
-    rollType = 'damage',
+    rollTypes = COMMIT_ROLL_TYPES,
     canControlAttack = () => false,
     onAttackRoll = null,
     waitForRemoteRoll = null,
@@ -111,24 +130,44 @@ export class CardRollerOverlay {
       const card = this.getCardForBoardSlot(globalSlotIndex);
       if (!card) continue;
 
-      const { sides, statValue } = this.getRollTypeForCard(card, rollType);
-      const panel = document.createElement('div');
-      panel.className = 'card-roller-overlay-panel';
-      this.layer.append(panel);
+      const resolvedRollTypes = Array.isArray(rollTypes) && rollTypes.length ? rollTypes : COMMIT_ROLL_TYPES;
+      const column = document.createElement('div');
+      column.className = 'card-roller-overlay-column';
+      this.layer.append(column);
 
-      const roller = new DieRollerClient({
-        container: panel,
-        assets: {},
+      const diceEntries = resolvedRollTypes.map((rollType) => {
+        const { sides, statValue } = this.getRollTypeForCard(card, rollType);
+        const panel = document.createElement('button');
+        panel.type = 'button';
+        panel.className = 'card-roller-overlay-panel';
+        panel.dataset.rollType = rollType;
+        panel.ariaLabel = `${rollType} d${sides}`;
+        column.append(panel);
+
+        const roller = new DieRollerClient({
+          container: panel,
+          assets: {},
+        });
+        roller.renderStaticPreview(sides);
+
+        const settled = createDeferred();
+        roller.handlers.onSettled = ({ value }) => settled.resolve(value ?? null);
+        roller.handlers.onError = (error) => settled.reject(error);
+
+        return {
+          panel,
+          roller,
+          settled,
+          rollType,
+          sides,
+          statValue,
+        };
       });
-      roller.renderStaticPreview(sides);
-
-      const settled = createDeferred();
-      roller.handlers.onSettled = ({ value }) => settled.resolve(value ?? null);
-      roller.handlers.onError = (error) => settled.reject(error);
 
       const entry = {
-        panel,
-        roller,
+        column,
+        panels: diceEntries.map((die) => die.panel),
+        diceEntries,
         globalSlotIndex,
         hasRolled: false,
       };
@@ -137,29 +176,33 @@ export class CardRollerOverlay {
 
       const controlsAttack = canControlAttack(step);
       if (controlsAttack) {
-        panel.title = 'Click to roll';
-        panel.dataset.state = 'pending';
+        for (const die of diceEntries) {
+          die.panel.title = `Click to roll ${die.rollType}`;
+          die.panel.dataset.state = 'pending';
+        }
         const triggerRoll = async (event) => {
           event?.preventDefault?.();
           event?.stopPropagation?.();
           if (entry.hasRolled) return;
           entry.hasRolled = true;
-          panel.dataset.state = 'rolling';
+          for (const die of diceEntries) die.panel.dataset.state = 'rolling';
           try {
-            const payload = await roller.roll({
-              dice: [{ id: `${card.userData.cardId}-${rollType}`, sides }],
-            });
-            const rolled = payload?.results?.[0]?.roll;
-            if (rolled && typeof onAttackRoll === 'function') {
-              await onAttackRoll({
-                attack: step,
-                rollType,
-                sides,
-                roll: rolled,
+            for (const die of diceEntries) {
+              const payload = await die.roller.roll({
+                dice: [{ id: `${card.userData.cardId}-${die.rollType}`, sides: die.sides }],
               });
+              const rolled = payload?.results?.[0]?.roll;
+              if (rolled && typeof onAttackRoll === 'function') {
+                await onAttackRoll({
+                  attack: step,
+                  rollType: die.rollType,
+                  sides: die.sides,
+                  roll: rolled,
+                });
+              }
             }
           } catch (error) {
-            settled.reject(error);
+            for (const die of diceEntries) die.settled.reject(error);
           }
         };
 
@@ -170,42 +213,50 @@ export class CardRollerOverlay {
           target.addEventListener('touchstart', triggerRoll, { passive: false });
         };
 
-        addRollTriggerListeners(panel);
-        addRollTriggerListeners(roller.canvas);
+        for (const die of diceEntries) {
+          addRollTriggerListeners(die.panel);
+          addRollTriggerListeners(die.roller.canvas);
+        }
       } else {
-        panel.title = 'Waiting for attacker roll';
-        panel.dataset.state = 'waiting';
-        pendingRolls.push((async () => {
-          const remoteRoll = typeof waitForRemoteRoll === 'function' ? await waitForRemoteRoll(step) : null;
-          if (!remoteRoll) {
-            settled.resolve(null);
-            return null;
-          }
-          panel.dataset.state = 'rolling';
-          roller.playRoll({ roll: remoteRoll.roll, sides: remoteRoll.sides || sides });
-          return settled.promise;
-        })().then((outcome) => ({
-          cardId: card.userData.cardId,
-          attackId: step.id,
-          rollType,
-          statValue,
-          sides,
-          outcome,
-        })));
+        for (const die of diceEntries) {
+          die.panel.title = `Waiting for attacker ${die.rollType} roll`;
+          die.panel.dataset.state = 'waiting';
+          pendingRolls.push((async () => {
+            const remoteRoll = typeof waitForRemoteRoll === 'function'
+              ? await waitForRemoteRoll(step, die.rollType)
+              : null;
+            if (!remoteRoll) {
+              die.settled.resolve(null);
+              return null;
+            }
+            die.panel.dataset.state = 'rolling';
+            die.roller.playRoll({ roll: remoteRoll.roll, sides: remoteRoll.sides || die.sides });
+            return die.settled.promise;
+          })().then((outcome) => ({
+            cardId: card.userData.cardId,
+            attackId: step.id,
+            rollType: die.rollType,
+            statValue: die.statValue,
+            sides: die.sides,
+            outcome,
+          })));
+        }
         continue;
       }
 
-      pendingRolls.push(settled.promise.then((outcome) => {
-        panel.dataset.state = 'settled';
-        return {
-          cardId: card.userData.cardId,
-          attackId: step.id,
-          rollType,
-          statValue,
-          sides,
-          outcome,
-        };
-      }));
+      for (const die of diceEntries) {
+        pendingRolls.push(die.settled.promise.then((outcome) => {
+          die.panel.dataset.state = 'settled';
+          return {
+            cardId: card.userData.cardId,
+            attackId: step.id,
+            rollType: die.rollType,
+            statValue: die.statValue,
+            sides: die.sides,
+            outcome,
+          };
+        }));
+      }
     }
 
     if (!pendingRolls.length) {
@@ -229,7 +280,9 @@ export class CardRollerOverlay {
       cancelAnimationFrame(this.positionTick);
       this.positionTick = 0;
     }
-    this.activeRollers.forEach((entry) => entry.roller.destroy());
+    this.activeRollers.forEach((entry) => {
+      entry.diceEntries.forEach((die) => die.roller.destroy());
+    });
     this.activeRollers = [];
     this.layer.replaceChildren();
   }

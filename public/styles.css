@@ -343,9 +343,18 @@ button {
   pointer-events: auto;
 }
 
-.card-roller-overlay-panel {
+.card-roller-overlay-column {
   position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+  pointer-events: auto;
+}
+
+.card-roller-overlay-panel {
+  position: relative;
   border: 0;
+  padding: 0;
   border-radius: 0.6rem;
   background: transparent;
   overflow: hidden;
