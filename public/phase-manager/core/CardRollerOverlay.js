@@ -119,6 +119,13 @@ export class CardRollerOverlay {
     this.positionTick = requestAnimationFrame(this.updatePositions);
   };
 
+  destroyEntry(entry) {
+    if (!entry) return;
+    entry.diceEntries?.forEach((die) => die.roller.destroy());
+    if (entry.column?.parentNode) entry.column.parentNode.removeChild(entry.column);
+    this.activeRollers = this.activeRollers.filter((candidate) => candidate !== entry);
+  }
+
   async rollForAttacks(attackPlan = [], {
     rollTypes = COMMIT_ROLL_TYPES,
     canControlAttack = () => false,
@@ -128,7 +135,7 @@ export class CardRollerOverlay {
     if (!Array.isArray(attackPlan) || !attackPlan.length) return [];
 
     const boardSlotsPerSide = Math.floor((this.cardGameClient.boardSlots?.length || 0) / 2);
-    const pendingRolls = [];
+    const rolls = [];
     this.layer.dataset.active = 'true';
 
     for (const step of attackPlan) {
@@ -184,6 +191,7 @@ export class CardRollerOverlay {
       this.positionRollerEntry(entry);
 
       const controlsAttack = canControlAttack(step);
+      const attackRollPromises = [];
       if (controlsAttack) {
         for (const die of diceEntries) {
           die.panel.title = `Click to roll ${die.rollType}`;
@@ -230,7 +238,7 @@ export class CardRollerOverlay {
         for (const die of diceEntries) {
           die.panel.title = `Waiting for attacker ${die.rollType} roll`;
           die.panel.dataset.state = 'waiting';
-          pendingRolls.push((async () => {
+          attackRollPromises.push((async () => {
             const remoteRoll = typeof waitForRemoteRoll === 'function'
               ? await waitForRemoteRoll(step, die.rollType)
               : null;
@@ -250,25 +258,34 @@ export class CardRollerOverlay {
             outcome,
           })));
         }
-        continue;
       }
 
-      for (const die of diceEntries) {
-        pendingRolls.push(die.settled.promise.then((outcome) => {
-          die.panel.dataset.state = 'settled';
-          return {
-            cardId: card.userData.cardId,
-            attackId: step.id,
-            rollType: die.rollType,
-            statValue: die.statValue,
-            sides: die.sides,
-            outcome,
-          };
-        }));
+      if (controlsAttack) {
+        for (const die of diceEntries) {
+          attackRollPromises.push(die.settled.promise.then((outcome) => {
+            die.panel.dataset.state = 'settled';
+            return {
+              cardId: card.userData.cardId,
+              attackId: step.id,
+              rollType: die.rollType,
+              statValue: die.statValue,
+              sides: die.sides,
+              outcome,
+            };
+          }));
+        }
       }
+
+      if (attackRollPromises.length) {
+        const attackRolls = await Promise.all(attackRollPromises);
+        rolls.push(...attackRolls);
+        await new Promise((resolve) => window.setTimeout(resolve, this.rollDelayMs));
+      }
+
+      this.destroyEntry(entry);
     }
 
-    if (!pendingRolls.length) {
+    if (!rolls.length) {
       this.clear();
       return [];
     }
@@ -277,8 +294,6 @@ export class CardRollerOverlay {
       this.positionTick = requestAnimationFrame(this.updatePositions);
     }
 
-    const rolls = await Promise.all(pendingRolls);
-    await new Promise((resolve) => window.setTimeout(resolve, this.rollDelayMs));
     this.clear();
     return rolls;
   }
@@ -289,9 +304,7 @@ export class CardRollerOverlay {
       cancelAnimationFrame(this.positionTick);
       this.positionTick = 0;
     }
-    this.activeRollers.forEach((entry) => {
-      entry.diceEntries.forEach((die) => die.roller.destroy());
-    });
+    [...this.activeRollers].forEach((entry) => this.destroyEntry(entry));
     this.activeRollers = [];
     this.layer.replaceChildren();
   }
