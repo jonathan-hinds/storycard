@@ -355,10 +355,10 @@ export class PhaseManagerClient {
   }
 
 
-  getCommitRollByAttackId(attackId, rollType = 'damage') {
+  getCommitRollByAttackId(attackId) {
     if (!this.match || typeof attackId !== 'string') return null;
     const commitRolls = Array.isArray(this.match.meta?.commitRolls) ? this.match.meta.commitRolls : [];
-    return commitRolls.find((entry) => entry?.attackId === attackId && entry?.rollType === rollType) || null;
+    return commitRolls.find((entry) => entry?.attackId === attackId) || null;
   }
 
   async submitCommitRoll({ attackId, rollType, sides, roll }) {
@@ -371,10 +371,10 @@ export class PhaseManagerClient {
     });
   }
 
-  async waitForRemoteAttackRoll(attackId, rollType = 'damage') {
+  async waitForRemoteAttackRoll(attackId) {
     const maxAttempts = 120;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const existing = this.getCommitRollByAttackId(attackId, rollType);
+      const existing = this.getCommitRollByAttackId(attackId);
       if (existing?.roll) return existing;
 
       try {
@@ -383,7 +383,7 @@ export class PhaseManagerClient {
           this.applyMatchmakingStatus(status);
         }
         const remoteRolls = Array.isArray(status?.matchState?.meta?.commitRolls) ? status.matchState.meta.commitRolls : [];
-        const matched = remoteRolls.find((entry) => entry?.attackId === attackId && entry?.rollType === rollType);
+        const matched = remoteRolls.find((entry) => entry?.attackId === attackId);
         if (matched?.roll) return matched;
         if (status?.matchState?.phase !== 2) return null;
       } catch (error) {
@@ -405,7 +405,7 @@ export class PhaseManagerClient {
     if (this.cardRollerOverlay) {
       try {
         await this.cardRollerOverlay.rollForAttacks(commitAttacks, {
-          rollTypes: ['damage', 'speed', 'defense'],
+          rollType: 'damage',
           canControlAttack: (attack) => attack?.attackerSide === PLAYER_SIDE,
           onAttackRoll: ({ attack, rollType, sides, roll }) => this.submitCommitRoll({
             attackId: attack?.id,
@@ -413,7 +413,7 @@ export class PhaseManagerClient {
             sides,
             roll,
           }),
-          waitForRemoteRoll: (attack, rollType) => this.waitForRemoteAttackRoll(attack?.id, rollType),
+          waitForRemoteRoll: (attack) => this.waitForRemoteAttackRoll(attack?.id),
         });
       } catch (error) {
         this.elements.statusEl.textContent = `Dice roll error: ${error.message}`;
