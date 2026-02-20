@@ -7,6 +7,8 @@ const ORTHO_OFFSET_Y = 0.62;
 const COMMIT_ROLL_TYPES = ['damage', 'speed', 'defense'];
 const MIN_PANEL_SIZE_PX = 46;
 const COLUMN_GAP_PX = 6;
+const SIDE_HORIZONTAL_NUDGE_FACTOR = 0.76;
+const SIDE_VERTICAL_NUDGE_FACTOR = 0.2;
 
 function createDeferred() {
   let resolve;
@@ -90,10 +92,17 @@ export class CardRollerOverlay {
       ),
     );
     const columnHeight = (panelSize * COMMIT_ROLL_TYPES.length) + (COLUMN_GAP_PX * (COMMIT_ROLL_TYPES.length - 1));
+    const isPlayerSlot = slot.side === this.cardGameClient.template?.playerSide;
+    const horizontalNudge = (isPlayerSlot ? 1 : -1) * panelSize * SIDE_HORIZONTAL_NUDGE_FACTOR;
+    const verticalNudge = (isPlayerSlot ? 1 : -1) * panelSize * SIDE_VERTICAL_NUDGE_FACTOR;
+    const unclampedLeft = (x - panelSize / 2) + horizontalNudge;
+    const unclampedTop = (y - columnHeight / 2) + verticalNudge;
+    const clampedLeft = THREE.MathUtils.clamp(unclampedLeft, 0, Math.max(0, this.host.clientWidth - panelSize));
+    const clampedTop = THREE.MathUtils.clamp(unclampedTop, 0, Math.max(0, this.host.clientHeight - columnHeight));
 
     entry.column.style.width = `${panelSize}px`;
     entry.column.style.height = `${columnHeight}px`;
-    entry.column.style.transform = `translate(${x - panelSize / 2}px, ${y - columnHeight / 2}px)`;
+    entry.column.style.transform = `translate(${clampedLeft}px, ${clampedTop}px)`;
 
     for (const panel of entry.panels) {
       panel.style.width = `${panelSize}px`;
