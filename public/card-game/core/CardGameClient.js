@@ -115,11 +115,17 @@ export class CardGameClient {
     this.updateSize = this.updateSize.bind(this);
     this.animate = this.animate.bind(this);
     this.resetDemo = this.resetDemo.bind(this);
+    this.handleWebglContextLost = this.handleWebglContextLost.bind(this);
+    this.handleWebglContextRestored = this.handleWebglContextRestored.bind(this);
+
+    this.isRendererContextLost = false;
 
     this.canvasContainer.addEventListener('pointerdown', this.handlePointerDown);
     this.canvasContainer.addEventListener('pointermove', this.handlePointerMove);
     this.canvasContainer.addEventListener('pointerup', this.handlePointerUp);
     this.canvasContainer.addEventListener('pointercancel', this.handlePointerCancel);
+    this.canvas.addEventListener('webglcontextlost', this.handleWebglContextLost, false);
+    this.canvas.addEventListener('webglcontextrestored', this.handleWebglContextRestored, false);
     window.addEventListener('resize', this.updateSize);
     this.resetBtn?.addEventListener('click', this.resetDemo);
 
@@ -1053,6 +1059,11 @@ export class CardGameClient {
   }
 
   animate(time) {
+    if (this.isRendererContextLost) {
+      this.animationFrame = requestAnimationFrame(this.animate);
+      return;
+    }
+
     this.applyCardAnimations(time);
     this.applyCombatAnimations(time);
     this.applyHandledCardSway(time);
@@ -1067,9 +1078,24 @@ export class CardGameClient {
     this.canvasContainer.removeEventListener('pointermove', this.handlePointerMove);
     this.canvasContainer.removeEventListener('pointerup', this.handlePointerUp);
     this.canvasContainer.removeEventListener('pointercancel', this.handlePointerCancel);
+    this.canvas.removeEventListener('webglcontextlost', this.handleWebglContextLost, false);
+    this.canvas.removeEventListener('webglcontextrestored', this.handleWebglContextRestored, false);
     window.removeEventListener('resize', this.updateSize);
     this.resetBtn?.removeEventListener('click', this.resetDemo);
     this.cardBackTexture?.dispose?.();
     this.renderer.dispose();
+  }
+
+  handleWebglContextLost(event) {
+    event.preventDefault();
+    this.isRendererContextLost = true;
+    this.setStatus('Rendering context was lost. Attempting to recover…');
+  }
+
+  handleWebglContextRestored() {
+    this.isRendererContextLost = false;
+    this.renderer.resetState();
+    this.updateSize();
+    this.setStatus('Rendering context restored.');
   }
 }
