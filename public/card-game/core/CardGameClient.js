@@ -522,6 +522,38 @@ export class CardGameClient {
     }
   }
 
+  getCardById(cardId) {
+    if (typeof cardId !== 'string') return null;
+    return this.cards.find((card) => card?.userData?.cardId === cardId) || null;
+  }
+
+  refreshCardFace(card) {
+    if (!card?.userData?.catalogCard || !card?.userData?.face) return;
+    const texture = createCardLabelTexture(card.userData.catalogCard, {
+      backgroundImagePath: '/public/assets/CardFront2.png',
+      statDisplayOverrides: card.userData.statDisplayOverrides || null,
+    });
+    card.userData.face.material.map = texture;
+    card.userData.face.material.needsUpdate = true;
+  }
+
+  setCardStatDisplayOverride(cardId, statKey, value) {
+    const card = this.getCardById(cardId);
+    if (!card) return false;
+    if (!card.userData.statDisplayOverrides) card.userData.statDisplayOverrides = {};
+    card.userData.statDisplayOverrides[statKey] = value;
+    this.refreshCardFace(card);
+    return true;
+  }
+
+  clearCardStatDisplayOverrides() {
+    this.cards.forEach((card) => {
+      if (!card?.userData?.statDisplayOverrides) return;
+      card.userData.statDisplayOverrides = null;
+      this.refreshCardFace(card);
+    });
+  }
+
   resetDemo() {
     this.clearHighlights();
     this.clearActiveCard({ restore: false });
@@ -558,6 +590,7 @@ export class CardGameClient {
       card.userData.attackCommitted = cfg.attackCommitted === true;
       card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
       card.userData.catalogCard = cfg.catalogCard ?? null;
+      card.userData.statDisplayOverrides = null;
       card.userData.isAttackHover = false;
       card.scale.setScalar(1);
       const { y, z } = this.getBoardRotationForCard(card);
