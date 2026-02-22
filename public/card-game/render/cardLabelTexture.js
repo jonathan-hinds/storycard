@@ -81,7 +81,11 @@ function drawGradientFallback(ctx) {
   }
 }
 
-export function createCardLabelTexture(card, { backgroundImagePath = DEFAULT_CARD_BACKGROUND_IMAGE_PATH, cardLabelLayout = DEFAULT_CARD_LABEL_LAYOUT } = {}) {
+export function createCardLabelTexture(card, {
+  backgroundImagePath = DEFAULT_CARD_BACKGROUND_IMAGE_PATH,
+  cardLabelLayout = DEFAULT_CARD_LABEL_LAYOUT,
+  statDisplayOverrides = null,
+} = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = CARD_LABEL_CANVAS_SIZE;
   canvas.height = CARD_LABEL_CANVAS_SIZE;
@@ -150,7 +154,11 @@ export function createCardLabelTexture(card, { backgroundImagePath = DEFAULT_CAR
       ctx.font = `600 ${Math.round(elementLayout.labelSize * elementLayout.size)}px Inter, system-ui, sans-serif`;
       ctx.fillText(label, left + width / 2, top + (88 * elementLayout.size));
 
-      const normalizedDieValue = ['damage', 'speed', 'defense'].includes(key) ? normalizeDieValue(value) : null;
+      const overrideValue = statDisplayOverrides && Object.hasOwn(statDisplayOverrides, key)
+        ? statDisplayOverrides[key]
+        : undefined;
+      const resolvedValue = overrideValue !== undefined ? overrideValue : value;
+      const normalizedDieValue = ['damage', 'speed', 'defense'].includes(key) ? normalizeDieValue(resolvedValue) : null;
       const dieIcon = normalizedDieValue ? dieIconCache.get(normalizedDieValue) ?? null : null;
 
       if (dieIcon) {
@@ -162,8 +170,14 @@ export function createCardLabelTexture(card, { backgroundImagePath = DEFAULT_CAR
         return;
       }
 
-      ctx.font = `700 ${Math.round(elementLayout.valueSize * elementLayout.size)}px Inter, system-ui, sans-serif`;
-      ctx.fillText(String(value ?? '-'), left + width / 2, top + (188 * elementLayout.size));
+      const isRollResult = typeof resolvedValue === 'number' && Number.isFinite(resolvedValue);
+      ctx.font = `700 ${Math.round(elementLayout.valueSize * elementLayout.size * (isRollResult ? 1.06 : 1))}px Inter, system-ui, sans-serif`;
+      if (isRollResult) {
+        ctx.lineWidth = Math.max(4, Math.round(11 * elementLayout.size));
+        ctx.strokeStyle = '#000000';
+        ctx.strokeText(String(resolvedValue), left + width / 2, top + (188 * elementLayout.size));
+      }
+      ctx.fillText(String(resolvedValue ?? '-'), left + width / 2, top + (188 * elementLayout.size));
     });
 
     texture.needsUpdate = true;

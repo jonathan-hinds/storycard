@@ -328,6 +328,7 @@ export class PhaseManagerClient {
       this.activeCommitSequenceKey = null;
       this.commitSequencePromise = null;
       this.cardRollerOverlay?.clear();
+      this.client?.clearCardStatDisplayOverrides?.();
     } else if (
       this.client
       && typeof this.client.playCommitPhaseAnimations === 'function'

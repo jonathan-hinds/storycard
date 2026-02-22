@@ -5,6 +5,12 @@ const DEFAULT_PANEL_SIZE_PX = 98;
 const DEFAULT_ROLL_DELAY_MS = 260;
 const ORTHO_OFFSET_Y = 0.62;
 
+const ROLL_TYPE_TO_STAT_KEY = Object.freeze({
+  damage: 'damage',
+  speed: 'speed',
+  defense: 'defense',
+});
+
 function createDeferred() {
   let resolve;
   let reject;
@@ -135,6 +141,7 @@ export class CardRollerOverlay {
       this.activeRollers.push(entry);
       this.positionRollerEntry(entry);
 
+      const statKey = ROLL_TYPE_TO_STAT_KEY[rollType] || rollType;
       const controlsAttack = canControlAttack(step);
       if (controlsAttack) {
         panel.title = 'Click to roll';
@@ -184,19 +191,27 @@ export class CardRollerOverlay {
           panel.dataset.state = 'rolling';
           roller.playRoll({ roll: remoteRoll.roll, sides: remoteRoll.sides || sides });
           return settled.promise;
-        })().then((outcome) => ({
-          cardId: card.userData.cardId,
-          attackId: step.id,
-          rollType,
-          statValue,
-          sides,
-          outcome,
-        })));
+        })().then((outcome) => {
+          if (typeof outcome === 'number') {
+            this.cardGameClient?.setCardStatDisplayOverride(card.userData.cardId, statKey, outcome);
+          }
+          return {
+            cardId: card.userData.cardId,
+            attackId: step.id,
+            rollType,
+            statValue,
+            sides,
+            outcome,
+          };
+        }));
         continue;
       }
 
       pendingRolls.push(settled.promise.then((outcome) => {
         panel.dataset.state = 'settled';
+        if (typeof outcome === 'number') {
+          this.cardGameClient?.setCardStatDisplayOverride(card.userData.cardId, statKey, outcome);
+        }
         return {
           cardId: card.userData.cardId,
           attackId: step.id,
