@@ -39,15 +39,28 @@ const scene = new CardLibraryScene({
 
 scene.setCards([previewCard]);
 
-loadImage(selectedBackgroundImagePath)
-  .then((image) => {
-    if (!image) return;
-    previewCard.backgroundImage = image;
+const updatePreviewBackground = async (assetPath) => {
+  selectedBackgroundImagePath = assetPath || '';
+  previewCard.backgroundImagePath = selectedBackgroundImagePath || null;
+
+  if (!selectedBackgroundImagePath) {
+    delete previewCard.backgroundImage;
     scene.setCards([previewCard]);
-  })
-  .catch((error) => {
+    return;
+  }
+
+  delete previewCard.backgroundImage;
+  scene.setCards([previewCard]);
+
+  try {
+    previewCard.backgroundImage = await loadImage(selectedBackgroundImagePath);
+    scene.setCards([previewCard]);
+  } catch (error) {
     console.warn(error);
-  });
+  }
+};
+
+updatePreviewBackground(selectedBackgroundImagePath);
 
 const updatePreviewArtwork = async (assetPath) => {
   selectedArtworkImagePath = assetPath || '';
@@ -285,20 +298,7 @@ function buildBackgroundSelectControl() {
   select.append(defaultOption);
 
   select.addEventListener('change', async () => {
-    try {
-      const selectedPath = select.value;
-      selectedBackgroundImagePath = selectedPath;
-      if (!selectedPath) {
-        delete previewCard.backgroundImage;
-        scene.setCards([previewCard]);
-        return;
-      }
-
-      previewCard.backgroundImage = await loadImage(selectedPath);
-      scene.setCards([previewCard]);
-    } catch (error) {
-      console.warn(error);
-    }
+    updatePreviewBackground(select.value);
   });
 
   fetch('/api/assets')
