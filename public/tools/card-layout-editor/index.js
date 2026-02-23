@@ -17,7 +17,7 @@ const defaultCard = {
 
 const previewCard = { ...defaultCard };
 const imageCache = new Map();
-let selectedBackgroundImagePath = '/public/assets/CardFront2.png';
+let selectedBackgroundImagePath = '/public/assets/CardFront2hole.png';
 let selectedArtworkImagePath = '';
 
 const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUT);

@@ -8,7 +8,7 @@ const DIE_ICON_PATHS = Object.freeze({
   D20: '/public/assets/D20Icon.png',
 });
 
-export const DEFAULT_CARD_BACKGROUND_IMAGE_PATH = '/public/assets/CardFront2.png';
+export const DEFAULT_CARD_BACKGROUND_IMAGE_PATH = '/public/assets/CardFront2hole.png';
 
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   name: Object.freeze({ x: 335, y: 110, size: 52, color: '#000000', align: 'left' }),
@@ -100,25 +100,29 @@ export function createCardLabelTexture(card, {
   texture.anisotropy = 8;
 
   const drawCardFace = () => {
+    const artworkLayout = cardLabelLayout.artwork ?? DEFAULT_CARD_LABEL_LAYOUT.artwork;
+    const artworkImage = card.artworkImage instanceof HTMLImageElement
+      ? card.artworkImage
+      : (resolvedArtworkPath ? (artworkImageCache.get(resolvedArtworkPath) ?? null) : null);
+    const drawArtwork = () => {
+      if (!artworkImage || !artworkLayout) return;
+      const artworkLeft = artworkLayout.x - (artworkLayout.width / 2);
+      const artworkTop = artworkLayout.y - (artworkLayout.height / 2);
+      ctx.drawImage(artworkImage, artworkLeft, artworkTop, artworkLayout.width, artworkLayout.height);
+    };
+
     const backgroundImage = card.backgroundImage instanceof HTMLImageElement
       ? card.backgroundImage
       : backgroundImageCache.get(resolvedBackgroundPath) ?? null;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (backgroundImage) {
-      ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
-    } else {
-      drawGradientFallback(ctx);
-    }
 
-    const artworkLayout = cardLabelLayout.artwork ?? DEFAULT_CARD_LABEL_LAYOUT.artwork;
-    const artworkImage = card.artworkImage instanceof HTMLImageElement
-      ? card.artworkImage
-      : (resolvedArtworkPath ? (artworkImageCache.get(resolvedArtworkPath) ?? null) : null);
-    if (artworkImage && artworkLayout) {
-      const artworkLeft = artworkLayout.x - (artworkLayout.width / 2);
-      const artworkTop = artworkLayout.y - (artworkLayout.height / 2);
-      ctx.drawImage(artworkImage, artworkLeft, artworkTop, artworkLayout.width, artworkLayout.height);
+    if (!backgroundImage) {
+      drawGradientFallback(ctx);
+      drawArtwork();
+    } else {
+      drawArtwork();
+      ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
     }
 
     ctx.fillStyle = cardLabelLayout.name.color;
