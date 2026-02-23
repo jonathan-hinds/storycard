@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto');
+const { DEFAULT_MESH_COLOR, normalizeCatalogCardDesign } = require('../../cards-catalog/catalogCardDesign');
 
 const DEFAULT_CARD_MESH_COLOR = 0x000000;
 
@@ -63,32 +64,19 @@ class PhaseManagerServer {
     return Number.parseInt(normalized.slice(1), 16);
   }
 
-  normalizeCatalogCard(catalogCard = {}) {
-    return {
-      id: catalogCard.id || null,
-      name: catalogCard.name || 'Unnamed Card',
-      type: catalogCard.type || 'Unknown',
-      damage: catalogCard.damage ?? '-',
-      health: catalogCard.health ?? '-',
-      speed: catalogCard.speed ?? '-',
-      defense: catalogCard.defense ?? '-',
-      meshColor: typeof catalogCard.meshColor === 'string' ? catalogCard.meshColor : '#000000',
-    };
-  }
-
   buildDeckFromCatalog(playerId, catalogCards = []) {
     if (!Array.isArray(catalogCards) || catalogCards.length === 0) {
       return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => ({
         id: `${playerId}-card-${index + 1}`,
         color: DEFAULT_CARD_MESH_COLOR,
-        catalogCard: this.normalizeCatalogCard({
+        catalogCard: normalizeCatalogCardDesign({
           name: `Test Card ${index + 1}`,
           type: 'Unknown',
           damage: 'D6',
           health: 10,
           speed: 'D6',
           defense: 'D6',
-          meshColor: '#000000',
+          meshColor: DEFAULT_MESH_COLOR,
         }),
         summonedTurn: null,
         attackCommitted: false,
@@ -98,7 +86,7 @@ class PhaseManagerServer {
 
     return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => {
       const randomCard = catalogCards[Math.floor(Math.random() * catalogCards.length)] || {};
-      const normalizedCard = this.normalizeCatalogCard(randomCard);
+      const normalizedCard = normalizeCatalogCardDesign(randomCard);
       return {
         id: `${playerId}-card-${index + 1}`,
         color: this.colorFromHexString(normalizedCard.meshColor),
