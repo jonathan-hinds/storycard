@@ -13,6 +13,7 @@ const damageLabel = document.querySelector('label[for="card-damage"]');
 const healthLabel = document.querySelector('label[for="card-health"]');
 const speedLabel = document.querySelector('label[for="card-speed"]');
 const defenseLabel = document.querySelector('label[for="card-defense"]');
+const healthInput = document.getElementById('card-health');
 const saveCardButton = document.getElementById('save-card-button');
 const artworkImageSelect = document.getElementById('card-artwork-image');
 const ability1Select = document.getElementById('card-ability-1');
@@ -59,6 +60,56 @@ let selectedCardId = null;
 let cardsCache = [];
 let abilitiesCache = [];
 
+function setFieldVisibility(label, input, visible) {
+  if (label) label.hidden = !visible;
+  if (input) {
+    input.hidden = !visible;
+    if ('required' in input) {
+      input.required = visible;
+    }
+  }
+}
+
+function normalizeCardForForm(card) {
+  const cardKind = card?.cardKind ?? 'Creature';
+  if (cardKind === 'Spell') {
+    return {
+      ...card,
+      health: '',
+      speed: '',
+      defense: '',
+    };
+  }
+
+  return {
+    ...card,
+    health: card?.health ?? 0,
+    speed: card?.speed ?? '',
+    defense: card?.defense ?? '',
+  };
+}
+
+function buildCardInput(formData) {
+  const cardKind = formData.get('cardKind');
+  const cardInput = {
+    name: formData.get('name'),
+    damage: formData.get('damage'),
+    type: formData.get('type'),
+    cardKind,
+    artworkImagePath: formData.get('artworkImagePath') || null,
+    ability1Id: formData.get('ability1Id'),
+    ability2Id: formData.get('ability2Id') || null,
+  };
+
+  if (cardKind === 'Creature') {
+    cardInput.health = Number.parseInt(formData.get('health'), 10);
+    cardInput.speed = formData.get('speed');
+    cardInput.defense = formData.get('defense');
+  }
+
+  return cardInput;
+}
+
 function getDynamicPreviewZMax(baseMax) {
   const cameraDistance = cardLibraryScene?.camera?.position?.z;
   if (!Number.isFinite(cameraDistance)) return baseMax;
@@ -104,14 +155,15 @@ cardLibraryScene = new CardLibraryScene({
   layoutTuning: GRID_LAYOUT_DEFAULTS,
   onCardSelect: (card) => {
     if (!card) return;
+    const normalizedCard = normalizeCardForForm(card);
     selectedCardId = card.id;
-    form.elements.name.value = card.name ?? '';
-    form.elements.damage.value = card.damage ?? '';
-    form.elements.health.value = card.health ?? 0;
-    form.elements.speed.value = card.speed ?? '';
-    form.elements.defense.value = card.defense ?? '';
-    typeSelect.value = card.type;
-    cardKindSelect.value = card.cardKind ?? 'Creature';
+    form.elements.name.value = normalizedCard.name ?? '';
+    form.elements.damage.value = normalizedCard.damage ?? '';
+    form.elements.health.value = normalizedCard.health;
+    form.elements.speed.value = normalizedCard.speed;
+    form.elements.defense.value = normalizedCard.defense;
+    typeSelect.value = normalizedCard.type;
+    cardKindSelect.value = normalizedCard.cardKind ?? 'Creature';
     syncCardKindUI(cardKindSelect.value).catch(() => {});
     artworkImageSelect.value = card.artworkImagePath ?? '';
     ability1Select.value = card.ability1Id ?? '';
@@ -247,10 +299,17 @@ function resetFormToCreateMode() {
 
 async function syncCardKindUI(cardKind) {
   const isSpell = cardKind === 'Spell';
-  if (damageLabel) damageLabel.textContent = isSpell ? 'Effectiveness' : 'Damage';
-  if (healthLabel) healthLabel.textContent = isSpell ? 'Potency (HP Placeholder)' : 'Health';
-  if (speedLabel) speedLabel.textContent = isSpell ? 'Cast Speed (Die)' : 'Speed';
-  if (defenseLabel) defenseLabel.textContent = isSpell ? 'Stability (Die)' : 'Defense';
+  if (damageLabel) damageLabel.textContent = isSpell ? 'Effectiveness (EFCT)' : 'Damage';
+  setFieldVisibility(healthLabel, healthInput, !isSpell);
+  setFieldVisibility(speedLabel, speedSelect, !isSpell);
+  setFieldVisibility(defenseLabel, defenseSelect, !isSpell);
+
+  if (isSpell) {
+    form.elements.health.value = '';
+    form.elements.speed.value = '';
+    form.elements.defense.value = '';
+  }
+
   await fetchAbilities(cardKind || 'Creature');
 }
 
@@ -305,18 +364,7 @@ async function fetchCards() {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const formData = new FormData(form);
-  const cardInput = {
-    name: formData.get('name'),
-    damage: formData.get('damage'),
-    health: Number.parseInt(formData.get('health'), 10),
-    speed: formData.get('speed'),
-    defense: formData.get('defense'),
-    type: formData.get('type'),
-    cardKind: formData.get('cardKind'),
-    artworkImagePath: formData.get('artworkImagePath') || null,
-    ability1Id: formData.get('ability1Id'),
-    ability2Id: formData.get('ability2Id') || null,
-  };
+  const cardInput = buildCardInput(formData);
 
   setStatus('Saving card...');
   try {
@@ -348,18 +396,7 @@ saveCardButton.addEventListener('click', async () => {
   }
 
   const formData = new FormData(form);
-  const cardInput = {
-    name: formData.get('name'),
-    damage: formData.get('damage'),
-    health: Number.parseInt(formData.get('health'), 10),
-    speed: formData.get('speed'),
-    defense: formData.get('defense'),
-    type: formData.get('type'),
-    cardKind: formData.get('cardKind'),
-    artworkImagePath: formData.get('artworkImagePath') || null,
-    ability1Id: formData.get('ability1Id'),
-    ability2Id: formData.get('ability2Id') || null,
-  };
+  const cardInput = buildCardInput(formData);
 
   setStatus('Updating card...');
 
@@ -379,16 +416,18 @@ saveCardButton.addEventListener('click', async () => {
     await fetchCards();
     const updatedCard = cardsCache.find((card) => card.id === selectedCardId);
     if (updatedCard) {
-      form.elements.name.value = updatedCard.name ?? '';
-      form.elements.damage.value = updatedCard.damage ?? '';
-      form.elements.health.value = updatedCard.health ?? 0;
-      form.elements.speed.value = updatedCard.speed ?? '';
-      form.elements.defense.value = updatedCard.defense ?? '';
-      typeSelect.value = updatedCard.type;
-      cardKindSelect.value = updatedCard.cardKind;
-      artworkImageSelect.value = updatedCard.artworkImagePath ?? '';
-      ability1Select.value = updatedCard.ability1Id ?? '';
-      ability2Select.value = updatedCard.ability2Id ?? '';
+      const normalizedCard = normalizeCardForForm(updatedCard);
+      form.elements.name.value = normalizedCard.name ?? '';
+      form.elements.damage.value = normalizedCard.damage ?? '';
+      form.elements.health.value = normalizedCard.health;
+      form.elements.speed.value = normalizedCard.speed;
+      form.elements.defense.value = normalizedCard.defense;
+      typeSelect.value = normalizedCard.type;
+      cardKindSelect.value = normalizedCard.cardKind;
+      artworkImageSelect.value = normalizedCard.artworkImagePath ?? '';
+      ability1Select.value = normalizedCard.ability1Id ?? '';
+      ability2Select.value = normalizedCard.ability2Id ?? '';
+      await syncCardKindUI(cardKindSelect.value || 'Creature');
     }
   } catch (error) {
     setStatus(error.message, true);
