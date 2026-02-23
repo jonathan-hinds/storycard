@@ -3,6 +3,8 @@ import { DieRollerClient } from '/public/die-roller/index.js';
 
 const DEFAULT_PANEL_SIZE_PX = 98;
 const DEFAULT_ROLL_DELAY_MS = 260;
+const DEFAULT_POST_SETTLE_DELAY_MS = 2000;
+const DEFAULT_POST_UPDATE_DELAY_MS = 2000;
 const ORTHO_OFFSET_Y = 0.62;
 
 const ROLL_TYPE_TO_STAT_KEY = Object.freeze({
@@ -38,18 +40,31 @@ function parseSidesFromStat(value, fallbackSides = 6) {
 }
 
 export class CardRollerOverlay {
-  constructor({ host, cardGameClient, rollDelayMs = DEFAULT_ROLL_DELAY_MS } = {}) {
+  constructor({
+    host,
+    cardGameClient,
+    rollDelayMs = DEFAULT_ROLL_DELAY_MS,
+    postSettleDelayMs = DEFAULT_POST_SETTLE_DELAY_MS,
+    postUpdateDelayMs = DEFAULT_POST_UPDATE_DELAY_MS,
+  } = {}) {
     if (!host) throw new Error('host is required');
     if (!cardGameClient) throw new Error('cardGameClient is required');
     this.host = host;
     this.cardGameClient = cardGameClient;
     this.rollDelayMs = rollDelayMs;
+    this.postSettleDelayMs = postSettleDelayMs;
+    this.postUpdateDelayMs = postUpdateDelayMs;
     this.activeRollers = [];
     this.positionTick = 0;
 
     this.layer = document.createElement('div');
     this.layer.className = 'card-roller-overlay-layer';
     this.host.append(this.layer);
+  }
+
+  async pause(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    await new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   getRollTypeForCard(card, rollType = 'damage') {
@@ -129,7 +144,9 @@ export class CardRollerOverlay {
       }
 
       const outcome = Number.isFinite(rolled?.outcome) ? rolled.outcome : null;
+      await this.pause(this.postSettleDelayMs);
       this.applyOutcomeToCard(card.userData.cardId, rollType, outcome);
+      await this.pause(this.postUpdateDelayMs);
       outcomes.push({
         cardId: card.userData.cardId,
         attackId: attackStep.id,
@@ -156,15 +173,18 @@ export class CardRollerOverlay {
       if (!remoteRoll) return outcomes;
 
       roller.playRoll({ roll: remoteRoll.roll, sides: remoteRoll.sides || sides });
-      const outcome = await settled.promise;
-      this.applyOutcomeToCard(card.userData.cardId, rollType, outcome);
+      await settled.promise;
+      const authoritativeOutcome = Number.isFinite(remoteRoll?.roll?.outcome) ? remoteRoll.roll.outcome : null;
+      await this.pause(this.postSettleDelayMs);
+      this.applyOutcomeToCard(card.userData.cardId, rollType, authoritativeOutcome);
+      await this.pause(this.postUpdateDelayMs);
       outcomes.push({
         cardId: card.userData.cardId,
         attackId: attackStep.id,
         rollType,
         statValue,
         sides,
-        outcome,
+        outcome: authoritativeOutcome,
       });
     }
     return outcomes;
