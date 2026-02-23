@@ -97,7 +97,11 @@ export const DEFAULT_SPELL_CARD_LABEL_LAYOUT = DEFAULT_CARD_LABEL_LAYOUTS[CARD_K
 export const DEFAULT_CARD_BACKGROUND_IMAGE_PATH = DEFAULT_CARD_BACKGROUND_IMAGE_PATHS[CARD_KINDS.CREATURE];
 
 export function resolveCardKind(cardKind) {
-  return cardKind === CARD_KINDS.SPELL ? CARD_KINDS.SPELL : CARD_KINDS.CREATURE;
+  if (typeof cardKind !== 'string') return CARD_KINDS.CREATURE;
+  const normalizedKind = cardKind.trim().toLowerCase();
+  return normalizedKind === CARD_KINDS.SPELL.toLowerCase() || normalizedKind === CARD_LAYOUT_FOR.SPELL
+    ? CARD_KINDS.SPELL
+    : CARD_KINDS.CREATURE;
 }
 
 export function getDefaultCardLabelLayout(cardKind) {

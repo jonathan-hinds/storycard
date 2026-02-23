@@ -187,7 +187,7 @@ export function createCardLabelTexture(card, {
     ctx.font = `600 ${Math.round(resolvedCardLabelLayout.type.size)}px Inter, system-ui, sans-serif`;
     ctx.fillText(card.type || 'unknown', resolvedCardLabelLayout.type.x, resolvedCardLabelLayout.type.y, 720);
 
-    const isSpellCard = card.cardKind === 'Spell';
+    const isSpellCard = cardKind === 'Spell';
     const stats = isSpellCard
       ? [{ key: 'damage', label: 'EFCT', value: card.damage }]
       : [
@@ -275,7 +275,7 @@ export function createCardLabelTexture(card, {
     });
   }
 
-  (card.cardKind === 'Spell' ? ['damage'] : ['damage', 'speed', 'defense']).forEach((key) => {
+  (cardKind === 'Spell' ? ['damage'] : ['damage', 'speed', 'defense']).forEach((key) => {
     const dieValue = normalizeDieValue(card[key]);
     const iconPath = dieValue ? DIE_ICON_PATHS[dieValue] : null;
     if (!dieValue || !iconPath || dieIconCache.has(dieValue)) return;
