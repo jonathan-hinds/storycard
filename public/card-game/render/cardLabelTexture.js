@@ -12,7 +12,7 @@ export const DEFAULT_CARD_BACKGROUND_IMAGE_PATH = '/public/assets/CardFront2hole
 
 export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   name: Object.freeze({ x: 335, y: 110, size: 52, color: '#000000', align: 'left' }),
-  artwork: Object.freeze({ x: 512, y: 385, width: 575, height: 450 }),
+  artwork: Object.freeze({ x: 521, y: 368, width: 900, height: 451 }),
   type: Object.freeze({ x: 512, y: 644, size: 48, color: '#ffffff', align: 'center' }),
   damage: Object.freeze({ x: 170, y: 802, size: 0.85, boxWidth: 264, boxHeight: 216, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 120, textColor: '#ffffff', iconWidth: 200, iconHeight: 175, iconOffsetX: 0, iconOffsetY: 0 }),
   health: Object.freeze({ x: 202, y: 114, size: 0.85, boxWidth: 264, boxHeight: 216, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 100, textColor: '#ffffff' }),
