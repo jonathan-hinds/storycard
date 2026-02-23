@@ -202,6 +202,11 @@ export function createCardLabelTexture(card, {
       ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
     }
 
+    if (card.cardKind === 'Spell') {
+      texture.needsUpdate = true;
+      return;
+    }
+
     ctx.fillStyle = cardLabelLayout.name.color;
     ctx.textAlign = cardLabelLayout.name.align;
     ctx.font = `bold ${Math.round(cardLabelLayout.name.size)}px Inter, system-ui, sans-serif`;

@@ -1,4 +1,5 @@
 const CARD_TYPES = ['Nature', 'Fire', 'Water', 'Arcane'];
+const CARD_KINDS = ['Creature', 'Spell'];
 const CARD_STAT_DICE = ['D6', 'D8', 'D12', 'D20'];
 const { listAbilitiesByIds } = require('../abilities-catalog/mongoStore');
 
@@ -8,6 +9,7 @@ const COLLECTION_NAME = process.env.CARDS_COLLECTION_NAME || 'cards';
 
 let clientPromise;
 let legacyStatsMigrationPromise;
+let legacyCardKindMigrationPromise;
 
 function getMongoClientConstructor() {
   try {
@@ -74,6 +76,36 @@ async function ensureLegacyStatsMigrated() {
   return legacyStatsMigrationPromise;
 }
 
+async function assignLegacyCardsToCreature(collection) {
+  await collection.updateMany(
+    {
+      $or: [
+        { cardKind: { $exists: false } },
+        { cardKind: null },
+      ],
+    },
+    {
+      $set: {
+        cardKind: 'Creature',
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  );
+}
+
+async function ensureLegacyCardKindsMigrated() {
+  if (!legacyCardKindMigrationPromise) {
+    legacyCardKindMigrationPromise = getCollection()
+      .then((collection) => assignLegacyCardsToCreature(collection))
+      .catch((error) => {
+        legacyCardKindMigrationPromise = null;
+        throw error;
+      });
+  }
+
+  return legacyCardKindMigrationPromise;
+}
+
 function toCardRecord(document) {
   return {
     id: document._id.toString(),
@@ -83,6 +115,7 @@ function toCardRecord(document) {
     speed: document.speed,
     defense: document.defense,
     type: document.type,
+    cardKind: document.cardKind || 'Creature',
     artworkImagePath: document.artworkImagePath ?? null,
     ability1Id: document.ability1Id ?? null,
     ability2Id: document.ability2Id ?? null,
@@ -157,6 +190,7 @@ function normalizeArtworkImagePath(value) {
 function validateCardInput(input = {}) {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const type = typeof input.type === 'string' ? input.type : '';
+  const cardKind = typeof input.cardKind === 'string' ? input.cardKind : '';
 
   if (!name) {
     throw new Error('name is required');
@@ -164,6 +198,10 @@ function validateCardInput(input = {}) {
 
   if (!CARD_TYPES.includes(type)) {
     throw new Error(`type must be one of: ${CARD_TYPES.join(', ')}`);
+  }
+
+  if (!CARD_KINDS.includes(cardKind)) {
+    throw new Error(`cardKind must be one of: ${CARD_KINDS.join(', ')}`);
   }
 
   const ability1Id = typeof input.ability1Id === 'string' ? input.ability1Id.trim() : '';
@@ -176,6 +214,7 @@ function validateCardInput(input = {}) {
     speed: normalizeDieValue(input.speed, 'speed'),
     defense: normalizeDieValue(input.defense, 'defense'),
     type,
+    cardKind,
     artworkImagePath: normalizeArtworkImagePath(input.artworkImagePath),
     ability1Id,
     ability2Id: ability2Id || null,
@@ -203,6 +242,7 @@ async function validateAbilityReferences(validatedCardInput) {
 
 async function listCards() {
   await ensureLegacyStatsMigrated();
+  await ensureLegacyCardKindsMigrated();
   const collection = await getCollection();
   const docs = await collection.find({}).sort({ createdAt: -1, _id: -1 }).toArray();
   return hydrateCardAbilities(docs.map(toCardRecord));
@@ -210,6 +250,7 @@ async function listCards() {
 
 async function createCard(input = {}) {
   await ensureLegacyStatsMigrated();
+  await ensureLegacyCardKindsMigrated();
   const collection = await getCollection();
   const validated = validateCardInput(input);
   await validateAbilityReferences(validated);
@@ -226,6 +267,7 @@ async function createCard(input = {}) {
 
 async function updateCard(cardId, input = {}) {
   await ensureLegacyStatsMigrated();
+  await ensureLegacyCardKindsMigrated();
   const collection = await getCollection();
   const validated = validateCardInput(input);
   await validateAbilityReferences(validated);
@@ -256,6 +298,7 @@ async function updateCard(cardId, input = {}) {
 
 module.exports = {
   CARD_TYPES,
+  CARD_KINDS,
   CARD_STAT_DICE,
   listCards,
   createCard,

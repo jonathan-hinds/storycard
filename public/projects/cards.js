@@ -5,6 +5,7 @@ const form = document.getElementById('create-card-form');
 const status = document.getElementById('create-card-status');
 const cardList = document.getElementById('card-list');
 const typeSelect = document.getElementById('card-type');
+const cardKindSelect = document.getElementById('card-kind');
 const damageSelect = document.getElementById('card-damage');
 const speedSelect = document.getElementById('card-speed');
 const defenseSelect = document.getElementById('card-defense');
@@ -106,6 +107,7 @@ cardLibraryScene = new CardLibraryScene({
     form.elements.speed.value = card.speed ?? '';
     form.elements.defense.value = card.defense ?? '';
     typeSelect.value = card.type;
+    cardKindSelect.value = card.cardKind ?? 'Creature';
     artworkImageSelect.value = card.artworkImagePath ?? '';
     ability1Select.value = card.ability1Id ?? '';
     ability2Select.value = card.ability2Id ?? '';
@@ -270,6 +272,7 @@ async function fetchCards() {
     };
 
     buildSelectOptions(typeSelect, payload.cardTypes, 'Select a type');
+    buildSelectOptions(cardKindSelect, payload.cardKinds, 'Select a card type');
     buildSelectOptions(damageSelect, payload.cardStatDice, 'Select a die');
     buildSelectOptions(speedSelect, payload.cardStatDice, 'Select a die');
     buildSelectOptions(defenseSelect, payload.cardStatDice, 'Select a die');
@@ -291,6 +294,7 @@ form.addEventListener('submit', async (event) => {
     speed: formData.get('speed'),
     defense: formData.get('defense'),
     type: formData.get('type'),
+    cardKind: formData.get('cardKind'),
     artworkImagePath: formData.get('artworkImagePath') || null,
     ability1Id: formData.get('ability1Id'),
     ability2Id: formData.get('ability2Id') || null,
@@ -311,6 +315,7 @@ form.addEventListener('submit', async (event) => {
 
     resetFormToCreateMode();
     typeSelect.value = payload.card.type;
+    cardKindSelect.value = payload.card.cardKind;
     setStatus(`Saved "${payload.card.name}".`);
     await fetchCards();
   } catch (error) {
@@ -332,6 +337,7 @@ saveCardButton.addEventListener('click', async () => {
     speed: formData.get('speed'),
     defense: formData.get('defense'),
     type: formData.get('type'),
+    cardKind: formData.get('cardKind'),
     artworkImagePath: formData.get('artworkImagePath') || null,
     ability1Id: formData.get('ability1Id'),
     ability2Id: formData.get('ability2Id') || null,
@@ -361,6 +367,7 @@ saveCardButton.addEventListener('click', async () => {
       form.elements.speed.value = updatedCard.speed ?? '';
       form.elements.defense.value = updatedCard.defense ?? '';
       typeSelect.value = updatedCard.type;
+      cardKindSelect.value = updatedCard.cardKind;
       artworkImageSelect.value = updatedCard.artworkImagePath ?? '';
       ability1Select.value = updatedCard.ability1Id ?? '';
       ability2Select.value = updatedCard.ability2Id ?? '';

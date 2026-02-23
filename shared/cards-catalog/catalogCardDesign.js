@@ -25,6 +25,7 @@ function normalizeCatalogCardDesign(catalogCard = {}) {
     id: catalogCard.id || null,
     name: catalogCard.name || 'Unnamed Card',
     type: catalogCard.type || 'Unknown',
+    cardKind: catalogCard.cardKind || 'Creature',
     damage: catalogCard.damage ?? '-',
     health: catalogCard.health ?? '-',
     speed: catalogCard.speed ?? '-',
