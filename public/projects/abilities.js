@@ -4,6 +4,10 @@ const form = document.getElementById('create-ability-form');
 const status = document.getElementById('create-ability-status');
 const abilityList = document.getElementById('ability-list');
 const saveAbilityButton = document.getElementById('save-ability-button');
+const abilityKindInput = document.getElementById('ability-kind');
+const abilityKindLabel = document.getElementById('ability-kind-label');
+
+const configuredAbilityKind = document.body?.dataset.abilityKind === 'spell' ? 'Spell' : 'Creature';
 
 let selectedAbilityId = null;
 let abilitiesCache = [];
@@ -17,13 +21,14 @@ function resetFormToCreateMode() {
   selectedAbilityId = null;
   saveAbilityButton.disabled = true;
   form.reset();
+  abilityKindInput.value = configuredAbilityKind;
 }
 
 function renderAbilities(abilities) {
   abilitiesCache = abilities;
 
   if (!abilities.length) {
-    abilityList.innerHTML = '<p class="catalog-empty">No abilities yet. Create your first ability using the form.</p>';
+    abilityList.innerHTML = `<p class="catalog-empty">No ${configuredAbilityKind.toLowerCase()} abilities yet. Create your first ability using the form.</p>`;
     return;
   }
 
@@ -51,6 +56,7 @@ function renderAbilities(abilities) {
       form.elements.name.value = ability.name ?? '';
       form.elements.cost.value = ability.cost ?? '';
       form.elements.description.value = ability.description ?? '';
+      abilityKindInput.value = ability.abilityKind ?? configuredAbilityKind;
       saveAbilityButton.disabled = false;
       setStatus(`Editing "${ability.name}".`);
     });
@@ -63,10 +69,10 @@ function renderAbilities(abilities) {
 }
 
 async function fetchAbilities() {
-  setStatus('Loading abilities...');
+  setStatus(`Loading ${configuredAbilityKind.toLowerCase()} abilities...`);
 
   try {
-    const response = await fetch('/api/projects/abilities');
+    const response = await fetch(`/api/projects/abilities?abilityKind=${encodeURIComponent(configuredAbilityKind)}`);
     const payload = await response.json();
 
     if (!response.ok) {
@@ -74,7 +80,7 @@ async function fetchAbilities() {
     }
 
     renderAbilities(Array.isArray(payload.abilities) ? payload.abilities : []);
-    setStatus(`Loaded ${payload.abilities.length} abilit${payload.abilities.length === 1 ? 'y' : 'ies'}.`);
+    setStatus(`Loaded ${payload.abilities.length} ${configuredAbilityKind.toLowerCase()} abilit${payload.abilities.length === 1 ? 'y' : 'ies'}.`);
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -84,7 +90,7 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const formData = new FormData(form);
-  const abilityInput = toAbilityInput(formData);
+  const abilityInput = toAbilityInput(formData, configuredAbilityKind);
 
   setStatus('Saving ability...');
 
@@ -115,7 +121,7 @@ saveAbilityButton.addEventListener('click', async () => {
   }
 
   const formData = new FormData(form);
-  const abilityInput = toAbilityInput(formData);
+  const abilityInput = toAbilityInput(formData, configuredAbilityKind);
 
   setStatus('Updating ability...');
 
@@ -139,10 +145,16 @@ saveAbilityButton.addEventListener('click', async () => {
       form.elements.name.value = updatedAbility.name ?? '';
       form.elements.cost.value = updatedAbility.cost ?? '';
       form.elements.description.value = updatedAbility.description ?? '';
+      abilityKindInput.value = updatedAbility.abilityKind ?? configuredAbilityKind;
     }
   } catch (error) {
     setStatus(error.message, true);
   }
 });
+
+abilityKindInput.value = configuredAbilityKind;
+if (abilityKindLabel) {
+  abilityKindLabel.textContent = `${configuredAbilityKind} Ability Kind`;
+}
 
 fetchAbilities();

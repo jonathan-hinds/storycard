@@ -238,6 +238,11 @@ async function validateAbilityReferences(validatedCardInput) {
   if (missingIds.length) {
     throw new Error(`Unknown abilities: ${missingIds.join(', ')}`);
   }
+
+  const mismatchedAbility = abilities.find((ability) => ability.abilityKind !== validatedCardInput.cardKind);
+  if (mismatchedAbility) {
+    throw new Error(`Ability ${mismatchedAbility.id} is ${mismatchedAbility.abilityKind} but cardKind is ${validatedCardInput.cardKind}`);
+  }
 }
 
 async function listCards() {

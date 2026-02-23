@@ -9,6 +9,10 @@ const cardKindSelect = document.getElementById('card-kind');
 const damageSelect = document.getElementById('card-damage');
 const speedSelect = document.getElementById('card-speed');
 const defenseSelect = document.getElementById('card-defense');
+const damageLabel = document.querySelector('label[for="card-damage"]');
+const healthLabel = document.querySelector('label[for="card-health"]');
+const speedLabel = document.querySelector('label[for="card-speed"]');
+const defenseLabel = document.querySelector('label[for="card-defense"]');
 const saveCardButton = document.getElementById('save-card-button');
 const artworkImageSelect = document.getElementById('card-artwork-image');
 const ability1Select = document.getElementById('card-ability-1');
@@ -108,6 +112,7 @@ cardLibraryScene = new CardLibraryScene({
     form.elements.defense.value = card.defense ?? '';
     typeSelect.value = card.type;
     cardKindSelect.value = card.cardKind ?? 'Creature';
+    syncCardKindUI(cardKindSelect.value).catch(() => {});
     artworkImageSelect.value = card.artworkImagePath ?? '';
     ability1Select.value = card.ability1Id ?? '';
     ability2Select.value = card.ability2Id ?? '';
@@ -184,8 +189,8 @@ function buildAbilitySelectOptions(abilities = []) {
   }
 }
 
-async function fetchAbilities() {
-  const response = await fetch('/api/projects/abilities');
+async function fetchAbilities(abilityKind = cardKindSelect.value || 'Creature') {
+  const response = await fetch(`/api/projects/abilities?abilityKind=${encodeURIComponent(abilityKind)}`);
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || 'Unable to load abilities');
   abilitiesCache = Array.isArray(payload.abilities) ? payload.abilities : [];
@@ -236,6 +241,17 @@ function resetFormToCreateMode() {
   artworkImageSelect.value = '';
   ability1Select.value = '';
   ability2Select.value = '';
+  cardKindSelect.value = 'Creature';
+}
+
+
+async function syncCardKindUI(cardKind) {
+  const isSpell = cardKind === 'Spell';
+  if (damageLabel) damageLabel.textContent = isSpell ? 'Effectiveness' : 'Damage';
+  if (healthLabel) healthLabel.textContent = isSpell ? 'Potency (HP Placeholder)' : 'Health';
+  if (speedLabel) speedLabel.textContent = isSpell ? 'Cast Speed (Die)' : 'Speed';
+  if (defenseLabel) defenseLabel.textContent = isSpell ? 'Stability (Die)' : 'Defense';
+  await fetchAbilities(cardKind || 'Creature');
 }
 
 function setStatus(message, isError = false) {
@@ -246,7 +262,7 @@ function setStatus(message, isError = false) {
 async function fetchCards() {
   setStatus('Loading cards...');
   try {
-    await Promise.all([fetchArtworkAssets(), fetchAbilities()]);
+    await fetchArtworkAssets();
     const response = await fetch('/api/projects/cards');
     const payload = await response.json();
 
@@ -276,6 +292,8 @@ async function fetchCards() {
     buildSelectOptions(damageSelect, payload.cardStatDice, 'Select a die');
     buildSelectOptions(speedSelect, payload.cardStatDice, 'Select a die');
     buildSelectOptions(defenseSelect, payload.cardStatDice, 'Select a die');
+
+    await syncCardKindUI(cardKindSelect.value || 'Creature');
 
     renderCards(payload.cards);
     setStatus(`Loaded ${payload.cards.length} card${payload.cards.length === 1 ? '' : 's'}.`);
@@ -375,6 +393,10 @@ saveCardButton.addEventListener('click', async () => {
   } catch (error) {
     setStatus(error.message, true);
   }
+});
+
+cardKindSelect.addEventListener('change', () => {
+  syncCardKindUI(cardKindSelect.value).catch((error) => setStatus(error.message, true));
 });
 
 fetchCards();

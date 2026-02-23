@@ -16,6 +16,7 @@ const {
   updateCard: updateCatalogCard,
 } = require('./shared/cards-catalog/mongoStore');
 const {
+  ABILITY_KINDS,
   listAbilities: listCatalogAbilities,
   createAbility: createCatalogAbility,
   updateAbility: updateCatalogAbility,
@@ -193,8 +194,10 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === 'GET' && pathname === '/api/projects/abilities') {
     try {
-      const abilities = await listCatalogAbilities();
-      sendJson(res, 200, { abilities });
+      const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+      const abilityKind = requestUrl.searchParams.get('abilityKind');
+      const abilities = await listCatalogAbilities({ abilityKind });
+      sendJson(res, 200, { abilities, abilityKinds: ABILITY_KINDS });
     } catch (error) {
       sendJson(res, 500, { error: 'Unable to load abilities from database' });
     }
@@ -208,7 +211,8 @@ async function handleApi(req, res, pathname) {
       sendJson(res, 201, { ability });
     } catch (error) {
       const isValidationError =
-        error.message.includes('required');
+        error.message.includes('required')
+        || error.message.includes('abilityKind must be one of');
       sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create ability' });
     }
     return true;
@@ -222,7 +226,8 @@ async function handleApi(req, res, pathname) {
       sendJson(res, 200, { ability });
     } catch (error) {
       const isValidationError =
-        error.message.includes('required');
+        error.message.includes('required')
+        || error.message.includes('abilityKind must be one of');
       const isNotFound = error.message === 'Ability not found';
       const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to update ability' });
@@ -258,7 +263,8 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('artworkImagePath must')
         || error.message.includes('ability1Id')
         || error.message.includes('ability2Id')
-        || error.message.includes('Unknown abilities');
+        || error.message.includes('Unknown abilities')
+        || error.message.includes('but cardKind is');
       sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create card' });
     }
     return true;
@@ -278,7 +284,8 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('artworkImagePath must')
         || error.message.includes('ability1Id')
         || error.message.includes('ability2Id')
-        || error.message.includes('Unknown abilities');
+        || error.message.includes('Unknown abilities')
+        || error.message.includes('but cardKind is');
       const isNotFound = error.message === 'Card not found';
       const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to update card' });

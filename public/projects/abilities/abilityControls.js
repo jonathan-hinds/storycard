@@ -5,10 +5,13 @@ export function formatAbilityOptionLabel(ability = {}) {
   return name || cost || 'Unnamed ability';
 }
 
-export function toAbilityInput(formData) {
+export function toAbilityInput(formData, defaultAbilityKind = 'Creature') {
+  const abilityKind = formData.get('abilityKind') || defaultAbilityKind;
+
   return {
     name: formData.get('name'),
     cost: formData.get('cost'),
     description: formData.get('description'),
+    abilityKind,
   };
 }
