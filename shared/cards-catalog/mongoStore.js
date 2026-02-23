@@ -10,6 +10,7 @@ const COLLECTION_NAME = process.env.CARDS_COLLECTION_NAME || 'cards';
 let clientPromise;
 let legacyStatsMigrationPromise;
 let legacyCardKindMigrationPromise;
+let spellStatCleanupPromise;
 
 function getMongoClientConstructor() {
   try {
@@ -104,6 +105,42 @@ async function ensureLegacyCardKindsMigrated() {
   }
 
   return legacyCardKindMigrationPromise;
+}
+
+async function removeCreatureOnlyStatsFromSpells(collection) {
+  await collection.updateMany(
+    {
+      cardKind: 'Spell',
+      $or: [
+        { health: { $exists: true } },
+        { speed: { $exists: true } },
+        { defense: { $exists: true } },
+      ],
+    },
+    {
+      $unset: {
+        health: '',
+        speed: '',
+        defense: '',
+      },
+      $set: {
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  );
+}
+
+async function ensureSpellStatsAreCleanedUp() {
+  if (!spellStatCleanupPromise) {
+    spellStatCleanupPromise = getCollection()
+      .then((collection) => removeCreatureOnlyStatsFromSpells(collection))
+      .catch((error) => {
+        spellStatCleanupPromise = null;
+        throw error;
+      });
+  }
+
+  return spellStatCleanupPromise;
 }
 
 function toCardRecord(document) {
@@ -207,18 +244,23 @@ function validateCardInput(input = {}) {
   const ability1Id = typeof input.ability1Id === 'string' ? input.ability1Id.trim() : '';
   const ability2Id = typeof input.ability2Id === 'string' ? input.ability2Id.trim() : '';
 
-  return {
+  const validatedInput = {
     name,
     damage: normalizeDieValue(input.damage, 'damage'),
-    health: normalizeInteger(input.health, 'health'),
-    speed: normalizeDieValue(input.speed, 'speed'),
-    defense: normalizeDieValue(input.defense, 'defense'),
     type,
     cardKind,
     artworkImagePath: normalizeArtworkImagePath(input.artworkImagePath),
     ability1Id,
     ability2Id: ability2Id || null,
   };
+
+  if (cardKind === 'Creature') {
+    validatedInput.health = normalizeInteger(input.health, 'health');
+    validatedInput.speed = normalizeDieValue(input.speed, 'speed');
+    validatedInput.defense = normalizeDieValue(input.defense, 'defense');
+  }
+
+  return validatedInput;
 }
 
 async function validateAbilityReferences(validatedCardInput) {
@@ -248,6 +290,7 @@ async function validateAbilityReferences(validatedCardInput) {
 async function listCards() {
   await ensureLegacyStatsMigrated();
   await ensureLegacyCardKindsMigrated();
+  await ensureSpellStatsAreCleanedUp();
   const collection = await getCollection();
   const docs = await collection.find({}).sort({ createdAt: -1, _id: -1 }).toArray();
   return hydrateCardAbilities(docs.map(toCardRecord));
@@ -256,6 +299,7 @@ async function listCards() {
 async function createCard(input = {}) {
   await ensureLegacyStatsMigrated();
   await ensureLegacyCardKindsMigrated();
+  await ensureSpellStatsAreCleanedUp();
   const collection = await getCollection();
   const validated = validateCardInput(input);
   await validateAbilityReferences(validated);
@@ -273,6 +317,7 @@ async function createCard(input = {}) {
 async function updateCard(cardId, input = {}) {
   await ensureLegacyStatsMigrated();
   await ensureLegacyCardKindsMigrated();
+  await ensureSpellStatsAreCleanedUp();
   const collection = await getCollection();
   const validated = validateCardInput(input);
   await validateAbilityReferences(validated);
