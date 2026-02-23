@@ -131,7 +131,7 @@ function drawAbilityBanner(ctx, abilityLayout, anchor, ability) {
 }
 
 export function createCardLabelTexture(card, {
-  backgroundImagePath = DEFAULT_CARD_BACKGROUND_IMAGE_PATH,
+  backgroundImagePath = null,
   cardLabelLayout = null,
   statDisplayOverrides = null,
 } = {}) {
