@@ -1,6 +1,6 @@
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 import { CardMeshFactory } from '../render/CardMeshFactory.js';
-import { createCardLabelTexture, DEFAULT_CARD_BACKGROUND_IMAGE_PATH } from '../render/cardLabelTexture.js';
+import { createCardLabelTexture } from '../render/cardLabelTexture.js';
 import { CardPicker } from '../render/CardPicker.js';
 import { CardGameHttpClient } from '../net/httpClient.js';
 import { SINGLE_CARD_TEMPLATE } from '../templates/singleCardTemplate.js';
@@ -530,7 +530,7 @@ export class CardGameClient {
   refreshCardFace(card) {
     if (!card?.userData?.catalogCard || !card?.userData?.face) return;
     const texture = createCardLabelTexture(card.userData.catalogCard, {
-      backgroundImagePath: DEFAULT_CARD_BACKGROUND_IMAGE_PATH,
+      backgroundImagePath: '/public/assets/CardFront2.png',
       statDisplayOverrides: card.userData.statDisplayOverrides || null,
     });
     card.userData.face.material.map = texture;
@@ -568,7 +568,7 @@ export class CardGameClient {
 
     for (const cfg of this.template.initialCards) {
       const faceTexture = cfg.catalogCard
-        ? createCardLabelTexture(cfg.catalogCard, { backgroundImagePath: DEFAULT_CARD_BACKGROUND_IMAGE_PATH })
+        ? createCardLabelTexture(cfg.catalogCard, { backgroundImagePath: '/public/assets/CardFront2.png' })
         : null;
       const card = CardMeshFactory.createCard({
         id: cfg.id,
