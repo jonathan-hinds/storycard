@@ -173,9 +173,10 @@ export class CardRollerOverlay {
       if (!remoteRoll) return outcomes;
 
       roller.playRoll({ roll: remoteRoll.roll, sides: remoteRoll.sides || sides });
-      const outcome = await settled.promise;
+      await settled.promise;
+      const authoritativeOutcome = Number.isFinite(remoteRoll?.roll?.outcome) ? remoteRoll.roll.outcome : null;
       await this.pause(this.postSettleDelayMs);
-      this.applyOutcomeToCard(card.userData.cardId, rollType, outcome);
+      this.applyOutcomeToCard(card.userData.cardId, rollType, authoritativeOutcome);
       await this.pause(this.postUpdateDelayMs);
       outcomes.push({
         cardId: card.userData.cardId,
@@ -183,7 +184,7 @@ export class CardRollerOverlay {
         rollType,
         statValue,
         sides,
-        outcome,
+        outcome: authoritativeOutcome,
       });
     }
     return outcomes;
