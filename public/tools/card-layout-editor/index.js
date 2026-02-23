@@ -4,11 +4,14 @@ import { DEFAULT_CARD_BACKGROUND_IMAGE_PATH } from '/public/card-game/render/car
 const previewCanvas = document.getElementById('card-layout-editor-canvas');
 const previewContainer = document.getElementById('card-layout-preview');
 const controlsRoot = document.getElementById('layout-controls');
+const editorCardKind = document.body?.dataset.cardKind === 'spell' ? 'Spell' : 'Creature';
+const exportLayoutFor = editorCardKind.toLowerCase();
 
 const defaultCard = {
   id: 'layout-editor-default',
   name: 'Ember Warden',
   type: 'Fire',
+  cardKind: editorCardKind,
   damage: 'D8',
   health: 18,
   speed: 'D6',
@@ -290,10 +293,12 @@ function buildExportControls() {
   status.className = 'tools-slider-value';
 
   const getSerializedState = () => JSON.stringify({
+    layoutFor: exportLayoutFor,
     cardLabelLayout: editorState,
     preview: {
       name: previewCard.name,
       type: previewCard.type,
+      cardKind: previewCard.cardKind,
       meshColor: previewCard.meshColor,
       backgroundImagePath: selectedBackgroundImagePath || null,
       artworkImagePath: selectedArtworkImagePath || null,
@@ -310,11 +315,11 @@ function buildExportControls() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'card-layout.json';
+    anchor.download = `${exportLayoutFor}-card-layout.json`;
     anchor.click();
     URL.revokeObjectURL(url);
 
-    status.textContent = 'Exported card-layout.json.';
+    status.textContent = `Exported ${exportLayoutFor}-card-layout.json.`;
   });
 
   copyButton.addEventListener('click', async () => {

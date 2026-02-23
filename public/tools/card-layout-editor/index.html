@@ -6,7 +6,7 @@
     <title>Card Layout Editor</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="card-layout-editor">
+  <body data-page="card-layout-editor" data-card-kind="creature">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -25,7 +25,8 @@
           <li class="menu-item">
             <button class="menu-trigger" type="button">Tools</button>
             <ul class="flyout">
-              <li><a href="/public/tools/card-layout-editor/index.html">Card Layout Editor</a></li>
+              <li><a href="/public/tools/card-layout-editor/index.html">Creature Card Layout Editor</a></li>
+              <li><a href="/public/tools/spell-card-layout-editor/index.html">Spell Card Layout Editor</a></li>
               <li><a href="/public/tools/dice-uv-editor/index.html">Dice UV Editor</a></li>
             </ul>
           </li>
@@ -45,7 +46,7 @@
     <main class="layout tools-layout">
       <section class="controls tools-controls">
         <h1>Card Layout Editor</h1>
-        <p>Tune the position and size of text elements on a default creature card.</p>
+        <p>Tune the position and size of text elements on a default creature card layout.</p>
         <div id="layout-controls" class="tools-slider-grid"></div>
       </section>
 

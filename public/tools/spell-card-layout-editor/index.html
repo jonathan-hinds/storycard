@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Single Card Project Demo</title>
+    <title>Spell Card Layout Editor</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="single-card-project">
+  <body data-page="spell-card-layout-editor" data-card-kind="spell">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -43,33 +43,18 @@
       </nav>
     </header>
 
-    <main class="layout single-card-layout">
-      <section class="controls">
-        <h1>Single Card Sub Project</h1>
-        <p>
-          Demo scaffold for card interaction. Includes a two-sided board with 3 card slots plus a dedicated deck slot per side, a hand row,
-          hold-to-zoom preview, and drag-to-snap placement.
-        </p>
-
-        <div class="card">
-          <h2>Interaction</h2>
-          <p>
-            Hold your board/hand cards for an animated close-up, or drag and release to snap them into one of
-            your three side card slots. Deck slots are reserved for future draw animations and networked game flow.
-          </p>
-          <button id="single-card-reset" type="button" class="secondary-action">Reset demo</button>
-          <p>
-            Card preview now uses fixed tuning values for a consistent feel across the project.
-          </p>
-          <p id="single-card-status" class="debug-pill">Loading…</p>
-        </div>
+    <main class="layout tools-layout">
+      <section class="controls tools-controls">
+        <h1>Spell Card Layout Editor</h1>
+        <p>Tune the position and size of text elements on a default spell card layout.</p>
+        <div id="layout-controls" class="tools-slider-grid"></div>
       </section>
 
-      <section class="single-card-stage-wrap">
-        <canvas id="single-card-canvas" class="single-card-canvas" aria-label="Single card interaction canvas"></canvas>
+      <section id="card-layout-preview" class="cards-library-stage-wrap">
+        <canvas id="card-layout-editor-canvas" class="cards-library-canvas" aria-label="Spell card layout editor preview"></canvas>
       </section>
     </main>
 
-    <script type="module" src="/public/card/single-card/src/app.js"></script>
+    <script type="module" src="/public/tools/card-layout-editor/index.js"></script>
   </body>
 </html>
