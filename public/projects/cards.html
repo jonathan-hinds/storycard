@@ -17,6 +17,7 @@
             <ul class="flyout">
               <li><a href="/public/dice/index.html">Dice</a></li>
               <li><a href="/public/projects/cards.html">Cards</a></li>
+              <li><a href="/public/projects/abilities.html">Abilities</a></li>
               <li><a href="/public/card/single-card/index.html">Card / Single Card</a></li>
               <li><a href="/public/projects/phase-manager/index.html">Phase Manager</a></li>
             </ul>
@@ -67,6 +68,12 @@
 
           <label for="card-artwork-image">Artwork Image</label>
           <select id="card-artwork-image" name="artworkImagePath"></select>
+
+          <label for="card-ability-1">Ability Slot 1 (required)</label>
+          <select id="card-ability-1" name="ability1Id" required></select>
+
+          <label for="card-ability-2">Ability Slot 2 (optional)</label>
+          <select id="card-ability-2" name="ability2Id"></select>
 
           <button type="submit">Create Card</button>
           <button id="save-card-button" type="button" disabled>Save Card</button>

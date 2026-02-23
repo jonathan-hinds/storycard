@@ -1,5 +1,6 @@
 const CARD_TYPES = ['Nature', 'Fire', 'Water', 'Arcane'];
 const CARD_STAT_DICE = ['D6', 'D8', 'D12', 'D20'];
+const { listAbilitiesByIds } = require('../abilities-catalog/mongoStore');
 
 const DEFAULT_MONGO_URI = 'mongodb+srv://jonathandhd:Bluecow3@cluster0.fwdtteo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
@@ -83,9 +84,38 @@ function toCardRecord(document) {
     defense: document.defense,
     type: document.type,
     artworkImagePath: document.artworkImagePath ?? null,
+    ability1Id: document.ability1Id ?? null,
+    ability2Id: document.ability2Id ?? null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
   };
+}
+
+async function hydrateCardAbilities(cardRecords = []) {
+  const abilityIds = [
+    ...new Set(
+      cardRecords
+        .flatMap((card) => [card.ability1Id, card.ability2Id])
+        .filter((id) => typeof id === 'string' && id.trim()),
+    ),
+  ];
+
+  if (!abilityIds.length) {
+    return cardRecords.map((card) => ({
+      ...card,
+      ability1: null,
+      ability2: null,
+    }));
+  }
+
+  const abilities = await listAbilitiesByIds(abilityIds);
+  const abilityById = new Map(abilities.map((ability) => [ability.id, ability]));
+
+  return cardRecords.map((card) => ({
+    ...card,
+    ability1: card.ability1Id ? abilityById.get(card.ability1Id) ?? null : null,
+    ability2: card.ability2Id ? abilityById.get(card.ability2Id) ?? null : null,
+  }));
 }
 
 function normalizeInteger(value, fieldName) {
@@ -136,6 +166,9 @@ function validateCardInput(input = {}) {
     throw new Error(`type must be one of: ${CARD_TYPES.join(', ')}`);
   }
 
+  const ability1Id = typeof input.ability1Id === 'string' ? input.ability1Id.trim() : '';
+  const ability2Id = typeof input.ability2Id === 'string' ? input.ability2Id.trim() : '';
+
   return {
     name,
     damage: normalizeDieValue(input.damage, 'damage'),
@@ -144,20 +177,42 @@ function validateCardInput(input = {}) {
     defense: normalizeDieValue(input.defense, 'defense'),
     type,
     artworkImagePath: normalizeArtworkImagePath(input.artworkImagePath),
+    ability1Id,
+    ability2Id: ability2Id || null,
   };
+}
+
+async function validateAbilityReferences(validatedCardInput) {
+  if (!validatedCardInput.ability1Id) {
+    throw new Error('ability1Id is required');
+  }
+
+  if (validatedCardInput.ability2Id && validatedCardInput.ability1Id === validatedCardInput.ability2Id) {
+    throw new Error('ability1Id and ability2Id must be different when both are set');
+  }
+
+  const requiredAbilityIds = [validatedCardInput.ability1Id, validatedCardInput.ability2Id].filter(Boolean);
+  const abilities = await listAbilitiesByIds(requiredAbilityIds);
+  const abilityIdSet = new Set(abilities.map((ability) => ability.id));
+  const missingIds = requiredAbilityIds.filter((abilityId) => !abilityIdSet.has(abilityId));
+
+  if (missingIds.length) {
+    throw new Error(`Unknown abilities: ${missingIds.join(', ')}`);
+  }
 }
 
 async function listCards() {
   await ensureLegacyStatsMigrated();
   const collection = await getCollection();
   const docs = await collection.find({}).sort({ createdAt: -1, _id: -1 }).toArray();
-  return docs.map(toCardRecord);
+  return hydrateCardAbilities(docs.map(toCardRecord));
 }
 
 async function createCard(input = {}) {
   await ensureLegacyStatsMigrated();
   const collection = await getCollection();
   const validated = validateCardInput(input);
+  await validateAbilityReferences(validated);
   const cardToInsert = {
     ...validated,
     createdAt: new Date().toISOString(),
@@ -165,13 +220,15 @@ async function createCard(input = {}) {
 
   const result = await collection.insertOne(cardToInsert);
   const inserted = await collection.findOne({ _id: result.insertedId });
-  return toCardRecord(inserted);
+  const [hydratedCard] = await hydrateCardAbilities([toCardRecord(inserted)]);
+  return hydratedCard;
 }
 
 async function updateCard(cardId, input = {}) {
   await ensureLegacyStatsMigrated();
   const collection = await getCollection();
   const validated = validateCardInput(input);
+  await validateAbilityReferences(validated);
   const { ObjectId } = getMongoClientConstructor();
 
   if (!ObjectId.isValid(cardId)) {
@@ -193,7 +250,8 @@ async function updateCard(cardId, input = {}) {
   }
 
   const updatedCard = await collection.findOne({ _id: new ObjectId(cardId) });
-  return toCardRecord(updatedCard);
+  const [hydratedCard] = await hydrateCardAbilities([toCardRecord(updatedCard)]);
+  return hydratedCard;
 }
 
 module.exports = {

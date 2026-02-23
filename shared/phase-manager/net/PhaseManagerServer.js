@@ -76,6 +76,11 @@ class PhaseManagerServer {
           health: 10,
           speed: 'D6',
           defense: 'D6',
+          ability1: {
+            cost: '1',
+            name: 'Prototype Strike',
+            description: 'Placeholder ability.',
+          },
           meshColor: DEFAULT_MESH_COLOR,
         }),
         summonedTurn: null,

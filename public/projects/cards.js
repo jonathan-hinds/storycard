@@ -1,4 +1,5 @@
 import { CardLibraryScene } from '/public/projects/card-library/CardLibraryScene.js';
+import { formatAbilityOptionLabel } from '/public/projects/abilities/abilityControls.js';
 
 const form = document.getElementById('create-card-form');
 const status = document.getElementById('create-card-status');
@@ -9,6 +10,8 @@ const speedSelect = document.getElementById('card-speed');
 const defenseSelect = document.getElementById('card-defense');
 const saveCardButton = document.getElementById('save-card-button');
 const artworkImageSelect = document.getElementById('card-artwork-image');
+const ability1Select = document.getElementById('card-ability-1');
+const ability2Select = document.getElementById('card-ability-2');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
 const GRID_LAYOUT_DEFAULTS = Object.freeze({
@@ -49,6 +52,7 @@ const PREVIEW_CLOSENESS_BY_VIEWPORT = Object.freeze({
 let cardLibraryScene;
 let selectedCardId = null;
 let cardsCache = [];
+let abilitiesCache = [];
 
 function getDynamicPreviewZMax(baseMax) {
   const cameraDistance = cardLibraryScene?.camera?.position?.z;
@@ -103,6 +107,8 @@ cardLibraryScene = new CardLibraryScene({
     form.elements.defense.value = card.defense ?? '';
     typeSelect.value = card.type;
     artworkImageSelect.value = card.artworkImagePath ?? '';
+    ability1Select.value = card.ability1Id ?? '';
+    ability2Select.value = card.ability2Id ?? '';
     saveCardButton.disabled = false;
     setStatus(`Editing "${card.name}". Update fields and click Save Card.`);
   },
@@ -133,6 +139,55 @@ function buildArtworkSelectOptions(assets = []) {
   }
 
   artworkImageSelect.value = currentValue;
+}
+
+
+function buildAbilitySelectOptions(abilities = []) {
+  const currentAbility1 = ability1Select.value;
+  const currentAbility2 = ability2Select.value;
+
+  ability1Select.innerHTML = '';
+  ability2Select.innerHTML = '';
+
+  const ability1Placeholder = document.createElement('option');
+  ability1Placeholder.value = '';
+  ability1Placeholder.textContent = 'Select Ability Slot 1';
+  ability1Placeholder.disabled = true;
+  ability1Placeholder.selected = true;
+  ability1Select.append(ability1Placeholder);
+
+  const ability2None = document.createElement('option');
+  ability2None.value = '';
+  ability2None.textContent = 'No ability in slot 2';
+  ability2Select.append(ability2None);
+
+  abilities.forEach((ability) => {
+    const option1 = document.createElement('option');
+    option1.value = ability.id;
+    option1.textContent = formatAbilityOptionLabel(ability);
+    ability1Select.append(option1);
+
+    const option2 = document.createElement('option');
+    option2.value = ability.id;
+    option2.textContent = formatAbilityOptionLabel(ability);
+    ability2Select.append(option2);
+  });
+
+  if (currentAbility1 && abilities.some((ability) => ability.id === currentAbility1)) {
+    ability1Select.value = currentAbility1;
+  }
+
+  if (currentAbility2 && abilities.some((ability) => ability.id === currentAbility2)) {
+    ability2Select.value = currentAbility2;
+  }
+}
+
+async function fetchAbilities() {
+  const response = await fetch('/api/projects/abilities');
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Unable to load abilities');
+  abilitiesCache = Array.isArray(payload.abilities) ? payload.abilities : [];
+  buildAbilitySelectOptions(abilitiesCache);
 }
 
 async function fetchArtworkAssets() {
@@ -177,6 +232,8 @@ function resetFormToCreateMode() {
   saveCardButton.disabled = true;
   form.reset();
   artworkImageSelect.value = '';
+  ability1Select.value = '';
+  ability2Select.value = '';
 }
 
 function setStatus(message, isError = false) {
@@ -187,7 +244,7 @@ function setStatus(message, isError = false) {
 async function fetchCards() {
   setStatus('Loading cards...');
   try {
-    await fetchArtworkAssets();
+    await Promise.all([fetchArtworkAssets(), fetchAbilities()]);
     const response = await fetch('/api/projects/cards');
     const payload = await response.json();
 
@@ -235,6 +292,8 @@ form.addEventListener('submit', async (event) => {
     defense: formData.get('defense'),
     type: formData.get('type'),
     artworkImagePath: formData.get('artworkImagePath') || null,
+    ability1Id: formData.get('ability1Id'),
+    ability2Id: formData.get('ability2Id') || null,
   };
 
   setStatus('Saving card...');
@@ -274,6 +333,8 @@ saveCardButton.addEventListener('click', async () => {
     defense: formData.get('defense'),
     type: formData.get('type'),
     artworkImagePath: formData.get('artworkImagePath') || null,
+    ability1Id: formData.get('ability1Id'),
+    ability2Id: formData.get('ability2Id') || null,
   };
 
   setStatus('Updating card...');
@@ -301,6 +362,8 @@ saveCardButton.addEventListener('click', async () => {
       form.elements.defense.value = updatedCard.defense ?? '';
       typeSelect.value = updatedCard.type;
       artworkImageSelect.value = updatedCard.artworkImagePath ?? '';
+      ability1Select.value = updatedCard.ability1Id ?? '';
+      ability2Select.value = updatedCard.ability2Id ?? '';
     }
   } catch (error) {
     setStatus(error.message, true);

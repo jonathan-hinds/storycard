@@ -435,6 +435,13 @@ button {
   display: block;
 }
 
+
+.cards-list-grid {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
 .catalog-card {
   background: #202636;
   border: 1px solid #3f4b67;

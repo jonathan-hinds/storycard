@@ -14,6 +14,11 @@ const {
   createCard: createCatalogCard,
   updateCard: updateCatalogCard,
 } = require('./shared/cards-catalog/mongoStore');
+const {
+  listAbilities: listCatalogAbilities,
+  createAbility: createCatalogAbility,
+  updateAbility: updateCatalogAbility,
+} = require('./shared/abilities-catalog/mongoStore');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -184,6 +189,46 @@ async function handleApi(req, res, pathname) {
     return true;
   }
 
+
+  if (req.method === 'GET' && pathname === '/api/projects/abilities') {
+    try {
+      const abilities = await listCatalogAbilities();
+      sendJson(res, 200, { abilities });
+    } catch (error) {
+      sendJson(res, 500, { error: 'Unable to load abilities from database' });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/projects/abilities') {
+    try {
+      const body = await readRequestJson(req);
+      const ability = await createCatalogAbility(body);
+      sendJson(res, 201, { ability });
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('required');
+      sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create ability' });
+    }
+    return true;
+  }
+
+  const catalogAbilityMatch = pathname.match(/^\/api\/projects\/abilities\/([^/]+)$/);
+  if (req.method === 'PUT' && catalogAbilityMatch) {
+    try {
+      const body = await readRequestJson(req);
+      const ability = await updateCatalogAbility(catalogAbilityMatch[1], body);
+      sendJson(res, 200, { ability });
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('required');
+      const isNotFound = error.message === 'Ability not found';
+      const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
+      sendJson(res, statusCode, { error: error.message || 'Unable to update ability' });
+    }
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/projects/cards') {
     try {
       const cards = await listCatalogCards();
@@ -204,7 +249,10 @@ async function handleApi(req, res, pathname) {
         error.message.includes('required')
         || error.message.includes('must be an integer')
         || error.message.includes('must be one of')
-        || error.message.includes('artworkImagePath must');
+        || error.message.includes('artworkImagePath must')
+        || error.message.includes('ability1Id')
+        || error.message.includes('ability2Id')
+        || error.message.includes('Unknown abilities');
       sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create card' });
     }
     return true;
@@ -221,7 +269,10 @@ async function handleApi(req, res, pathname) {
         error.message.includes('required')
         || error.message.includes('must be an integer')
         || error.message.includes('must be one of')
-        || error.message.includes('artworkImagePath must');
+        || error.message.includes('artworkImagePath must')
+        || error.message.includes('ability1Id')
+        || error.message.includes('ability2Id')
+        || error.message.includes('Unknown abilities');
       const isNotFound = error.message === 'Card not found';
       const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to update card' });
