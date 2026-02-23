@@ -18,6 +18,31 @@ export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
   health: Object.freeze({ x: 202, y: 114, size: 0.85, boxWidth: 264, boxHeight: 216, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 100, textColor: '#ffffff' }),
   speed: Object.freeze({ x: 512, y: 802, size: 0.85, boxWidth: 266, boxHeight: 217, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 120, textColor: '#ffffff', iconWidth: 200, iconHeight: 175, iconOffsetX: 0, iconOffsetY: 0 }),
   defense: Object.freeze({ x: 854, y: 802, size: 0.85, boxWidth: 265, boxHeight: 217, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 120, textColor: '#ffffff', iconWidth: 200, iconHeight: 175, iconOffsetX: 0, iconOffsetY: 0 }),
+  abilityBanner: Object.freeze({
+    x: 512,
+    y: 706,
+    size: 1,
+    boxWidth: 760,
+    boxHeight: 120,
+    boxBevel: 12,
+    backgroundOpacity: 0.85,
+    backgroundColor: '#121828',
+    textColor: '#ffffff',
+    costSize: 40,
+    costOffsetX: -316,
+    costOffsetY: -4,
+    costAlign: 'center',
+    nameSize: 38,
+    nameOffsetX: -200,
+    nameOffsetY: -10,
+    nameAlign: 'left',
+    descriptionSize: 24,
+    descriptionOffsetX: -200,
+    descriptionOffsetY: 30,
+    descriptionAlign: 'left',
+  }),
+  ability1: Object.freeze({ x: 0, y: 0 }),
+  ability2: Object.freeze({ x: 0, y: 138 }),
 });
 
 const dieIconCache = new Map();
@@ -79,6 +104,58 @@ function drawGradientFallback(ctx) {
     drawRoundedRect(ctx, 42 + index * 8, 42 + index * 8, 940 - index * 16, 940 - index * 16, 28);
     ctx.fill();
   }
+}
+
+function drawAbilityBanner(ctx, abilityLayout, anchor, ability) {
+  if (!ability) return;
+  const cost = String(ability.cost ?? '').trim();
+  const name = String(ability.name ?? '').trim();
+  const description = String(ability.description ?? '').trim();
+  if (!cost && !name && !description) return;
+
+  const width = abilityLayout.boxWidth * abilityLayout.size;
+  const height = abilityLayout.boxHeight * abilityLayout.size;
+  const left = anchor.x - (width / 2);
+  const top = anchor.y - (height / 2);
+
+  const bannerColor = abilityLayout.backgroundColor || '#121828';
+  const r = Number.parseInt(bannerColor.slice(1, 3), 16);
+  const g = Number.parseInt(bannerColor.slice(3, 5), 16);
+  const b = Number.parseInt(bannerColor.slice(5, 7), 16);
+  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${abilityLayout.backgroundOpacity})`;
+  drawRoundedRect(ctx, left, top, width, height, abilityLayout.boxBevel * abilityLayout.size);
+  ctx.fill();
+
+  const drawText = ({ text, size, offsetX, offsetY, align }) => {
+    if (!text) return;
+    ctx.fillStyle = abilityLayout.textColor;
+    ctx.textAlign = align;
+    ctx.font = `600 ${Math.round(size * abilityLayout.size)}px Inter, system-ui, sans-serif`;
+    const maxWidth = Math.max(120, width - 60);
+    ctx.fillText(text, anchor.x + (offsetX * abilityLayout.size), anchor.y + (offsetY * abilityLayout.size), maxWidth);
+  };
+
+  drawText({
+    text: cost,
+    size: abilityLayout.costSize,
+    offsetX: abilityLayout.costOffsetX,
+    offsetY: abilityLayout.costOffsetY,
+    align: abilityLayout.costAlign,
+  });
+  drawText({
+    text: name,
+    size: abilityLayout.nameSize,
+    offsetX: abilityLayout.nameOffsetX,
+    offsetY: abilityLayout.nameOffsetY,
+    align: abilityLayout.nameAlign,
+  });
+  drawText({
+    text: description,
+    size: abilityLayout.descriptionSize,
+    offsetX: abilityLayout.descriptionOffsetX,
+    offsetY: abilityLayout.descriptionOffsetY,
+    align: abilityLayout.descriptionAlign,
+  });
 }
 
 export function createCardLabelTexture(card, {
@@ -183,6 +260,18 @@ export function createCardLabelTexture(card, {
       }
       ctx.fillText(String(resolvedValue ?? '-'), left + width / 2, top + (188 * elementLayout.size));
     });
+
+    const abilityBannerLayout = cardLabelLayout.abilityBanner ?? DEFAULT_CARD_LABEL_LAYOUT.abilityBanner;
+    const ability1Offset = cardLabelLayout.ability1 ?? DEFAULT_CARD_LABEL_LAYOUT.ability1;
+    const ability2Offset = cardLabelLayout.ability2 ?? DEFAULT_CARD_LABEL_LAYOUT.ability2;
+    drawAbilityBanner(ctx, abilityBannerLayout, {
+      x: abilityBannerLayout.x + ability1Offset.x,
+      y: abilityBannerLayout.y + ability1Offset.y,
+    }, card.ability1);
+    drawAbilityBanner(ctx, abilityBannerLayout, {
+      x: abilityBannerLayout.x + ability2Offset.x,
+      y: abilityBannerLayout.y + ability2Offset.y,
+    }, card.ability2);
 
     texture.needsUpdate = true;
   };

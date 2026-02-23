@@ -14,9 +14,19 @@ const defaultCard = {
   speed: 'D6',
   defense: 'D12',
   meshColor: '#000000',
+  ability1: {
+    cost: '2',
+    name: 'Flame Lash',
+    description: 'Deal 3 fire damage.',
+  },
+  ability2: {
+    cost: '4',
+    name: 'Blazing Guard',
+    description: 'Gain +2 defense this turn.',
+  },
 };
 
-const previewCard = { ...defaultCard };
+const previewCard = structuredClone(defaultCard);
 const imageCache = new Map();
 let selectedBackgroundImagePath = DEFAULT_CARD_BACKGROUND_IMAGE_PATH;
 let selectedArtworkImagePath = '';
@@ -177,6 +187,38 @@ function buildAlignmentControl({ elementKey, label }) {
   return row;
 }
 
+function buildCustomAlignmentControl({ elementKey, prop, label }) {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+  valueLabel.textContent = label;
+
+  const select = document.createElement('select');
+  select.className = 'tools-select';
+
+  [
+    { value: 'left', text: 'Left' },
+    { value: 'center', text: 'Center' },
+    { value: 'right', text: 'Right' },
+  ].forEach((optionDef) => {
+    const option = document.createElement('option');
+    option.value = optionDef.value;
+    option.textContent = optionDef.text;
+    select.append(option);
+  });
+
+  select.value = editorState[elementKey][prop];
+  select.addEventListener('change', () => {
+    editorState[elementKey][prop] = select.value;
+    scene.setCardLabelLayout(editorState);
+  });
+
+  row.append(valueLabel, select);
+  return row;
+}
+
 function buildTextInputControl({ cardProp, label }) {
   const row = document.createElement('label');
   row.className = 'tools-slider-row';
@@ -192,6 +234,31 @@ function buildTextInputControl({ cardProp, label }) {
 
   input.addEventListener('input', () => {
     previewCard[cardProp] = input.value || defaultCard[cardProp];
+    scene.setCards([previewCard]);
+  });
+
+  row.append(valueLabel, input);
+  return row;
+}
+
+function buildAbilityTextInputControl({ abilityKey, field, label }) {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+  valueLabel.textContent = label;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = previewCard[abilityKey][field];
+  input.placeholder = `Enter ${label.toLowerCase()}`;
+
+  input.addEventListener('input', () => {
+    previewCard[abilityKey] = {
+      ...previewCard[abilityKey],
+      [field]: input.value || defaultCard[abilityKey][field],
+    };
     scene.setCards([previewCard]);
   });
 
@@ -230,6 +297,8 @@ function buildExportControls() {
       meshColor: previewCard.meshColor,
       backgroundImagePath: selectedBackgroundImagePath || null,
       artworkImagePath: selectedArtworkImagePath || null,
+      ability1: previewCard.ability1,
+      ability2: previewCard.ability2,
     },
   }, null, 2);
 
@@ -397,6 +466,12 @@ textPreviewGroup.append(textPreviewHeading);
 textPreviewGroup.append(
   buildTextInputControl({ cardProp: 'name', label: 'Name Text' }),
   buildTextInputControl({ cardProp: 'type', label: 'Type Text' }),
+  buildAbilityTextInputControl({ abilityKey: 'ability1', field: 'cost', label: 'Ability 1 Cost' }),
+  buildAbilityTextInputControl({ abilityKey: 'ability1', field: 'name', label: 'Ability 1 Name' }),
+  buildAbilityTextInputControl({ abilityKey: 'ability1', field: 'description', label: 'Ability 1 Description' }),
+  buildAbilityTextInputControl({ abilityKey: 'ability2', field: 'cost', label: 'Ability 2 Cost' }),
+  buildAbilityTextInputControl({ abilityKey: 'ability2', field: 'name', label: 'Ability 2 Name' }),
+  buildAbilityTextInputControl({ abilityKey: 'ability2', field: 'description', label: 'Ability 2 Description' }),
   buildMeshColorControl(),
   buildBackgroundSelectControl(),
   buildArtworkSelectControl(),
@@ -417,6 +492,49 @@ artworkGroup.append(
   buildSlider({ elementKey: 'artwork', prop: 'height', label: 'Height', min: 80, max: 900, step: 1 }),
 );
 controlsRoot.append(artworkGroup);
+
+const abilityBannerGroup = document.createElement('div');
+abilityBannerGroup.className = 'card tools-group';
+const abilityBannerHeading = document.createElement('h2');
+abilityBannerHeading.textContent = 'Ability Banner (generic style)';
+abilityBannerGroup.append(abilityBannerHeading);
+abilityBannerGroup.append(
+  buildSlider({ elementKey: 'abilityBanner', prop: 'x', label: 'Banner Left / Right', min: 120, max: 904, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'y', label: 'Banner Up / Down', min: 110, max: 930, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'size', label: 'Banner Scale', min: 0.4, max: 1.6, step: 0.01 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'boxWidth', label: 'Banner Width', min: 180, max: 920, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'boxHeight', label: 'Banner Height', min: 60, max: 260, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'boxBevel', label: 'Banner Corner Radius', min: 0, max: 80, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'backgroundOpacity', label: 'Banner Opacity', min: 0, max: 1, step: 0.01 }),
+  buildColorControl({ elementKey: 'abilityBanner', label: 'Banner Color', prop: 'backgroundColor' }),
+  buildColorControl({ elementKey: 'abilityBanner', label: 'Font Color', prop: 'textColor' }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'costOffsetX', label: 'Cost Left / Right', min: -440, max: 440, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'costOffsetY', label: 'Cost Up / Down', min: -120, max: 120, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'costSize', label: 'Cost Size', min: 12, max: 84, step: 1 }),
+  buildCustomAlignmentControl({ elementKey: 'abilityBanner', prop: 'costAlign', label: 'Cost Alignment' }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'nameOffsetX', label: 'Name Left / Right', min: -440, max: 440, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'nameOffsetY', label: 'Name Up / Down', min: -120, max: 120, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'nameSize', label: 'Name Size', min: 12, max: 84, step: 1 }),
+  buildCustomAlignmentControl({ elementKey: 'abilityBanner', prop: 'nameAlign', label: 'Name Alignment' }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'descriptionOffsetX', label: 'Description Left / Right', min: -440, max: 440, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'descriptionOffsetY', label: 'Description Up / Down', min: -120, max: 120, step: 1 }),
+  buildSlider({ elementKey: 'abilityBanner', prop: 'descriptionSize', label: 'Description Size', min: 10, max: 60, step: 1 }),
+  buildCustomAlignmentControl({ elementKey: 'abilityBanner', prop: 'descriptionAlign', label: 'Description Alignment' }),
+);
+controlsRoot.append(abilityBannerGroup);
+
+const abilityPositionsGroup = document.createElement('div');
+abilityPositionsGroup.className = 'card tools-group';
+const abilityPositionsHeading = document.createElement('h2');
+abilityPositionsHeading.textContent = 'Ability Positions';
+abilityPositionsGroup.append(abilityPositionsHeading);
+abilityPositionsGroup.append(
+  buildSlider({ elementKey: 'ability1', prop: 'x', label: 'Ability 1 Offset Left / Right', min: -440, max: 440, step: 1 }),
+  buildSlider({ elementKey: 'ability1', prop: 'y', label: 'Ability 1 Offset Up / Down', min: -260, max: 260, step: 1 }),
+  buildSlider({ elementKey: 'ability2', prop: 'x', label: 'Ability 2 Offset Left / Right', min: -440, max: 440, step: 1 }),
+  buildSlider({ elementKey: 'ability2', prop: 'y', label: 'Ability 2 Offset Up / Down', min: -260, max: 260, step: 1 }),
+);
+controlsRoot.append(abilityPositionsGroup);
 
 sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, supportsStatBoxStyle }) => {
   const group = document.createElement('div');
