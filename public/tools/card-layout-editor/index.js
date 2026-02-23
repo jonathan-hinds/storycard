@@ -1,4 +1,5 @@
 import { CardLibraryScene, DEFAULT_CARD_LABEL_LAYOUT } from '/public/projects/card-library/CardLibraryScene.js';
+import { DEFAULT_CARD_BACKGROUND_IMAGE_PATH } from '/public/card-game/render/cardLabelTexture.js';
 
 const previewCanvas = document.getElementById('card-layout-editor-canvas');
 const previewContainer = document.getElementById('card-layout-preview');
@@ -17,7 +18,7 @@ const defaultCard = {
 
 const previewCard = { ...defaultCard };
 const imageCache = new Map();
-let selectedBackgroundImagePath = '/public/assets/CardFront2hole.png';
+let selectedBackgroundImagePath = DEFAULT_CARD_BACKGROUND_IMAGE_PATH;
 let selectedArtworkImagePath = '';
 
 const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUT);
