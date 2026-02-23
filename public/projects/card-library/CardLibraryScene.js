@@ -165,6 +165,44 @@ function normalizeCardLabelLayout(cardLabelLayout = {}) {
     health: normalizeLabelElementLayout(cardLabelLayout.health, DEFAULT_CARD_LABEL_LAYOUT.health),
     speed: normalizeLabelElementLayout(cardLabelLayout.speed, DEFAULT_CARD_LABEL_LAYOUT.speed),
     defense: normalizeLabelElementLayout(cardLabelLayout.defense, DEFAULT_CARD_LABEL_LAYOUT.defense),
+    abilityBanner: normalizeAbilityBannerLayout(cardLabelLayout.abilityBanner, DEFAULT_CARD_LABEL_LAYOUT.abilityBanner),
+    ability1: normalizeAbilityAnchorLayout(cardLabelLayout.ability1, DEFAULT_CARD_LABEL_LAYOUT.ability1),
+    ability2: normalizeAbilityAnchorLayout(cardLabelLayout.ability2, DEFAULT_CARD_LABEL_LAYOUT.ability2),
+  };
+}
+
+function normalizeAbilityBannerLayout(layout, fallback) {
+  return {
+    x: Number.isFinite(layout?.x) ? layout.x : fallback.x,
+    y: Number.isFinite(layout?.y) ? layout.y : fallback.y,
+    size: Number.isFinite(layout?.size) ? Math.max(0.25, layout.size) : fallback.size,
+    boxWidth: Number.isFinite(layout?.boxWidth) ? Math.max(120, layout.boxWidth) : fallback.boxWidth,
+    boxHeight: Number.isFinite(layout?.boxHeight) ? Math.max(40, layout.boxHeight) : fallback.boxHeight,
+    boxBevel: Number.isFinite(layout?.boxBevel) ? Math.max(0, layout.boxBevel) : fallback.boxBevel,
+    backgroundOpacity: Number.isFinite(layout?.backgroundOpacity)
+      ? THREE.MathUtils.clamp(layout.backgroundOpacity, 0, 1)
+      : fallback.backgroundOpacity,
+    backgroundColor: normalizeTextColor(layout?.backgroundColor, fallback.backgroundColor),
+    textColor: normalizeTextColor(layout?.textColor, fallback.textColor),
+    costSize: Number.isFinite(layout?.costSize) ? Math.max(8, layout.costSize) : fallback.costSize,
+    costOffsetX: Number.isFinite(layout?.costOffsetX) ? layout.costOffsetX : fallback.costOffsetX,
+    costOffsetY: Number.isFinite(layout?.costOffsetY) ? layout.costOffsetY : fallback.costOffsetY,
+    costAlign: normalizeTextAlign(layout?.costAlign, fallback.costAlign),
+    nameSize: Number.isFinite(layout?.nameSize) ? Math.max(8, layout.nameSize) : fallback.nameSize,
+    nameOffsetX: Number.isFinite(layout?.nameOffsetX) ? layout.nameOffsetX : fallback.nameOffsetX,
+    nameOffsetY: Number.isFinite(layout?.nameOffsetY) ? layout.nameOffsetY : fallback.nameOffsetY,
+    nameAlign: normalizeTextAlign(layout?.nameAlign, fallback.nameAlign),
+    descriptionSize: Number.isFinite(layout?.descriptionSize) ? Math.max(8, layout.descriptionSize) : fallback.descriptionSize,
+    descriptionOffsetX: Number.isFinite(layout?.descriptionOffsetX) ? layout.descriptionOffsetX : fallback.descriptionOffsetX,
+    descriptionOffsetY: Number.isFinite(layout?.descriptionOffsetY) ? layout.descriptionOffsetY : fallback.descriptionOffsetY,
+    descriptionAlign: normalizeTextAlign(layout?.descriptionAlign, fallback.descriptionAlign),
+  };
+}
+
+function normalizeAbilityAnchorLayout(layout, fallback) {
+  return {
+    x: Number.isFinite(layout?.x) ? layout.x : fallback.x,
+    y: Number.isFinite(layout?.y) ? layout.y : fallback.y,
   };
 }
 
