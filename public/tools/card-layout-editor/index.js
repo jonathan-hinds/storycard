@@ -1,18 +1,23 @@
-import { CardLibraryScene, DEFAULT_CARD_LABEL_LAYOUT } from '/public/projects/card-library/CardLibraryScene.js';
-import { DEFAULT_CARD_BACKGROUND_IMAGE_PATH } from '/public/card-game/render/cardLabelTexture.js';
+import { CardLibraryScene } from '/public/projects/card-library/CardLibraryScene.js';
+import {
+  CARD_KINDS,
+  DEFAULT_CARD_LABEL_LAYOUTS,
+  getDefaultCardBackgroundImagePath,
+  resolveCardKind,
+} from '/public/card-game/render/cardStyleConfig.js';
 
 const previewCanvas = document.getElementById('card-layout-editor-canvas');
 const previewContainer = document.getElementById('card-layout-preview');
 const controlsRoot = document.getElementById('layout-controls');
-const editorCardKind = document.body?.dataset.cardKind === 'spell' ? 'Spell' : 'Creature';
+const editorCardKind = document.body?.dataset.cardKind === 'spell' ? CARD_KINDS.SPELL : CARD_KINDS.CREATURE;
 const exportLayoutFor = editorCardKind.toLowerCase();
 
-const defaultCard = editorCardKind === 'Spell'
+const defaultCard = editorCardKind === CARD_KINDS.SPELL
   ? {
     id: 'layout-editor-default',
     name: 'Arc Light',
     type: 'Arcane',
-    cardKind: 'Spell',
+    cardKind: CARD_KINDS.SPELL,
     damage: 'D12',
     health: 0,
     speed: 'D6',
@@ -33,7 +38,7 @@ const defaultCard = editorCardKind === 'Spell'
     id: 'layout-editor-default',
     name: 'Ember Warden',
     type: 'Fire',
-    cardKind: 'Creature',
+    cardKind: CARD_KINDS.CREATURE,
     damage: 'D8',
     health: 18,
     speed: 'D6',
@@ -53,10 +58,10 @@ const defaultCard = editorCardKind === 'Spell'
 
 const previewCard = structuredClone(defaultCard);
 const imageCache = new Map();
-let selectedBackgroundImagePath = DEFAULT_CARD_BACKGROUND_IMAGE_PATH;
+let selectedBackgroundImagePath = getDefaultCardBackgroundImagePath(editorCardKind);
 let selectedArtworkImagePath = '';
 
-const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUT);
+const editorState = structuredClone(DEFAULT_CARD_LABEL_LAYOUTS[resolveCardKind(editorCardKind)]);
 
 const scene = new CardLibraryScene({
   canvas: previewCanvas,
@@ -116,20 +121,14 @@ const updatePreviewArtwork = async (assetPath) => {
   }
 };
 
-const sections = editorCardKind === 'Spell'
-  ? [
-    { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
-    { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1, supportsTextStyle: true },
-    { key: 'damage', label: 'Effectiveness (EFCT)', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-  ]
-  : [
-    { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
-    { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1, supportsTextStyle: true },
-    { key: 'damage', label: 'Attack', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-    { key: 'health', label: 'Health', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-    { key: 'speed', label: 'Speed', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-    { key: 'defense', label: 'Defense', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-  ];
+const sections = [
+  { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
+  { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1, supportsTextStyle: true },
+  { key: 'damage', label: editorCardKind === CARD_KINDS.SPELL ? 'Effectiveness (EFCT)' : 'Attack', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+  { key: 'health', label: 'Health', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+  { key: 'speed', label: 'Speed', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+  { key: 'defense', label: 'Defense', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+];
 
 function buildSlider({ elementKey, prop, label, min, max, step }) {
   const row = document.createElement('label');
@@ -150,7 +149,7 @@ function buildSlider({ elementKey, prop, label, min, max, step }) {
     editorState[elementKey][prop] = numericValue;
     const precision = step < 1 ? 2 : 0;
     valueLabel.textContent = `${label}: ${numericValue.toFixed(precision)}`;
-    scene.setCardLabelLayout(editorState);
+    scene.setCardLabelLayout(editorState, editorCardKind);
   };
 
   input.addEventListener('input', syncValue);
@@ -175,7 +174,7 @@ function buildColorControl({ elementKey, label, prop = 'color' }) {
   const syncValue = () => {
     editorState[elementKey][prop] = input.value;
     valueLabel.textContent = `${label}: ${input.value.toUpperCase()}`;
-    scene.setCardLabelLayout(editorState);
+    scene.setCardLabelLayout(editorState, editorCardKind);
   };
 
   input.addEventListener('input', syncValue);
@@ -211,7 +210,7 @@ function buildAlignmentControl({ elementKey, label }) {
   select.value = editorState[elementKey].align;
   select.addEventListener('change', () => {
     editorState[elementKey].align = select.value;
-    scene.setCardLabelLayout(editorState);
+    scene.setCardLabelLayout(editorState, editorCardKind);
   });
 
   row.append(valueLabel, select);
@@ -243,7 +242,7 @@ function buildCustomAlignmentControl({ elementKey, prop, label }) {
   select.value = editorState[elementKey][prop];
   select.addEventListener('change', () => {
     editorState[elementKey][prop] = select.value;
-    scene.setCardLabelLayout(editorState);
+    scene.setCardLabelLayout(editorState, editorCardKind);
   });
 
   row.append(valueLabel, select);

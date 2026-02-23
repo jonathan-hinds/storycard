@@ -1,6 +1,7 @@
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 import { CardMeshFactory } from '/public/card-game/render/CardMeshFactory.js';
 import { createCardLabelTexture, DEFAULT_CARD_LABEL_LAYOUT } from '/public/card-game/render/cardLabelTexture.js';
+import { CARD_KINDS, DEFAULT_CARD_LABEL_LAYOUTS, resolveCardKind } from '/public/card-game/render/cardStyleConfig.js';
 import {
   PREVIEW_HOLD_DELAY_MS,
   PREVIEW_BASE_POSITION,
@@ -156,18 +157,26 @@ function normalizeLabelElementLayout(layout, fallback) {
   return normalizedLayout;
 }
 
-function normalizeCardLabelLayout(cardLabelLayout = {}) {
+function normalizeCardLabelLayout(cardLabelLayout = {}, fallbackLayout = DEFAULT_CARD_LABEL_LAYOUT) {
   return {
-    name: normalizeLabelElementLayout(cardLabelLayout.name, DEFAULT_CARD_LABEL_LAYOUT.name),
-    artwork: normalizeArtworkLayout(cardLabelLayout.artwork, DEFAULT_CARD_LABEL_LAYOUT.artwork),
-    type: normalizeLabelElementLayout(cardLabelLayout.type, DEFAULT_CARD_LABEL_LAYOUT.type),
-    damage: normalizeLabelElementLayout(cardLabelLayout.damage, DEFAULT_CARD_LABEL_LAYOUT.damage),
-    health: normalizeLabelElementLayout(cardLabelLayout.health, DEFAULT_CARD_LABEL_LAYOUT.health),
-    speed: normalizeLabelElementLayout(cardLabelLayout.speed, DEFAULT_CARD_LABEL_LAYOUT.speed),
-    defense: normalizeLabelElementLayout(cardLabelLayout.defense, DEFAULT_CARD_LABEL_LAYOUT.defense),
-    abilityBanner: normalizeAbilityBannerLayout(cardLabelLayout.abilityBanner, DEFAULT_CARD_LABEL_LAYOUT.abilityBanner),
-    ability1: normalizeAbilityAnchorLayout(cardLabelLayout.ability1, DEFAULT_CARD_LABEL_LAYOUT.ability1),
-    ability2: normalizeAbilityAnchorLayout(cardLabelLayout.ability2, DEFAULT_CARD_LABEL_LAYOUT.ability2),
+    name: normalizeLabelElementLayout(cardLabelLayout.name, fallbackLayout.name),
+    artwork: normalizeArtworkLayout(cardLabelLayout.artwork, fallbackLayout.artwork),
+    type: normalizeLabelElementLayout(cardLabelLayout.type, fallbackLayout.type),
+    damage: normalizeLabelElementLayout(cardLabelLayout.damage, fallbackLayout.damage),
+    health: normalizeLabelElementLayout(cardLabelLayout.health, fallbackLayout.health),
+    speed: normalizeLabelElementLayout(cardLabelLayout.speed, fallbackLayout.speed),
+    defense: normalizeLabelElementLayout(cardLabelLayout.defense, fallbackLayout.defense),
+    abilityBanner: normalizeAbilityBannerLayout(cardLabelLayout.abilityBanner, fallbackLayout.abilityBanner),
+    ability1: normalizeAbilityAnchorLayout(cardLabelLayout.ability1, fallbackLayout.ability1),
+    ability2: normalizeAbilityAnchorLayout(cardLabelLayout.ability2, fallbackLayout.ability2),
+  };
+}
+
+
+function normalizeCardLabelLayouts(layouts = {}) {
+  return {
+    [CARD_KINDS.CREATURE]: normalizeCardLabelLayout(layouts[CARD_KINDS.CREATURE] || DEFAULT_CARD_LABEL_LAYOUTS[CARD_KINDS.CREATURE], DEFAULT_CARD_LABEL_LAYOUTS[CARD_KINDS.CREATURE]),
+    [CARD_KINDS.SPELL]: normalizeCardLabelLayout(layouts[CARD_KINDS.SPELL] || DEFAULT_CARD_LABEL_LAYOUTS[CARD_KINDS.SPELL], DEFAULT_CARD_LABEL_LAYOUTS[CARD_KINDS.SPELL]),
   };
 }
 
@@ -223,6 +232,7 @@ export class CardLibraryScene {
     previewPositionOffset = DEFAULT_PREVIEW_POSITION_OFFSET,
     layoutTuning = DEFAULT_LAYOUT_TUNING,
     cardLabelLayout = DEFAULT_CARD_LABEL_LAYOUT,
+    cardLabelLayouts = null,
     onCardSelect = null,
   }) {
     this.canvas = canvas;
@@ -271,7 +281,7 @@ export class CardLibraryScene {
     this.viewportWidth = 0;
     this.viewportHeight = 0;
     this.layout = this.normalizeLayoutTuning(layoutTuning);
-    this.cardLabelLayout = normalizeCardLabelLayout(cardLabelLayout);
+    this.cardLabelLayouts = normalizeCardLabelLayouts(cardLabelLayouts || { [CARD_KINDS.CREATURE]: cardLabelLayout });
     this.onCardSelect = typeof onCardSelect === 'function' ? onCardSelect : null;
 
     this.onPointerDown = this.onPointerDown.bind(this);
@@ -310,14 +320,17 @@ export class CardLibraryScene {
       const card = root.userData.catalogCard;
       if (!face || !card) return;
       const previousTexture = face.material.map;
-      face.material.map = createCardLabelTexture(card, { cardLabelLayout: this.cardLabelLayout });
+      const cardLayout = this.cardLabelLayouts[resolveCardKind(card.cardKind)] || DEFAULT_CARD_LABEL_LAYOUT;
+      face.material.map = createCardLabelTexture(card, { cardLabelLayout: cardLayout });
       face.material.needsUpdate = true;
       previousTexture?.dispose?.();
     });
   }
 
-  setCardLabelLayout(cardLabelLayout = {}) {
-    this.cardLabelLayout = normalizeCardLabelLayout({ ...this.cardLabelLayout, ...cardLabelLayout });
+  setCardLabelLayout(cardLabelLayout = {}, cardKind = CARD_KINDS.CREATURE) {
+    const resolvedKind = resolveCardKind(cardKind);
+    const currentLayout = this.cardLabelLayouts[resolvedKind] || DEFAULT_CARD_LABEL_LAYOUTS[resolvedKind];
+    this.cardLabelLayouts[resolvedKind] = normalizeCardLabelLayout({ ...currentLayout, ...cardLabelLayout }, DEFAULT_CARD_LABEL_LAYOUTS[resolvedKind]);
     this.refreshCardTextures();
   }
 
@@ -454,7 +467,8 @@ export class CardLibraryScene {
         color: colorFromHexString(card.meshColor, DEFAULT_CARD_MESH_COLOR),
       });
 
-      const texture = createCardLabelTexture(card, { cardLabelLayout: this.cardLabelLayout });
+      const cardLayout = this.cardLabelLayouts[resolveCardKind(card.cardKind)] || DEFAULT_CARD_LABEL_LAYOUT;
+      const texture = createCardLabelTexture(card, { cardLabelLayout: cardLayout });
       const face = new THREE.Mesh(
         new THREE.PlaneGeometry(cardWidth * 0.92, cardHeight * 0.92),
         new THREE.MeshStandardMaterial({
