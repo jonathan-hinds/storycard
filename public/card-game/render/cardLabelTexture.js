@@ -1,4 +1,13 @@
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
+import {
+  DEFAULT_CARD_BACKGROUND_IMAGE_PATH,
+  DEFAULT_CARD_LABEL_LAYOUT,
+  getDefaultCardBackgroundImagePath,
+  getDefaultCardLabelLayout,
+  resolveCardKind,
+} from './cardStyleConfig.js';
+
+export { DEFAULT_CARD_BACKGROUND_IMAGE_PATH, DEFAULT_CARD_LABEL_LAYOUT };
 
 const CARD_LABEL_CANVAS_SIZE = 1024;
 const DIE_ICON_PATHS = Object.freeze({
@@ -6,43 +15,6 @@ const DIE_ICON_PATHS = Object.freeze({
   D8: '/public/assets/D8Icon.png',
   D12: '/public/assets/D12Icon.png',
   D20: '/public/assets/D20Icon.png',
-});
-
-export const DEFAULT_CARD_BACKGROUND_IMAGE_PATH = '/public/assets/CardFront2hole.png';
-
-export const DEFAULT_CARD_LABEL_LAYOUT = Object.freeze({
-  name: Object.freeze({ x: 335, y: 110, size: 52, color: '#000000', align: 'left' }),
-  artwork: Object.freeze({ x: 521, y: 368, width: 900, height: 451 }),
-  type: Object.freeze({ x: 512, y: 644, size: 48, color: '#ffffff', align: 'center' }),
-  damage: Object.freeze({ x: 170, y: 802, size: 0.85, boxWidth: 264, boxHeight: 216, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 120, textColor: '#ffffff', iconWidth: 200, iconHeight: 175, iconOffsetX: 0, iconOffsetY: 0 }),
-  health: Object.freeze({ x: 202, y: 114, size: 0.85, boxWidth: 264, boxHeight: 216, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 100, textColor: '#ffffff' }),
-  speed: Object.freeze({ x: 512, y: 802, size: 0.85, boxWidth: 266, boxHeight: 217, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 120, textColor: '#ffffff', iconWidth: 200, iconHeight: 175, iconOffsetX: 0, iconOffsetY: 0 }),
-  defense: Object.freeze({ x: 854, y: 802, size: 0.85, boxWidth: 265, boxHeight: 217, boxBevel: 0, backgroundOpacity: 0, labelSize: 60, valueSize: 120, textColor: '#ffffff', iconWidth: 200, iconHeight: 175, iconOffsetX: 0, iconOffsetY: 0 }),
-  abilityBanner: Object.freeze({
-    x: 518,
-    y: 359,
-    size: 1,
-    boxWidth: 920,
-    boxHeight: 121,
-    boxBevel: 0,
-    backgroundOpacity: 0.61,
-    backgroundColor: '#000000',
-    textColor: '#ffffff',
-    costSize: 84,
-    costOffsetX: -440,
-    costOffsetY: 36,
-    costAlign: 'left',
-    nameSize: 35,
-    nameOffsetX: -358,
-    nameOffsetY: 0,
-    nameAlign: 'left',
-    descriptionSize: 27,
-    descriptionOffsetX: -358,
-    descriptionOffsetY: 30,
-    descriptionAlign: 'left',
-  }),
-  ability1: Object.freeze({ x: 0, y: 138 }),
-  ability2: Object.freeze({ x: 0, y: 0 }),
 });
 
 const dieIconCache = new Map();
@@ -160,14 +132,17 @@ function drawAbilityBanner(ctx, abilityLayout, anchor, ability) {
 
 export function createCardLabelTexture(card, {
   backgroundImagePath = DEFAULT_CARD_BACKGROUND_IMAGE_PATH,
-  cardLabelLayout = DEFAULT_CARD_LABEL_LAYOUT,
+  cardLabelLayout = null,
   statDisplayOverrides = null,
 } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = CARD_LABEL_CANVAS_SIZE;
   canvas.height = CARD_LABEL_CANVAS_SIZE;
   const ctx = canvas.getContext('2d');
-  const resolvedBackgroundPath = card.backgroundImagePath || backgroundImagePath;
+  const cardKind = resolveCardKind(card.cardKind);
+  const fallbackBackgroundPath = getDefaultCardBackgroundImagePath(cardKind);
+  const resolvedBackgroundPath = card.backgroundImagePath || backgroundImagePath || fallbackBackgroundPath;
+  const resolvedCardLabelLayout = cardLabelLayout || getDefaultCardLabelLayout(cardKind);
   const resolvedArtworkPath = typeof card.artworkImagePath === 'string' && card.artworkImagePath.trim()
     ? card.artworkImagePath.trim()
     : null;
@@ -177,7 +152,7 @@ export function createCardLabelTexture(card, {
   texture.anisotropy = 8;
 
   const drawCardFace = () => {
-    const artworkLayout = cardLabelLayout.artwork ?? DEFAULT_CARD_LABEL_LAYOUT.artwork;
+    const artworkLayout = resolvedCardLabelLayout.artwork ?? getDefaultCardLabelLayout(cardKind).artwork;
     const artworkImage = card.artworkImage instanceof HTMLImageElement
       ? card.artworkImage
       : (resolvedArtworkPath ? (artworkImageCache.get(resolvedArtworkPath) ?? null) : null);
@@ -202,15 +177,15 @@ export function createCardLabelTexture(card, {
       ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
     }
 
-    ctx.fillStyle = cardLabelLayout.name.color;
-    ctx.textAlign = cardLabelLayout.name.align;
-    ctx.font = `bold ${Math.round(cardLabelLayout.name.size)}px Inter, system-ui, sans-serif`;
-    ctx.fillText(card.name || 'Unnamed Card', cardLabelLayout.name.x, cardLabelLayout.name.y, 820);
+    ctx.fillStyle = resolvedCardLabelLayout.name.color;
+    ctx.textAlign = resolvedCardLabelLayout.name.align;
+    ctx.font = `bold ${Math.round(resolvedCardLabelLayout.name.size)}px Inter, system-ui, sans-serif`;
+    ctx.fillText(card.name || 'Unnamed Card', resolvedCardLabelLayout.name.x, resolvedCardLabelLayout.name.y, 820);
 
-    ctx.fillStyle = cardLabelLayout.type.color;
-    ctx.textAlign = cardLabelLayout.type.align;
-    ctx.font = `600 ${Math.round(cardLabelLayout.type.size)}px Inter, system-ui, sans-serif`;
-    ctx.fillText(card.type || 'unknown', cardLabelLayout.type.x, cardLabelLayout.type.y, 720);
+    ctx.fillStyle = resolvedCardLabelLayout.type.color;
+    ctx.textAlign = resolvedCardLabelLayout.type.align;
+    ctx.font = `600 ${Math.round(resolvedCardLabelLayout.type.size)}px Inter, system-ui, sans-serif`;
+    ctx.fillText(card.type || 'unknown', resolvedCardLabelLayout.type.x, resolvedCardLabelLayout.type.y, 720);
 
     const isSpellCard = card.cardKind === 'Spell';
     const stats = isSpellCard
@@ -223,7 +198,7 @@ export function createCardLabelTexture(card, {
       ];
 
     stats.forEach(({ key, label, value }) => {
-      const elementLayout = cardLabelLayout[key];
+      const elementLayout = resolvedCardLabelLayout[key];
       const width = elementLayout.boxWidth;
       const height = elementLayout.boxHeight;
       const left = elementLayout.x - width / 2;
@@ -264,9 +239,10 @@ export function createCardLabelTexture(card, {
       ctx.fillText(String(resolvedValue ?? '-'), left + width / 2, top + (188 * elementLayout.size));
     });
 
-    const abilityBannerLayout = cardLabelLayout.abilityBanner ?? DEFAULT_CARD_LABEL_LAYOUT.abilityBanner;
-    const ability1Offset = cardLabelLayout.ability1 ?? DEFAULT_CARD_LABEL_LAYOUT.ability1;
-    const ability2Offset = cardLabelLayout.ability2 ?? DEFAULT_CARD_LABEL_LAYOUT.ability2;
+    const defaultLayout = getDefaultCardLabelLayout(cardKind);
+    const abilityBannerLayout = resolvedCardLabelLayout.abilityBanner ?? defaultLayout.abilityBanner;
+    const ability1Offset = resolvedCardLabelLayout.ability1 ?? defaultLayout.ability1;
+    const ability2Offset = resolvedCardLabelLayout.ability2 ?? defaultLayout.ability2;
     drawAbilityBanner(ctx, abilityBannerLayout, {
       x: abilityBannerLayout.x + ability1Offset.x,
       y: abilityBannerLayout.y + ability1Offset.y,
