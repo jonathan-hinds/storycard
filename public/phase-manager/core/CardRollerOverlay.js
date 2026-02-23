@@ -129,23 +129,34 @@ export class CardRollerOverlay {
   async rollLocalSequence({ card, attackStep, rollSequence, roller, onAttackRoll }) {
     const outcomes = [];
     for (const rollType of rollSequence) {
+      const settled = createDeferred();
+      roller.handlers.onSettled = ({ value }) => settled.resolve(value ?? null);
+      roller.handlers.onError = (error) => settled.reject(error);
+
       const { sides, statValue } = this.getRollTypeForCard(card, rollType);
       const payload = await roller.roll({
         dice: [{ id: `${card.userData.cardId}-${rollType}`, sides }],
       });
       const rolled = payload?.results?.[0]?.roll;
+      const settledValue = await settled.promise;
+      const normalizedOutcome = Number.isFinite(settledValue)
+        ? settledValue
+        : (Number.isFinite(rolled?.outcome) ? rolled.outcome : null);
+
       if (rolled && typeof onAttackRoll === 'function') {
+        const normalizedRoll = Number.isFinite(normalizedOutcome)
+          ? { ...rolled, outcome: normalizedOutcome }
+          : rolled;
         await onAttackRoll({
           attack: attackStep,
           rollType,
           sides,
-          roll: rolled,
+          roll: normalizedRoll,
         });
       }
 
-      const outcome = Number.isFinite(rolled?.outcome) ? rolled.outcome : null;
       await this.pause(this.postSettleDelayMs);
-      this.applyOutcomeToCard(card.userData.cardId, rollType, outcome);
+      this.applyOutcomeToCard(card.userData.cardId, rollType, normalizedOutcome);
       await this.pause(this.postUpdateDelayMs);
       outcomes.push({
         cardId: card.userData.cardId,
@@ -153,7 +164,7 @@ export class CardRollerOverlay {
         rollType,
         statValue,
         sides,
-        outcome,
+        outcome: normalizedOutcome,
       });
     }
     return outcomes;
