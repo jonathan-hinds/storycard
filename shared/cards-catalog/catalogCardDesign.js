@@ -7,6 +7,20 @@ function normalizeArtworkImagePath(value) {
 }
 
 function normalizeCatalogCardDesign(catalogCard = {}) {
+  const normalizeAbility = (ability) => {
+    if (!ability || typeof ability !== 'object') return null;
+    const cost = String(ability.cost ?? '').trim();
+    const name = String(ability.name ?? '').trim();
+    const description = String(ability.description ?? '').trim();
+    if (!cost && !name && !description) return null;
+    return {
+      id: ability.id || null,
+      cost,
+      name,
+      description,
+    };
+  };
+
   return {
     id: catalogCard.id || null,
     name: catalogCard.name || 'Unnamed Card',
@@ -15,6 +29,8 @@ function normalizeCatalogCardDesign(catalogCard = {}) {
     health: catalogCard.health ?? '-',
     speed: catalogCard.speed ?? '-',
     defense: catalogCard.defense ?? '-',
+    ability1: normalizeAbility(catalogCard.ability1),
+    ability2: normalizeAbility(catalogCard.ability2),
     meshColor: typeof catalogCard.meshColor === 'string' ? catalogCard.meshColor : DEFAULT_MESH_COLOR,
     artworkImagePath: normalizeArtworkImagePath(catalogCard.artworkImagePath),
   };
