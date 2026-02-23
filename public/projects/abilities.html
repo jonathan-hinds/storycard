@@ -6,7 +6,7 @@
     <title>Abilities Project</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="abilities-project">
+  <body data-page="abilities-project" data-ability-kind="creature">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -17,7 +17,8 @@
             <ul class="flyout">
               <li><a href="/public/dice/index.html">Dice</a></li>
               <li><a href="/public/projects/cards.html">Cards</a></li>
-              <li><a href="/public/projects/abilities.html">Abilities</a></li>
+              <li><a href="/public/projects/abilities.html">Creature Abilities</a></li>
+              <li><a href="/public/projects/spell-abilities.html">Spell Abilities</a></li>
               <li><a href="/public/card/single-card/index.html">Card / Single Card</a></li>
               <li><a href="/public/projects/phase-manager/index.html">Phase Manager</a></li>
             </ul>
@@ -46,9 +47,12 @@
     <main class="cards-project-layout">
       <section class="cards-panel">
         <h1>Abilities Catalog</h1>
-        <p>Create and maintain ability definitions for card slot assignment.</p>
+        <p>Create and maintain creature ability definitions for card slot assignment.</p>
 
         <form id="create-ability-form" class="card" novalidate>
+
+          <label for="ability-kind" id="ability-kind-label">Creature Ability Kind</label>
+          <input id="ability-kind" name="abilityKind" type="text" readonly />
           <label for="ability-name">Ability Name</label>
           <input id="ability-name" name="name" type="text" maxlength="80" required />
 

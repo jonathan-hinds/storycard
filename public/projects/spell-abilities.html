@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Storycard Sandbox</title>
+    <title>Spell Abilities Project</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="home">
+  <body data-page="abilities-project" data-ability-kind="spell">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -18,7 +18,6 @@
               <li><a href="/public/dice/index.html">Dice</a></li>
               <li><a href="/public/projects/cards.html">Cards</a></li>
               <li><a href="/public/projects/abilities.html">Creature Abilities</a></li>
-              <li><a href="/public/projects/spell-abilities.html">Spell Abilities</a></li>
               <li><a href="/public/card/single-card/index.html">Card / Single Card</a></li>
               <li><a href="/public/projects/phase-manager/index.html">Phase Manager</a></li>
             </ul>
@@ -44,11 +43,37 @@
       </nav>
     </header>
 
-    <main class="landing">
-      <h1>Welcome to your game tools sandbox</h1>
-      <p>
-        Use the navigation above to open modules under <strong>Projects</strong> or browse placeholder API docs.
-      </p>
+    <main class="cards-project-layout">
+      <section class="cards-panel">
+        <h1>Spell Abilities Catalog</h1>
+        <p>Create and maintain spell ability definitions for card slot assignment.</p>
+
+        <form id="create-ability-form" class="card" novalidate>
+
+          <label for="ability-kind" id="ability-kind-label">Creature Ability Kind</label>
+          <input id="ability-kind" name="abilityKind" type="text" readonly />
+          <label for="ability-name">Ability Name</label>
+          <input id="ability-name" name="name" type="text" maxlength="80" required />
+
+          <label for="ability-cost">Cost</label>
+          <input id="ability-cost" name="cost" type="text" maxlength="20" required />
+
+          <label for="ability-description">Description</label>
+          <textarea id="ability-description" name="description" rows="4" maxlength="140" required></textarea>
+
+          <button type="submit">Create Ability</button>
+          <button id="save-ability-button" type="button" disabled>Save Ability</button>
+          <p id="create-ability-status" class="cards-status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="cards-list-wrap" aria-live="polite">
+        <h2>Spell Ability Library</h2>
+        <p class="cards-library-caption">Select an ability to edit its data.</p>
+        <div id="ability-list" class="cards-list"></div>
+      </section>
     </main>
+
+    <script type="module" src="/public/projects/abilities.js"></script>
   </body>
 </html>

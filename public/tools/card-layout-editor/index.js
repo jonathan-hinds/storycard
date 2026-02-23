@@ -7,27 +7,49 @@ const controlsRoot = document.getElementById('layout-controls');
 const editorCardKind = document.body?.dataset.cardKind === 'spell' ? 'Spell' : 'Creature';
 const exportLayoutFor = editorCardKind.toLowerCase();
 
-const defaultCard = {
-  id: 'layout-editor-default',
-  name: 'Ember Warden',
-  type: 'Fire',
-  cardKind: editorCardKind,
-  damage: 'D8',
-  health: 18,
-  speed: 'D6',
-  defense: 'D12',
-  meshColor: '#000000',
-  ability1: {
-    cost: '2',
-    name: 'Flame Lash',
-    description: 'Deal 3 fire damage.',
-  },
-  ability2: {
-    cost: '4',
-    name: 'Blazing Guard',
-    description: 'Gain +2 defense this turn.',
-  },
-};
+const defaultCard = editorCardKind === 'Spell'
+  ? {
+    id: 'layout-editor-default',
+    name: 'Arc Light',
+    type: 'Arcane',
+    cardKind: 'Spell',
+    damage: 'D12',
+    health: 0,
+    speed: 'D6',
+    defense: 'D6',
+    meshColor: '#000000',
+    ability1: {
+      cost: '1',
+      name: 'Spark Surge',
+      description: 'Amplify the next spell by this card\'s effectiveness roll.',
+    },
+    ability2: {
+      cost: '3',
+      name: 'Echo Ward',
+      description: 'Create a brief spell shield after resolving.',
+    },
+  }
+  : {
+    id: 'layout-editor-default',
+    name: 'Ember Warden',
+    type: 'Fire',
+    cardKind: 'Creature',
+    damage: 'D8',
+    health: 18,
+    speed: 'D6',
+    defense: 'D12',
+    meshColor: '#000000',
+    ability1: {
+      cost: '2',
+      name: 'Flame Lash',
+      description: 'Deal 3 fire damage.',
+    },
+    ability2: {
+      cost: '4',
+      name: 'Blazing Guard',
+      description: 'Gain +2 defense this turn.',
+    },
+  };
 
 const previewCard = structuredClone(defaultCard);
 const imageCache = new Map();
@@ -94,14 +116,20 @@ const updatePreviewArtwork = async (assetPath) => {
   }
 };
 
-const sections = [
-  { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
-  { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1, supportsTextStyle: true },
-  { key: 'damage', label: 'Attack', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-  { key: 'health', label: 'Health', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-  { key: 'speed', label: 'Speed', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-  { key: 'defense', label: 'Defense', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
-];
+const sections = editorCardKind === 'Spell'
+  ? [
+    { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
+    { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1, supportsTextStyle: true },
+    { key: 'damage', label: 'Effectiveness (EFCT)', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+  ]
+  : [
+    { key: 'name', label: 'Name', minSize: 18, maxSize: 120, stepSize: 1, supportsTextStyle: true },
+    { key: 'type', label: 'Type', minSize: 16, maxSize: 96, stepSize: 1, supportsTextStyle: true },
+    { key: 'damage', label: 'Attack', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+    { key: 'health', label: 'Health', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+    { key: 'speed', label: 'Speed', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+    { key: 'defense', label: 'Defense', minSize: 0.5, maxSize: 1.7, stepSize: 0.05, supportsStatBoxStyle: true },
+  ];
 
 function buildSlider({ elementKey, prop, label, min, max, step }) {
   const row = document.createElement('label');
@@ -471,6 +499,7 @@ textPreviewGroup.append(textPreviewHeading);
 textPreviewGroup.append(
   buildTextInputControl({ cardProp: 'name', label: 'Name Text' }),
   buildTextInputControl({ cardProp: 'type', label: 'Type Text' }),
+  buildTextInputControl({ cardProp: 'damage', label: editorCardKind === 'Spell' ? 'Effectiveness Die' : 'Damage Die' }),
   buildAbilityTextInputControl({ abilityKey: 'ability1', field: 'cost', label: 'Ability 1 Cost' }),
   buildAbilityTextInputControl({ abilityKey: 'ability1', field: 'name', label: 'Ability 1 Name' }),
   buildAbilityTextInputControl({ abilityKey: 'ability1', field: 'description', label: 'Ability 1 Description' }),

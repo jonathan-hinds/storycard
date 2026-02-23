@@ -202,11 +202,6 @@ export function createCardLabelTexture(card, {
       ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
     }
 
-    if (card.cardKind === 'Spell') {
-      texture.needsUpdate = true;
-      return;
-    }
-
     ctx.fillStyle = cardLabelLayout.name.color;
     ctx.textAlign = cardLabelLayout.name.align;
     ctx.font = `bold ${Math.round(cardLabelLayout.name.size)}px Inter, system-ui, sans-serif`;
@@ -217,12 +212,15 @@ export function createCardLabelTexture(card, {
     ctx.font = `600 ${Math.round(cardLabelLayout.type.size)}px Inter, system-ui, sans-serif`;
     ctx.fillText(card.type || 'unknown', cardLabelLayout.type.x, cardLabelLayout.type.y, 720);
 
-    const stats = [
-      { key: 'damage', label: 'DMG', value: card.damage },
-      { key: 'health', label: 'HP', value: card.health },
-      { key: 'speed', label: 'SPD', value: card.speed },
-      { key: 'defense', label: 'DEF', value: card.defense },
-    ];
+    const isSpellCard = card.cardKind === 'Spell';
+    const stats = isSpellCard
+      ? [{ key: 'damage', label: 'EFCT', value: card.damage }]
+      : [
+        { key: 'damage', label: 'DMG', value: card.damage },
+        { key: 'health', label: 'HP', value: card.health },
+        { key: 'speed', label: 'SPD', value: card.speed },
+        { key: 'defense', label: 'DEF', value: card.defense },
+      ];
 
     stats.forEach(({ key, label, value }) => {
       const elementLayout = cardLabelLayout[key];
@@ -244,7 +242,7 @@ export function createCardLabelTexture(card, {
         ? statDisplayOverrides[key]
         : undefined;
       const resolvedValue = overrideValue !== undefined ? overrideValue : value;
-      const normalizedDieValue = ['damage', 'speed', 'defense'].includes(key) ? normalizeDieValue(resolvedValue) : null;
+      const normalizedDieValue = (isSpellCard || ['damage', 'speed', 'defense'].includes(key)) ? normalizeDieValue(resolvedValue) : null;
       const dieIcon = normalizedDieValue ? dieIconCache.get(normalizedDieValue) ?? null : null;
 
       if (dieIcon) {
@@ -301,7 +299,7 @@ export function createCardLabelTexture(card, {
     });
   }
 
-  ['damage', 'speed', 'defense'].forEach((key) => {
+  (card.cardKind === 'Spell' ? ['damage'] : ['damage', 'speed', 'defense']).forEach((key) => {
     const dieValue = normalizeDieValue(card[key]);
     const iconPath = dieValue ? DIE_ICON_PATHS[dieValue] : null;
     if (!dieValue || !iconPath || dieIconCache.has(dieValue)) return;

@@ -1,8 +1,10 @@
 const DEFAULT_MONGO_URI = 'mongodb+srv://jonathandhd:Bluecow3@cluster0.fwdtteo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
 const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
+const ABILITY_KINDS = ['Creature', 'Spell'];
 
 let clientPromise;
+let legacyAbilityKindMigrationPromise;
 
 function getMongoClientConstructor() {
   try {
@@ -35,12 +37,43 @@ async function getCollection() {
   return db.collection(COLLECTION_NAME);
 }
 
+async function assignLegacyAbilitiesToCreature(collection) {
+  await collection.updateMany(
+    {
+      $or: [
+        { abilityKind: { $exists: false } },
+        { abilityKind: null },
+      ],
+    },
+    {
+      $set: {
+        abilityKind: 'Creature',
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  );
+}
+
+async function ensureLegacyAbilityKindsMigrated() {
+  if (!legacyAbilityKindMigrationPromise) {
+    legacyAbilityKindMigrationPromise = getCollection()
+      .then((collection) => assignLegacyAbilitiesToCreature(collection))
+      .catch((error) => {
+        legacyAbilityKindMigrationPromise = null;
+        throw error;
+      });
+  }
+
+  return legacyAbilityKindMigrationPromise;
+}
+
 function toAbilityRecord(document) {
   return {
     id: document._id.toString(),
     name: document.name,
     cost: document.cost,
     description: document.description,
+    abilityKind: document.abilityKind || 'Creature',
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
   };
@@ -50,6 +83,7 @@ function normalizeAbilityInput(input = {}) {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const cost = typeof input.cost === 'string' ? input.cost.trim() : String(input.cost ?? '').trim();
   const description = typeof input.description === 'string' ? input.description.trim() : '';
+  const abilityKind = typeof input.abilityKind === 'string' ? input.abilityKind.trim() : '';
 
   if (!name) {
     throw new Error('name is required');
@@ -63,16 +97,28 @@ function normalizeAbilityInput(input = {}) {
     throw new Error('description is required');
   }
 
-  return { name, cost, description };
+  if (!ABILITY_KINDS.includes(abilityKind)) {
+    throw new Error(`abilityKind must be one of: ${ABILITY_KINDS.join(', ')}`);
+  }
+
+  return { name, cost, description, abilityKind };
 }
 
-async function listAbilities() {
+async function listAbilities({ abilityKind } = {}) {
+  await ensureLegacyAbilityKindsMigrated();
   const collection = await getCollection();
-  const docs = await collection.find({}).sort({ createdAt: -1, _id: -1 }).toArray();
+  const normalizedAbilityKind = typeof abilityKind === 'string' ? abilityKind.trim() : '';
+  if (normalizedAbilityKind && !ABILITY_KINDS.includes(normalizedAbilityKind)) {
+    throw new Error(`abilityKind must be one of: ${ABILITY_KINDS.join(', ')}`);
+  }
+
+  const query = normalizedAbilityKind ? { abilityKind: normalizedAbilityKind } : {};
+  const docs = await collection.find(query).sort({ createdAt: -1, _id: -1 }).toArray();
   return docs.map(toAbilityRecord);
 }
 
 async function listAbilitiesByIds(ids = []) {
+  await ensureLegacyAbilityKindsMigrated();
   const { ObjectId } = getMongoClientConstructor();
   const validObjectIds = ids
     .filter((id) => typeof id === 'string' && ObjectId.isValid(id))
@@ -88,6 +134,7 @@ async function listAbilitiesByIds(ids = []) {
 }
 
 async function createAbility(input = {}) {
+  await ensureLegacyAbilityKindsMigrated();
   const collection = await getCollection();
   const validated = normalizeAbilityInput(input);
   const abilityToInsert = {
@@ -101,6 +148,7 @@ async function createAbility(input = {}) {
 }
 
 async function updateAbility(abilityId, input = {}) {
+  await ensureLegacyAbilityKindsMigrated();
   const { ObjectId } = getMongoClientConstructor();
   if (!ObjectId.isValid(abilityId)) {
     throw new Error('Ability not found');
@@ -128,6 +176,7 @@ async function updateAbility(abilityId, input = {}) {
 }
 
 module.exports = {
+  ABILITY_KINDS,
   listAbilities,
   listAbilitiesByIds,
   createAbility,
