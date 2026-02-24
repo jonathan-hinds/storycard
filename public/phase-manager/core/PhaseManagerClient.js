@@ -33,6 +33,7 @@ export class PhaseManagerClient {
     this.commitSequencePromise = null;
     this.activeCommitSequenceKey = null;
     this.cardRollerOverlay = null;
+    this.seenSpellCastIds = new Set();
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
 
@@ -142,6 +143,16 @@ export class PhaseManagerClient {
       });
     });
 
+    currentMatch.players[OPPONENT_SIDE].hand.forEach((card) => {
+      initialCards.push({
+        id: card.id,
+        color: card.color,
+        owner: OPPONENT_SIDE,
+        zone: CARD_ZONE_TYPES.HAND,
+        catalogCard: null,
+      });
+    });
+
     currentMatch.players[PLAYER_SIDE].board.forEach((card, index) => {
       const relativeSlotIndex = Number.isInteger(card.slotIndex) ? card.slotIndex : index;
       initialCards.push({
@@ -181,7 +192,7 @@ export class PhaseManagerClient {
   }
 
   syncPlayerStateFromClient() {
-    if (!this.client || !this.match) return { hand: [], board: [], discard: [], attacks: [] };
+    if (!this.client || !this.match) return { hand: [], board: [], discard: [], attacks: [], spellCasts: [] };
 
     const allPlayerCards = this.client.cards
       .filter((card) => card.userData.owner === PLAYER_SIDE)
@@ -206,8 +217,22 @@ export class PhaseManagerClient {
       .map(({ id, color }) => ({ id, color }));
 
     const attacks = typeof this.client.getCombatDecisions === 'function' ? this.client.getCombatDecisions() : [];
+    const spellCasts = typeof this.client.consumePendingSpellCasts === 'function' ? this.client.consumePendingSpellCasts() : [];
 
-    return { hand, board, discard, attacks };
+    return { hand, board, discard, attacks, spellCasts };
+  }
+
+  async runPhaseOneSpellCastSequence() {
+    if (!this.client || !this.match || this.match.phase !== 1) return;
+    const spellCasts = Array.isArray(this.match.meta?.spellCasts) ? this.match.meta.spellCasts : [];
+    for (const spellCast of spellCasts) {
+      if (!spellCast?.id || this.seenSpellCastIds.has(spellCast.id)) continue;
+      this.seenSpellCastIds.add(spellCast.id);
+      if (typeof this.client.playObservedSpellCast === 'function') {
+        // eslint-disable-next-line no-await-in-loop
+        await this.client.playObservedSpellCast(spellCast);
+      }
+    }
   }
 
   setReadyLockState() {
@@ -358,6 +383,9 @@ export class PhaseManagerClient {
 
     this.setReadyLockState();
     this.updateSummaryPanels();
+    if (this.match.phase === 1) {
+      this.runPhaseOneSpellCastSequence();
+    }
   }
 
 
@@ -503,6 +531,7 @@ export class PhaseManagerClient {
         board: nextState.board,
         discard: nextState.discard,
         attacks: nextState.attacks,
+        spellCasts: nextState.spellCasts,
       });
       this.applyMatchmakingStatus(status);
     } catch (error) {
@@ -563,6 +592,7 @@ export class PhaseManagerClient {
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
+    this.seenSpellCastIds.clear();
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -642,6 +672,7 @@ export class PhaseManagerClient {
       board: nextState.board,
       discard: nextState.discard,
       attacks: nextState.attacks,
+      spellCasts: nextState.spellCasts,
     })
       .then((status) => {
         this.applyMatchmakingStatus(status);
@@ -661,6 +692,7 @@ export class PhaseManagerClient {
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
+    this.seenSpellCastIds.clear();
     if (this.client) {
       this.client.destroy();
       this.client = null;
