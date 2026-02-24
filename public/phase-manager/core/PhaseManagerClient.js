@@ -434,15 +434,19 @@ export class PhaseManagerClient {
     }
 
     const allRolledAt = await this.waitForCommitAllRolledAt();
-    if (!allRolledAt) return;
+    const waitRemainingMs = Number.isFinite(allRolledAt)
+      ? Math.max(0, (allRolledAt + this.options.commitObservationDelayMs) - Date.now())
+      : this.options.commitObservationDelayMs;
 
-    const waitRemainingMs = Math.max(0, (allRolledAt + this.options.commitObservationDelayMs) - Date.now());
     if (waitRemainingMs > 0) {
       await new Promise((resolve) => window.setTimeout(resolve, waitRemainingMs));
     }
 
-    this.client.playCommitPhaseAnimations(commitAttacks, {
-      interAttackDelayMs: 740,
+    await new Promise((resolve) => {
+      this.client.playCommitPhaseAnimations(commitAttacks, {
+        interAttackDelayMs: 740,
+        onDone: resolve,
+      });
     });
     this.lastAnimatedCommitKey = commitAnimationKey;
   }
@@ -450,11 +454,13 @@ export class PhaseManagerClient {
   async waitForCommitAllRolledAt() {
     const maxAttempts = 45;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const existingCommitAllRolledAt = this.match?.meta?.commitAllRolledAt;
+      if (Number.isFinite(existingCommitAllRolledAt)) return existingCommitAllRolledAt;
+
       try {
         const status = await this.getJson(`/api/phase-manager/matchmaking/status?playerId=${encodeURIComponent(this.playerId)}`);
         const commitAllRolledAt = status?.matchState?.meta?.commitAllRolledAt;
         if (Number.isFinite(commitAllRolledAt)) return commitAllRolledAt;
-        if (status?.matchState?.phase !== 2) return null;
       } catch (error) {
         this.elements.statusEl.textContent = `Commit polling error: ${error.message}`;
         return null;
