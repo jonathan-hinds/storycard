@@ -2,14 +2,14 @@ const PREVIEW_TUNING_STORAGE_KEY = 'storycard.previewTuning.v2';
 
 export const DEFAULT_PREVIEW_TUNING = Object.freeze({
   rotationX: -1.16,
-  previewOffsetX: 0,
-  previewOffsetY: 0,
-  cameraDistanceOffset: 1.2,
-  previewOffsetDesktop: Object.freeze({ x: 0, y: 0, z: 1.2 }),
-  previewOffsetMobile: Object.freeze({ x: 0, y: 0, z: 1.2 }),
-  ambientLightIntensity: 0.9,
-  keyLightIntensity: 1.1,
-  cardMaterialRoughness: 0.62,
+  previewOffsetX: -0.03,
+  previewOffsetY: 2.5,
+  cameraDistanceOffset: 1.44,
+  previewOffsetDesktop: Object.freeze({ x: -0.03, y: 2.5, z: 1.44 }),
+  previewOffsetMobile: Object.freeze({ x: 0, y: 6.41, z: 3.5 }),
+  ambientLightIntensity: 3,
+  keyLightIntensity: 1.01,
+  cardMaterialRoughness: 1,
 });
 
 const PREVIEW_TUNING_BOUNDS = Object.freeze({
