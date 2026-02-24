@@ -232,7 +232,7 @@ class PhaseManagerServer {
       return Number.isFinite(fixedValue) ? Math.max(0, Math.floor(fixedValue)) : 0;
     }
 
-    const rollType = ability.valueSourceStat || 'damage';
+    const rollType = ability.valueSourceStat === 'efct' ? 'damage' : (ability.valueSourceStat || 'damage');
     const rollEntry = commitRollsByAttackId.get(`${attackId}:${rollType}`);
     const outcome = Number(rollEntry?.roll?.outcome);
     return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : 0;
@@ -464,6 +464,7 @@ class PhaseManagerServer {
   validatePhaseTurnPayload(payload, playerState, currentTurnNumber) {
     const hand = Array.isArray(payload.hand) ? payload.hand : [];
     const board = Array.isArray(payload.board) ? payload.board : [];
+    const discard = Array.isArray(payload.discard) ? payload.discard : [];
 
     if (board.length > this.options.boardSlotsPerSide) {
       return { error: `board is limited to ${this.options.boardSlotsPerSide} cards` };
@@ -473,9 +474,9 @@ class PhaseManagerServer {
       return { error: `hand is limited to ${this.options.maxHandSize} cards` };
     }
 
-    const visibleCards = [...playerState.hand, ...playerState.board];
+    const visibleCards = [...playerState.hand, ...playerState.board, ...(Array.isArray(playerState.discard) ? playerState.discard : [])];
     const knownCards = new Map(visibleCards.map((card) => [card.id, card]));
-    const merged = [...hand, ...board];
+    const merged = [...hand, ...board, ...discard];
     const uniqueIds = new Set(merged.map((card) => card.id));
     if (merged.length !== uniqueIds.size) {
       return { error: 'hand and board must not contain duplicate cards' };
@@ -505,6 +506,9 @@ class PhaseManagerServer {
       }
       usedBoardSlots.add(boardCard.slotIndex);
       const knownCard = knownCards.get(boardCard.id);
+      if (knownCard?.catalogCard?.cardKind === 'Spell') {
+        return { error: `spell card ${knownCard.id} cannot be placed on the board` };
+      }
       const cardWasAlreadyOnBoard = previousBoardIds.has(boardCard.id);
       normalizedBoard.push({
         ...knownCard,
@@ -558,6 +562,7 @@ class PhaseManagerServer {
     return {
       hand: hand.map((card) => knownCards.get(card.id)),
       board: normalizedBoard,
+      discard: discard.map((card) => knownCards.get(card.id)),
     };
   }
 
@@ -616,6 +621,7 @@ class PhaseManagerServer {
           allCards: cards,
           hand: cards.slice(0, this.options.startingHandSize),
           board: [],
+          discard: [],
           deck: cards.slice(this.options.startingHandSize),
         });
       });
@@ -686,6 +692,7 @@ class PhaseManagerServer {
 
     playerState.hand = validated.hand;
     playerState.board = validated.board;
+    playerState.discard = validated.discard;
     this.readyPlayerInMatch(match, playerId);
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
@@ -722,6 +729,7 @@ class PhaseManagerServer {
 
     playerState.hand = validated.hand;
     playerState.board = validated.board;
+    playerState.discard = validated.discard;
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }

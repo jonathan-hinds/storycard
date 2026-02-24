@@ -5,7 +5,11 @@ const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
 const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target'];
 const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
-const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense'];
+const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense', 'efct'];
+const ABILITY_ROLL_STATS_BY_KIND = Object.freeze({
+  Creature: ['damage', 'speed', 'defense'],
+  Spell: ['efct'],
+});
 
 let clientPromise;
 let legacyAbilityMigrationPromise;
@@ -183,8 +187,9 @@ function normalizeAbilityInput(input = {}) {
     throw new Error(`valueSourceType must be one of: ${ABILITY_VALUE_SOURCE_TYPES.join(', ')}`);
   }
 
-  if (valueSourceType === 'roll' && !ABILITY_ROLL_STATS.includes(valueSourceStat || '')) {
-    throw new Error(`valueSourceStat must be one of: ${ABILITY_ROLL_STATS.join(', ')}`);
+  const allowedRollStats = ABILITY_ROLL_STATS_BY_KIND[abilityKind] || ABILITY_ROLL_STATS;
+  if (valueSourceType === 'roll' && !allowedRollStats.includes(valueSourceStat || '')) {
+    throw new Error(`valueSourceStat must be one of: ${allowedRollStats.join(', ')}`);
   }
 
   if (valueSourceType === 'fixed') {
@@ -286,6 +291,7 @@ module.exports = {
   ABILITY_EFFECTS,
   ABILITY_VALUE_SOURCE_TYPES,
   ABILITY_ROLL_STATS,
+  ABILITY_ROLL_STATS_BY_KIND,
   listAbilities,
   listAbilitiesByIds,
   createAbility,
