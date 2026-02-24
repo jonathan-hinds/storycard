@@ -8,6 +8,7 @@ import { SINGLE_CARD_TEMPLATE } from '../templates/singleCardTemplate.js';
 import { CARD_ZONE_TYPES, isKnownZone, validateZoneTemplate } from './zoneFramework.js';
 import { DEFAULT_PREVIEW_TUNING, sanitizePreviewTuning } from './previewTuning.js';
 import { PREVIEW_TRANSITION_IN_MS, PREVIEW_BASE_POSITION, beginPreviewTransition, beginPreviewReturnTransition, getPreviewPose } from './previewMotion.js';
+import { DieRollerClient } from '/public/die-roller/index.js';
 
 const CAMERA_BASE_FOV = 45;
 const CAMERA_BASE_Y = 8.2;
@@ -37,6 +38,9 @@ const CARD_OUTLINE_BASE_SCALE = 1.01;
 const CARD_OUTLINE_HIGHLIGHT_SCALE = 1.03;
 const CARD_OUTLINE_BASE_COLOR = 0x000000;
 const CARD_OUTLINE_HIGHLIGHT_COLOR = 0xffffff;
+const SPELL_CENTER_POSITION = Object.freeze(new THREE.Vector3(1.05, 0.32, 0.2));
+const SPELL_ATTACK_DELAY_AFTER_IMPACT_MS = 2000;
+const SPELL_DEATH_SETTLE_WAIT_MS = 700;
 const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 
@@ -114,6 +118,7 @@ export class CardGameClient {
       },
       portraitIntensity: 0,
       spellResolutionInProgress: false,
+      activeSpellRoller: null,
     };
 
     this.#buildBaseScene();
@@ -546,6 +551,95 @@ export class CardGameClient {
     return Number.isFinite(sides) ? Math.max(2, sides) : fallback;
   }
 
+  createSpellRollerPanel(card) {
+    const host = this.canvas?.parentElement;
+    if (!host || !card) return null;
+    const panel = document.createElement('div');
+    panel.className = 'card-roller-overlay-panel';
+    panel.dataset.state = 'pending';
+    panel.title = 'Click to roll spell EFCT die';
+    host.append(panel);
+    return panel;
+  }
+
+  async waitForSpellRoll({ card, rollType, dieSides }) {
+    const panel = this.createSpellRollerPanel(card);
+    if (!panel) return null;
+
+    const roller = new DieRollerClient({ container: panel, assets: {} });
+    this.state.activeSpellRoller = { panel, roller, card };
+    roller.renderStaticPreview(dieSides);
+    const dieId = `${card.userData.cardId}-${rollType}`;
+
+    return new Promise((resolve, reject) => {
+      let rolled = false;
+      const cleanup = () => {
+        panel.removeEventListener('pointerdown', triggerRoll);
+        panel.removeEventListener('click', triggerRoll);
+        panel.removeEventListener('touchstart', triggerRoll);
+      };
+
+      const triggerRoll = async (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        if (rolled) return;
+        rolled = true;
+        panel.dataset.state = 'rolling';
+        cleanup();
+        try {
+          const payload = await roller.roll({ dice: [{ id: dieId, sides: dieSides }] });
+          const outcome = Number(payload?.results?.[0]?.roll?.outcome);
+          panel.dataset.state = 'settled';
+          resolve(Number.isFinite(outcome) ? outcome : null);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      panel.addEventListener('pointerdown', triggerRoll);
+      panel.addEventListener('click', triggerRoll);
+      panel.addEventListener('touchstart', triggerRoll, { passive: false });
+    });
+  }
+
+
+  positionSpellRollerPanel() {
+    const active = this.state.activeSpellRoller;
+    if (!active?.panel || !active?.card) return;
+    const projected = active.card.position.clone();
+    projected.y += 0.62;
+    projected.project(this.camera);
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const x = (projected.x * 0.5 + 0.5) * size.x;
+    const y = (-projected.y * 0.5 + 0.5) * size.y;
+    const panelSize = Math.max(72, Math.min(98, (this.canvas.parentElement?.clientWidth || size.x) * 0.14));
+    active.panel.style.width = `${panelSize}px`;
+    active.panel.style.height = `${panelSize}px`;
+    active.panel.style.transform = `translate(${x - panelSize / 2}px, ${y - panelSize / 2}px)`;
+  }
+  clearSpellRollerPanel() {
+    const active = this.state.activeSpellRoller;
+    if (!active) return;
+    active.panel?.remove();
+    this.state.activeSpellRoller = null;
+  }
+
+  queueSpellAttackAnimation(card, targetCard) {
+    if (!card || !targetCard) return;
+    const startAtMs = performance.now();
+    this.combatAnimations.push({
+      attackerCard: card,
+      defenderCard: targetCard,
+      originPosition: card.position.clone(),
+      defenderPosition: targetCard.position.clone(),
+      startAtMs,
+      durationMs: 760,
+      resolvedDamage: null,
+      didHit: false,
+      initialized: true,
+    });
+  }
+
   async runSpellResolution({ card, targetCard, selectedAbility }) {
     this.state.spellResolutionInProgress = true;
     this.options = { ...this.options, interactionLocked: true };
@@ -553,7 +647,7 @@ export class CardGameClient {
     card.userData.locked = true;
 
     const startPosition = card.position.clone();
-    const centerPosition = new THREE.Vector3(1.05, 0.32, 0.2);
+    const centerPosition = SPELL_CENTER_POSITION.clone();
     const centerStart = performance.now();
     this.cardAnimations.push({
       card,
@@ -572,22 +666,25 @@ export class CardGameClient {
     await new Promise((resolve) => window.setTimeout(resolve, 650));
     const rollType = selectedAbility?.valueSourceStat === 'efct' ? 'damage' : (selectedAbility?.valueSourceStat || 'damage');
     const dieSides = this.parseDieSides(card.userData.catalogCard?.[rollType], 6);
-    const outcome = 1 + Math.floor(Math.random() * dieSides);
+    let outcome = null;
+    try {
+      outcome = await this.waitForSpellRoll({ card, rollType, dieSides });
+    } catch (error) {
+      this.setStatus(`Spell roll failed: ${error.message}`);
+    } finally {
+      this.clearSpellRollerPanel();
+    }
+    if (!Number.isFinite(outcome)) {
+      outcome = 1 + Math.floor(Math.random() * dieSides);
+    }
     this.setCardStatDisplayOverride(card.userData.cardId, rollType, outcome);
 
-    this.combatShakeEffects.push({
-      card: targetCard,
-      startAtMs: performance.now(),
-      durationMs: 360,
-      basePosition: targetCard.position.clone(),
-      baseRotationZ: targetCard.rotation.z,
-      axis: new THREE.Vector3(0, 0, -1),
-      amplitude: 0.16,
-      swayAmplitude: 0.08,
-      rollAmplitude: 0.08,
-    });
+    if (targetCard) {
+      this.queueSpellAttackAnimation(card, targetCard);
+      await new Promise((resolve) => window.setTimeout(resolve, 760));
+    }
 
-    if (selectedAbility?.effectId === 'damage_enemy') {
+    if (selectedAbility?.effectId === 'damage_enemy' && targetCard) {
       const currentHealth = Number(targetCard.userData?.catalogCard?.health);
       if (Number.isFinite(currentHealth)) {
         targetCard.userData.catalogCard.health = currentHealth - outcome;
@@ -595,12 +692,12 @@ export class CardGameClient {
       }
     }
 
-    await new Promise((resolve) => window.setTimeout(resolve, 360));
+    await new Promise((resolve) => window.setTimeout(resolve, SPELL_ATTACK_DELAY_AFTER_IMPACT_MS));
     this.beginCardDeathAnimation(card, new THREE.Vector3(0, 0, -1), performance.now());
     card.userData.zone = CARD_ZONE_TYPES.DISCARD;
     card.userData.slotIndex = null;
     await this.notifyCardStateCommitted(card);
-    await new Promise((resolve) => window.setTimeout(resolve, 700));
+    await new Promise((resolve) => window.setTimeout(resolve, SPELL_DEATH_SETTLE_WAIT_MS));
 
     this.state.spellResolutionInProgress = false;
     this.options = { ...this.options, interactionLocked: false };
@@ -825,6 +922,7 @@ export class CardGameClient {
   }
 
   resetDemo() {
+    this.clearSpellRollerPanel();
     this.clearHighlights();
     this.clearActiveCard({ restore: false });
     window.clearTimeout(this.state.holdTimer);
@@ -1508,6 +1606,7 @@ export class CardGameClient {
     this.applyCombatAnimations(time);
     this.applyHandledCardSway(time);
     this.applyPlacedCardAmbientSway(time);
+    this.positionSpellRollerPanel();
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = requestAnimationFrame(this.animate);
   }
@@ -1520,6 +1619,7 @@ export class CardGameClient {
     this.canvasContainer.removeEventListener('pointercancel', this.handlePointerCancel);
     window.removeEventListener('resize', this.updateSize);
     this.resetBtn?.removeEventListener('click', this.resetDemo);
+    this.clearSpellRollerPanel();
     this.cardBackTexture?.dispose?.();
     this.renderer.dispose();
   }
