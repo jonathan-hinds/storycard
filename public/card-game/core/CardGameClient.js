@@ -1,7 +1,7 @@
-import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
-import { EffectComposer } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/RenderPass.js';
-import { OutlinePass } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/OutlinePass.js';
+import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js?module';
+import { EffectComposer } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/EffectComposer.js?module';
+import { RenderPass } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/RenderPass.js?module';
+import { OutlinePass } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/OutlinePass.js?module';
 import { CardMeshFactory } from '../render/CardMeshFactory.js';
 import { CARD_LABEL_CANVAS_SIZE, createCardLabelTexture } from '../render/cardLabelTexture.js';
 import { getDefaultCardBackgroundImagePath, getDefaultCardLabelLayout, resolveCardKind } from '../render/cardStyleConfig.js';
