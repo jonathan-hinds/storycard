@@ -1,4 +1,4 @@
-import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
+import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, getPreviewTuningBounds, loadPreviewTuning, savePreviewTuning } from '/public/card-game/index.js';
 import { CardRollerOverlay } from './CardRollerOverlay.js';
 
 const PLAYER_SIDE = 'player';
@@ -39,6 +39,8 @@ export class PhaseManagerClient {
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
     this.readyUp = this.readyUp.bind(this);
     this.resetMatch = this.resetMatch.bind(this);
+    this.handlePreviewTuningInput = this.handlePreviewTuningInput.bind(this);
+    this.exportPreviewTuningJson = this.exportPreviewTuningJson.bind(this);
   }
 
   async postJson(url, body) {
@@ -69,6 +71,7 @@ export class PhaseManagerClient {
     matchmakingBtn.addEventListener('click', this.beginMatchmaking);
     readyBtn.addEventListener('click', this.readyUp);
     resetBtn.addEventListener('click', this.resetMatch);
+    this.setupPreviewTuningControls();
 
     this.renderMatch();
     this.matchmakingPollTimer = window.setInterval(() => this.pollMatchmakingStatus(), this.options.pollIntervalMs);
@@ -81,6 +84,7 @@ export class PhaseManagerClient {
     matchmakingBtn.removeEventListener('click', this.beginMatchmaking);
     readyBtn.removeEventListener('click', this.readyUp);
     resetBtn.removeEventListener('click', this.resetMatch);
+    this.teardownPreviewTuningControls();
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -96,6 +100,139 @@ export class PhaseManagerClient {
       window.clearInterval(this.matchmakingPollTimer);
       this.matchmakingPollTimer = 0;
     }
+  }
+
+  setupPreviewTuningControls() {
+    const {
+      tuningUpDownEl,
+      tuningLeftRightEl,
+      tuningNearFarEl,
+      tuningAmbientEl,
+      tuningKeyLightEl,
+      tuningRoughnessEl,
+      tuningExportBtn,
+    } = this.elements;
+
+    const bounds = getPreviewTuningBounds();
+    if (tuningUpDownEl) {
+      tuningUpDownEl.min = String(bounds.previewOffsetY.min);
+      tuningUpDownEl.max = String(bounds.previewOffsetY.max);
+      tuningUpDownEl.step = '0.01';
+      tuningUpDownEl.value = String(this.previewTuning.previewOffsetY);
+      tuningUpDownEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    if (tuningLeftRightEl) {
+      tuningLeftRightEl.min = String(bounds.previewOffsetX.min);
+      tuningLeftRightEl.max = String(bounds.previewOffsetX.max);
+      tuningLeftRightEl.step = '0.01';
+      tuningLeftRightEl.value = String(this.previewTuning.previewOffsetX);
+      tuningLeftRightEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    if (tuningNearFarEl) {
+      tuningNearFarEl.step = '0.01';
+      tuningNearFarEl.value = String(this.previewTuning.cameraDistanceOffset);
+      tuningNearFarEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    if (tuningAmbientEl) {
+      tuningAmbientEl.min = String(bounds.ambientLightIntensity.min);
+      tuningAmbientEl.max = String(bounds.ambientLightIntensity.max);
+      tuningAmbientEl.step = '0.01';
+      tuningAmbientEl.value = String(this.previewTuning.ambientLightIntensity);
+      tuningAmbientEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    if (tuningKeyLightEl) {
+      tuningKeyLightEl.min = String(bounds.keyLightIntensity.min);
+      tuningKeyLightEl.max = String(bounds.keyLightIntensity.max);
+      tuningKeyLightEl.step = '0.01';
+      tuningKeyLightEl.value = String(this.previewTuning.keyLightIntensity);
+      tuningKeyLightEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    if (tuningRoughnessEl) {
+      tuningRoughnessEl.min = String(bounds.cardMaterialRoughness.min);
+      tuningRoughnessEl.max = String(bounds.cardMaterialRoughness.max);
+      tuningRoughnessEl.step = '0.01';
+      tuningRoughnessEl.value = String(this.previewTuning.cardMaterialRoughness);
+      tuningRoughnessEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    tuningExportBtn?.addEventListener('click', this.exportPreviewTuningJson);
+    this.renderPreviewTuningReadouts();
+  }
+
+  teardownPreviewTuningControls() {
+    const {
+      tuningUpDownEl,
+      tuningLeftRightEl,
+      tuningNearFarEl,
+      tuningAmbientEl,
+      tuningKeyLightEl,
+      tuningRoughnessEl,
+      tuningExportBtn,
+    } = this.elements;
+
+    tuningUpDownEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningLeftRightEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningNearFarEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningAmbientEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningKeyLightEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningRoughnessEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningExportBtn?.removeEventListener('click', this.exportPreviewTuningJson);
+  }
+
+  renderPreviewTuningReadouts() {
+    const {
+      tuningUpDownValueEl,
+      tuningLeftRightValueEl,
+      tuningNearFarValueEl,
+      tuningAmbientValueEl,
+      tuningKeyLightValueEl,
+      tuningRoughnessValueEl,
+      tuningExportOutputEl,
+    } = this.elements;
+
+    if (tuningUpDownValueEl) tuningUpDownValueEl.textContent = `Y: ${this.previewTuning.previewOffsetY.toFixed(2)}`;
+    if (tuningLeftRightValueEl) tuningLeftRightValueEl.textContent = `X: ${this.previewTuning.previewOffsetX.toFixed(2)}`;
+    if (tuningNearFarValueEl) tuningNearFarValueEl.textContent = `Z offset: ${this.previewTuning.cameraDistanceOffset.toFixed(2)}`;
+    if (tuningAmbientValueEl) tuningAmbientValueEl.textContent = `${this.previewTuning.ambientLightIntensity.toFixed(2)}`;
+    if (tuningKeyLightValueEl) tuningKeyLightValueEl.textContent = `${this.previewTuning.keyLightIntensity.toFixed(2)}`;
+    if (tuningRoughnessValueEl) tuningRoughnessValueEl.textContent = `${this.previewTuning.cardMaterialRoughness.toFixed(2)}`;
+
+    if (tuningExportOutputEl) {
+      tuningExportOutputEl.value = JSON.stringify(this.previewTuning, null, 2);
+    }
+  }
+
+  handlePreviewTuningInput() {
+    const {
+      tuningUpDownEl,
+      tuningLeftRightEl,
+      tuningNearFarEl,
+      tuningAmbientEl,
+      tuningKeyLightEl,
+      tuningRoughnessEl,
+    } = this.elements;
+
+    this.previewTuning = savePreviewTuning({
+      ...this.previewTuning,
+      previewOffsetY: Number(tuningUpDownEl?.value ?? this.previewTuning.previewOffsetY),
+      previewOffsetX: Number(tuningLeftRightEl?.value ?? this.previewTuning.previewOffsetX),
+      cameraDistanceOffset: Number(tuningNearFarEl?.value ?? this.previewTuning.cameraDistanceOffset),
+      ambientLightIntensity: Number(tuningAmbientEl?.value ?? this.previewTuning.ambientLightIntensity),
+      keyLightIntensity: Number(tuningKeyLightEl?.value ?? this.previewTuning.keyLightIntensity),
+      cardMaterialRoughness: Number(tuningRoughnessEl?.value ?? this.previewTuning.cardMaterialRoughness),
+    });
+
+    if (this.client?.setPreviewTuning) this.client.setPreviewTuning(this.previewTuning);
+    this.renderPreviewTuningReadouts();
+  }
+
+  exportPreviewTuningJson() {
+    this.renderPreviewTuningReadouts();
   }
 
   getBoardSlotLayout() {
@@ -314,9 +451,11 @@ export class PhaseManagerClient {
         host: canvas.parentElement,
         cardGameClient: this.client,
       });
+      this.client.setPreviewTuning(this.previewTuning);
     } else {
       this.client.template = template;
       this.client.resetDemo();
+      this.client.setPreviewTuning(this.previewTuning);
     }
 
     if (shouldAnimateInitialDeal) this.lastAnimatedMatchId = this.match.id;

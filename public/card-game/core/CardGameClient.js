@@ -115,6 +115,7 @@ export class CardGameClient {
     };
 
     this.#buildBaseScene();
+    this.setPreviewTuning(this.previewTuning);
     this.picker = new CardPicker({ camera: this.camera, domElement: canvas, cards: this.cards });
 
     this.handlePointerDown = this.handlePointerDown.bind(this);
@@ -139,13 +140,13 @@ export class CardGameClient {
   }
 
   #buildBaseScene() {
-    const hemiLight = new THREE.HemisphereLight(0xeaf2ff, 0x202938, 0.9);
-    this.scene.add(hemiLight);
+    this.hemiLight = new THREE.HemisphereLight(0xeaf2ff, 0x202938, 0.9);
+    this.scene.add(this.hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
-    keyLight.position.set(4, 8, 6);
-    keyLight.castShadow = true;
-    this.scene.add(keyLight);
+    this.keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    this.keyLight.position.set(4, 8, 6);
+    this.keyLight.castShadow = true;
+    this.scene.add(this.keyLight);
 
     const table = new THREE.Mesh(
       new THREE.PlaneGeometry(20, 20),
@@ -337,11 +338,16 @@ export class CardGameClient {
 
   setPreviewTuning(nextPreviewTuning = {}) {
     this.previewTuning = sanitizePreviewTuning(nextPreviewTuning);
+
+    if (this.hemiLight) this.hemiLight.intensity = this.previewTuning.ambientLightIntensity;
+    if (this.keyLight) this.keyLight.intensity = this.previewTuning.keyLightIntensity;
+    this.applyCardMaterialRoughness(this.previewTuning.cardMaterialRoughness);
+
     if ((this.state.mode === 'preview' || this.state.mode === 'preview-return') && this.state.activeCard) {
       this.setActiveCardPose(
         new THREE.Vector3(
-          PREVIEW_BASE_POSITION.x,
-          PREVIEW_BASE_POSITION.y,
+          PREVIEW_BASE_POSITION.x + this.previewTuning.previewOffsetX,
+          PREVIEW_BASE_POSITION.y + this.previewTuning.previewOffsetY,
           PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
         ),
         this.previewTuning.rotationX,
@@ -364,8 +370,8 @@ export class CardGameClient {
       beginPreviewTransition(this.state, this.state.previewStartedAt);
       this.setActiveCardPose(
         new THREE.Vector3(
-          PREVIEW_BASE_POSITION.x,
-          PREVIEW_BASE_POSITION.y,
+          PREVIEW_BASE_POSITION.x + this.previewTuning.previewOffsetX,
+          PREVIEW_BASE_POSITION.y + this.previewTuning.previewOffsetY,
           PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
         ),
         this.previewTuning.rotationX,
@@ -378,6 +384,23 @@ export class CardGameClient {
       ? `Dragging ${card.userData.cardId}. Release to commit to a board slot.`
       : `Previewing ${card.userData.cardId}.`);
     if (mode === 'preview') this.updateAbilityPanelHighlights(card, { interactive: true });
+  }
+
+  applyCardMaterialRoughness(roughness) {
+    const clampedRoughness = THREE.MathUtils.clamp(roughness, 0, 1);
+    for (const card of this.cards) {
+      const bodyMaterial = card.userData?.mesh?.material;
+      if (bodyMaterial && typeof bodyMaterial.roughness === 'number') {
+        bodyMaterial.roughness = clampedRoughness;
+        bodyMaterial.needsUpdate = true;
+      }
+
+      const faceMaterial = card.userData?.face?.material;
+      if (faceMaterial && typeof faceMaterial.roughness === 'number') {
+        faceMaterial.roughness = clampedRoughness;
+        faceMaterial.needsUpdate = true;
+      }
+    }
   }
 
   clearActiveCard({ restore = true } = {}) {
@@ -755,6 +778,7 @@ export class CardGameClient {
     }
 
     this.relayoutBoardAndHand();
+    this.applyCardMaterialRoughness(this.previewTuning.cardMaterialRoughness);
     this.queueCardAnimationsFromHooks({ reason: 'reset' });
     this.picker.setCards(this.cards);
     this.setStatus('Demo reset. Zone framework enabled with mirrored player/opponent zones; board remains capped at 3 slots per side and 1 deck slot per side.');
