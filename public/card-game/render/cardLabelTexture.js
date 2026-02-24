@@ -10,6 +10,8 @@ import {
 export { DEFAULT_CARD_BACKGROUND_IMAGE_PATH, DEFAULT_CARD_LABEL_LAYOUT };
 
 const CARD_LABEL_CANVAS_SIZE = 1024;
+
+export { CARD_LABEL_CANVAS_SIZE };
 const DIE_ICON_PATHS = Object.freeze({
   D6: '/public/assets/D6Icon.png',
   D8: '/public/assets/D8Icon.png',
@@ -134,6 +136,8 @@ export function createCardLabelTexture(card, {
   backgroundImagePath = null,
   cardLabelLayout = null,
   statDisplayOverrides = null,
+  abilityOutlineIndices = null,
+  selectedAbilityIndex = null,
 } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = CARD_LABEL_CANVAS_SIZE;
@@ -243,14 +247,25 @@ export function createCardLabelTexture(card, {
     const abilityBannerLayout = resolvedCardLabelLayout.abilityBanner ?? defaultLayout.abilityBanner;
     const ability1Offset = resolvedCardLabelLayout.ability1 ?? defaultLayout.ability1;
     const ability2Offset = resolvedCardLabelLayout.ability2 ?? defaultLayout.ability2;
-    drawAbilityBanner(ctx, abilityBannerLayout, {
-      x: abilityBannerLayout.x + ability1Offset.x,
-      y: abilityBannerLayout.y + ability1Offset.y,
-    }, card.ability1);
-    drawAbilityBanner(ctx, abilityBannerLayout, {
-      x: abilityBannerLayout.x + ability2Offset.x,
-      y: abilityBannerLayout.y + ability2Offset.y,
-    }, card.ability2);
+    const abilityAnchors = [
+      { x: abilityBannerLayout.x + ability1Offset.x, y: abilityBannerLayout.y + ability1Offset.y, ability: card.ability1 },
+      { x: abilityBannerLayout.x + ability2Offset.x, y: abilityBannerLayout.y + ability2Offset.y, ability: card.ability2 },
+    ];
+
+    abilityAnchors.forEach(({ x, y, ability }) => drawAbilityBanner(ctx, abilityBannerLayout, { x, y }, ability));
+
+    const outlineIndices = Array.isArray(abilityOutlineIndices) ? new Set(abilityOutlineIndices.filter(Number.isInteger)) : null;
+    const width = abilityBannerLayout.boxWidth * abilityBannerLayout.size;
+    const height = abilityBannerLayout.boxHeight * abilityBannerLayout.size;
+    abilityAnchors.forEach(({ x, y, ability }, index) => {
+      if (!ability) return;
+      const isOutlined = outlineIndices?.has(index) || selectedAbilityIndex === index;
+      if (!isOutlined) return;
+      ctx.strokeStyle = selectedAbilityIndex === index ? '#ffe16d' : 'rgba(124, 183, 255, 0.95)';
+      ctx.lineWidth = selectedAbilityIndex === index ? 8 : 5;
+      drawRoundedRect(ctx, x - (width / 2), y - (height / 2), width, height, abilityBannerLayout.boxBevel * abilityBannerLayout.size);
+      ctx.stroke();
+    });
 
     texture.needsUpdate = true;
   };

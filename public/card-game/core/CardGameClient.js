@@ -1,7 +1,7 @@
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 import { CardMeshFactory } from '../render/CardMeshFactory.js';
-import { createCardLabelTexture } from '../render/cardLabelTexture.js';
-import { getDefaultCardBackgroundImagePath } from '../render/cardStyleConfig.js';
+import { CARD_LABEL_CANVAS_SIZE, createCardLabelTexture } from '../render/cardLabelTexture.js';
+import { getDefaultCardBackgroundImagePath, getDefaultCardLabelLayout, resolveCardKind } from '../render/cardStyleConfig.js';
 import { CardPicker } from '../render/CardPicker.js';
 import { CardGameHttpClient } from '../net/httpClient.js';
 import { SINGLE_CARD_TEMPLATE } from '../templates/singleCardTemplate.js';
@@ -110,7 +110,6 @@ export class CardGameClient {
     };
 
     this.#buildBaseScene();
-    this.#buildAbilityOverlay();
     this.picker = new CardPicker({ camera: this.camera, domElement: canvas, cards: this.cards });
 
     this.handlePointerDown = this.handlePointerDown.bind(this);
@@ -216,13 +215,6 @@ export class CardGameClient {
 
       this.deckSlots.push({ ...slot, mesh: slotMesh, deck });
     });
-  }
-
-  #buildAbilityOverlay() {
-    this.abilityOverlay = document.createElement('div');
-    this.abilityOverlay.className = 'card-ability-overlay';
-    this.abilityOverlay.hidden = true;
-    this.canvasContainer.append(this.abilityOverlay);
   }
 
   setStatus(message) {
@@ -372,7 +364,7 @@ export class CardGameClient {
     this.setStatus(mode === 'drag'
       ? `Dragging ${card.userData.cardId}. Release to commit to a board slot.`
       : `Previewing ${card.userData.cardId}.`);
-    if (mode === 'preview') this.renderAbilityOverlay(card);
+    if (mode === 'preview') this.updateAbilityPanelHighlights(card, { interactive: true });
   }
 
   clearActiveCard({ restore = true } = {}) {
@@ -387,31 +379,48 @@ export class CardGameClient {
     this.state.mode = 'idle';
     this.state.dropSlotIndex = null;
     this.state.previewTransition.isActive = false;
-    this.hideAbilityOverlay();
+    this.updateAbilityPanelHighlights(card, { interactive: false });
   }
 
-  renderAbilityOverlay(card) {
-    const abilities = [card?.userData?.catalogCard?.ability1, card?.userData?.catalogCard?.ability2].filter(Boolean);
-    if (!abilities.length) {
-      this.hideAbilityOverlay();
-      return;
+
+  getAbilityPanelIndexFromHit(card, hit) {
+    const uv = hit?.uv;
+    if (!card?.userData?.catalogCard || !uv || hit?.hitObject !== card.userData.face) return null;
+
+    const cardKind = resolveCardKind(card.userData.catalogCard.cardKind);
+    const layout = getDefaultCardLabelLayout(cardKind);
+    const abilityBannerLayout = layout.abilityBanner;
+    const abilityOffsets = [layout.ability1, layout.ability2];
+    const abilities = [card.userData.catalogCard.ability1, card.userData.catalogCard.ability2];
+    const textureX = uv.x * CARD_LABEL_CANVAS_SIZE;
+    const textureY = (1 - uv.y) * CARD_LABEL_CANVAS_SIZE;
+    const width = abilityBannerLayout.boxWidth * abilityBannerLayout.size;
+    const height = abilityBannerLayout.boxHeight * abilityBannerLayout.size;
+
+    for (let index = 0; index < abilityOffsets.length; index += 1) {
+      if (!abilities[index]) continue;
+      const anchorX = abilityBannerLayout.x + abilityOffsets[index].x;
+      const anchorY = abilityBannerLayout.y + abilityOffsets[index].y;
+      const left = anchorX - (width / 2);
+      const top = anchorY - (height / 2);
+      if (textureX >= left && textureX <= left + width && textureY >= top && textureY <= top + height) {
+        return index;
+      }
     }
-    this.abilityOverlay.hidden = false;
-    this.abilityOverlay.innerHTML = '';
-    abilities.forEach((ability, index) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'card-ability-button';
-      button.textContent = `${ability.name || `Ability ${index + 1}`} (${ability.target || 'none'})`;
-      button.addEventListener('click', () => this.selectAbilityForActiveCard(ability, index));
-      this.abilityOverlay.append(button);
-    });
+
+    return null;
   }
 
-  hideAbilityOverlay() {
-    if (!this.abilityOverlay) return;
-    this.abilityOverlay.hidden = true;
-    this.abilityOverlay.innerHTML = '';
+  updateAbilityPanelHighlights(card, { interactive = false } = {}) {
+    if (!card?.userData?.catalogCard) return;
+    const outlineIndices = interactive
+      ? [card.userData.catalogCard.ability1, card.userData.catalogCard.ability2]
+        .map((ability, index) => (ability ? index : null))
+        .filter(Number.isInteger)
+      : null;
+    card.userData.abilityOutlineIndices = outlineIndices;
+    if (!interactive) card.userData.selectedAbilityIndex = null;
+    this.refreshCardFace(card);
   }
 
   getAbilityTargetType(ability) {
@@ -423,6 +432,8 @@ export class CardGameClient {
     const card = this.state.activeCard;
     if (!card || this.state.mode !== 'preview') return;
     const targetType = this.getAbilityTargetType(ability);
+    card.userData.selectedAbilityIndex = index;
+    this.refreshCardFace(card);
     this.state.selectedAbilityByCardId.set(card.userData.cardId, {
       index,
       targetType,
@@ -644,6 +655,8 @@ export class CardGameClient {
     const texture = createCardLabelTexture(card.userData.catalogCard, {
       backgroundImagePath: getDefaultCardBackgroundImagePath(cardKind),
       statDisplayOverrides: card.userData.statDisplayOverrides || null,
+      abilityOutlineIndices: card.userData.abilityOutlineIndices || null,
+      selectedAbilityIndex: Number.isInteger(card.userData.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : null,
     });
     card.userData.face.material.map = texture;
     card.userData.face.material.needsUpdate = true;
@@ -741,7 +754,8 @@ export class CardGameClient {
     this.state.pendingCardCanDrag = false;
     this.state.pendingCardDidPickup = false;
 
-    const card = this.picker.pick(event);
+    const hit = this.picker.pickHit(event);
+    const card = hit?.card ?? null;
     if (!card) {
       if (this.state.mode === 'preview' && this.beginPreviewReturn()) {
         this.clearHighlights();
@@ -764,6 +778,23 @@ export class CardGameClient {
       this.setStatus(`${card.userData.cardId} is still animating. Try again in a moment.`);
       return;
     }
+
+    if (this.state.mode === 'preview' && this.state.activeCard === card) {
+      const abilityIndex = this.getAbilityPanelIndexFromHit(card, hit);
+      if (abilityIndex != null) {
+        const ability = abilityIndex === 0 ? card.userData.catalogCard?.ability1 : card.userData.catalogCard?.ability2;
+        if (ability) {
+          this.selectAbilityForActiveCard(ability, abilityIndex);
+          this.state.activePointerId = null;
+          this.state.pendingCard = null;
+          this.state.pendingCardCanDrag = false;
+          this.state.pendingCardDidPickup = false;
+          if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+          return;
+        }
+      }
+    }
+
 
     if (this.state.pendingAbilitySelection) {
       const pending = this.state.pendingAbilitySelection;
@@ -1240,7 +1271,6 @@ export class CardGameClient {
     this.canvasContainer.removeEventListener('pointercancel', this.handlePointerCancel);
     window.removeEventListener('resize', this.updateSize);
     this.resetBtn?.removeEventListener('click', this.resetDemo);
-    this.abilityOverlay?.remove();
     this.cardBackTexture?.dispose?.();
     this.renderer.dispose();
   }

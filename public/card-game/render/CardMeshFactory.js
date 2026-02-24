@@ -79,6 +79,7 @@ export class CardMeshFactory {
         }),
       );
       face.position.set(0, 0, (thickness / 2) + 0.002);
+      face.userData.cardRoot = root;
       dragPivot.add(face);
       root.userData.face = face;
     }
