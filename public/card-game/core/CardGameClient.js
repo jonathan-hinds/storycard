@@ -119,6 +119,7 @@ export class CardGameClient {
       portraitIntensity: 0,
       spellResolutionInProgress: false,
       activeSpellRoller: null,
+      spellRollerLayer: null,
     };
 
     this.#buildBaseScene();
@@ -554,11 +555,22 @@ export class CardGameClient {
   createSpellRollerPanel(card) {
     const host = this.canvas?.parentElement;
     if (!host || !card) return null;
+
+    if (!this.state.spellRollerLayer || !this.state.spellRollerLayer.isConnected) {
+      const layer = document.createElement('div');
+      layer.className = 'card-roller-overlay-layer';
+      host.append(layer);
+      this.state.spellRollerLayer = layer;
+    }
+
     const panel = document.createElement('div');
     panel.className = 'card-roller-overlay-panel';
     panel.dataset.state = 'pending';
     panel.title = 'Click to roll spell EFCT die';
-    host.append(panel);
+    panel.style.left = '0';
+    panel.style.top = '0';
+    this.state.spellRollerLayer.dataset.active = 'true';
+    this.state.spellRollerLayer.append(panel);
     return panel;
   }
 
@@ -619,15 +631,20 @@ export class CardGameClient {
     const size = this.renderer.getSize(new THREE.Vector2());
     const x = (projected.x * 0.5 + 0.5) * size.x;
     const y = (-projected.y * 0.5 + 0.5) * size.y;
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const layerRect = (this.state.spellRollerLayer || this.canvas.parentElement).getBoundingClientRect();
+    const xInLayer = x + (canvasRect.left - layerRect.left);
+    const yInLayer = y + (canvasRect.top - layerRect.top);
     const panelSize = Math.max(72, Math.min(98, (this.canvas.parentElement?.clientWidth || size.x) * 0.14));
     active.panel.style.width = `${panelSize}px`;
     active.panel.style.height = `${panelSize}px`;
-    active.panel.style.transform = `translate(${x - panelSize / 2}px, ${y - panelSize / 2}px)`;
+    active.panel.style.transform = `translate(${xInLayer - panelSize / 2}px, ${yInLayer - panelSize / 2}px)`;
   }
   clearSpellRollerPanel() {
     const active = this.state.activeSpellRoller;
     if (!active) return;
     active.panel?.remove();
+    if (this.state.spellRollerLayer) this.state.spellRollerLayer.dataset.active = 'false';
     this.state.activeSpellRoller = null;
   }
 
@@ -1627,6 +1644,8 @@ export class CardGameClient {
     window.removeEventListener('resize', this.updateSize);
     this.resetBtn?.removeEventListener('click', this.resetDemo);
     this.clearSpellRollerPanel();
+    this.state.spellRollerLayer?.remove();
+    this.state.spellRollerLayer = null;
     this.cardBackTexture?.dispose?.();
     this.renderer.dispose();
   }
