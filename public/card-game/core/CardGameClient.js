@@ -113,6 +113,7 @@ export class CardGameClient {
         durationMs: PREVIEW_TRANSITION_IN_MS,
       },
       portraitIntensity: 0,
+      spellResolutionInProgress: false,
     };
 
     this.#buildBaseScene();
@@ -479,7 +480,15 @@ export class CardGameClient {
     return TARGET_TYPES[target] || TARGET_TYPES.none;
   }
 
+  isSpellCard(card) {
+    return resolveCardKind(card?.userData?.catalogCard?.cardKind) === 'Spell';
+  }
+
   canInteractWithCardAbilities(card) {
+    if (!card || this.options?.interactionLocked || this.state.spellResolutionInProgress) return false;
+    if (this.isSpellCard(card)) {
+      return card.userData.zone === CARD_ZONE_TYPES.HAND && card.userData.owner === this.template.playerSide;
+    }
     return this.canCardAttack(card);
   }
 
@@ -511,7 +520,8 @@ export class CardGameClient {
 
   getCardsForTargetType(targetType, sourceCard) {
     if (!sourceCard) return [];
-    if (targetType === TARGET_TYPES.self) return [sourceCard];
+    const sourceIsSpellInHand = this.isSpellCard(sourceCard) && sourceCard.userData.zone === CARD_ZONE_TYPES.HAND;
+    if (targetType === TARGET_TYPES.self) return sourceIsSpellInHand ? [] : [sourceCard];
     if (targetType === TARGET_TYPES.friendly) {
       return this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner === sourceCard.userData.owner);
     }
@@ -529,7 +539,85 @@ export class CardGameClient {
     this.getCardsForTargetType(pending.targetType, sourceCard).forEach((card) => this.applySelectionGlow(card));
   }
 
-  async commitAbilitySelection({ card, targetSlotIndex, targetSide }) {
+  parseDieSides(value, fallback = 6) {
+    if (typeof value !== 'string') return fallback;
+    const match = value.trim().match(/d\s*(\d+)/i);
+    const sides = Number.parseInt(match?.[1] || '', 10);
+    return Number.isFinite(sides) ? Math.max(2, sides) : fallback;
+  }
+
+  async runSpellResolution({ card, targetCard, selectedAbility }) {
+    this.state.spellResolutionInProgress = true;
+    this.options = { ...this.options, interactionLocked: true };
+    this.clearHighlights();
+    card.userData.locked = true;
+
+    const startPosition = card.position.clone();
+    const centerPosition = new THREE.Vector3(1.05, 0.32, 0.2);
+    const centerStart = performance.now();
+    this.cardAnimations.push({
+      card,
+      startAtMs: centerStart,
+      durationMs: 520,
+      fromPosition: startPosition,
+      fromRotation: card.rotation.clone(),
+      targetPosition: centerPosition,
+      targetRotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
+      arcHeight: 0.24,
+      scaleFrom: 1,
+      scaleTo: 1.06,
+      onComplete: () => {},
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 650));
+    const rollType = selectedAbility?.valueSourceStat === 'efct' ? 'damage' : (selectedAbility?.valueSourceStat || 'damage');
+    const dieSides = this.parseDieSides(card.userData.catalogCard?.[rollType], 6);
+    const outcome = 1 + Math.floor(Math.random() * dieSides);
+    this.setCardStatDisplayOverride(card.userData.cardId, rollType, outcome);
+
+    this.combatShakeEffects.push({
+      card: targetCard,
+      startAtMs: performance.now(),
+      durationMs: 360,
+      basePosition: targetCard.position.clone(),
+      baseRotationZ: targetCard.rotation.z,
+      axis: new THREE.Vector3(0, 0, -1),
+      amplitude: 0.16,
+      swayAmplitude: 0.08,
+      rollAmplitude: 0.08,
+    });
+
+    if (selectedAbility?.effectId === 'damage_enemy') {
+      const currentHealth = Number(targetCard.userData?.catalogCard?.health);
+      if (Number.isFinite(currentHealth)) {
+        targetCard.userData.catalogCard.health = currentHealth - outcome;
+        this.refreshCardFace(targetCard);
+      }
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 360));
+    this.beginCardDeathAnimation(card, new THREE.Vector3(0, 0, -1), performance.now());
+    card.userData.zone = CARD_ZONE_TYPES.DISCARD;
+    card.userData.slotIndex = null;
+    await this.notifyCardStateCommitted(card);
+    await new Promise((resolve) => window.setTimeout(resolve, 700));
+
+    this.state.spellResolutionInProgress = false;
+    this.options = { ...this.options, interactionLocked: false };
+  }
+
+  async commitAbilitySelection({ card, targetSlotIndex, targetSide, targetCard = null }) {
+    const selectedAbility = Number.isInteger(card.userData.selectedAbilityIndex)
+      ? (card.userData.selectedAbilityIndex === 0 ? card.userData.catalogCard?.ability1 : card.userData.catalogCard?.ability2)
+      : card.userData.catalogCard?.ability1;
+
+    if (this.isSpellCard(card) && card.userData.zone === CARD_ZONE_TYPES.HAND) {
+      await this.runSpellResolution({ card, targetCard, selectedAbility });
+      this.state.pendingAbilitySelection = null;
+      this.clearHighlights();
+      return;
+    }
+
     card.userData.attackCommitted = true;
     card.userData.targetSlotIndex = Number.isInteger(targetSlotIndex) ? targetSlotIndex : null;
     card.userData.targetSide = targetSide || null;
@@ -662,6 +750,7 @@ export class CardGameClient {
 
   canCardDrag(card) {
     if (!card) return false;
+    if (this.isSpellCard(card)) return false;
     if (card.userData.zone === CARD_ZONE_TYPES.HAND && card.userData.owner === this.template.playerSide) return true;
     return false;
   }
@@ -799,6 +888,7 @@ export class CardGameClient {
   }
 
   async handlePointerDown(event) {
+    if (this.options?.interactionLocked || this.state.spellResolutionInProgress) return;
     if (this.state.mode === 'preview-return') return;
     if (this.state.activePointerId != null) return;
     this.canvasContainer.setPointerCapture(event.pointerId);
@@ -879,6 +969,7 @@ export class CardGameClient {
         card: sourceCard,
         targetSlotIndex: card.userData.slotIndex,
         targetSide: card.userData.owner,
+        targetCard: card,
       });
       this.setStatus(`Ability queued from ${sourceCard.userData.cardId}.`);
       this.state.activePointerId = null;

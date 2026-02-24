@@ -181,7 +181,7 @@ export class PhaseManagerClient {
   }
 
   syncPlayerStateFromClient() {
-    if (!this.client || !this.match) return { hand: [], board: [], attacks: [] };
+    if (!this.client || !this.match) return { hand: [], board: [], discard: [], attacks: [] };
 
     const allPlayerCards = this.client.cards
       .filter((card) => card.userData.owner === PLAYER_SIDE)
@@ -201,9 +201,13 @@ export class PhaseManagerClient {
       .sort((a, b) => a.slotIndex - b.slotIndex)
       .map(({ id, color, slotIndex }) => ({ id, color, slotIndex: slotIndex - BOARD_SLOTS_PER_SIDE }));
 
+    const discard = allPlayerCards
+      .filter((card) => card.zone === CARD_ZONE_TYPES.DISCARD)
+      .map(({ id, color }) => ({ id, color }));
+
     const attacks = typeof this.client.getCombatDecisions === 'function' ? this.client.getCombatDecisions() : [];
 
-    return { hand, board, attacks };
+    return { hand, board, discard, attacks };
   }
 
   setReadyLockState() {
@@ -497,6 +501,7 @@ export class PhaseManagerClient {
         playerId: this.playerId,
         hand: nextState.hand,
         board: nextState.board,
+        discard: nextState.discard,
         attacks: nextState.attacks,
       });
       this.applyMatchmakingStatus(status);
@@ -635,6 +640,7 @@ export class PhaseManagerClient {
       playerId: this.playerId,
       hand: nextState.hand,
       board: nextState.board,
+      discard: nextState.discard,
       attacks: nextState.attacks,
     })
       .then((status) => {
