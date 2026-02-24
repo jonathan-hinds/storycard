@@ -1,4 +1,7 @@
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/RenderPass.js';
+import { OutlinePass } from 'https://unpkg.com/three@0.162.0/examples/jsm/postprocessing/OutlinePass.js';
 import { CardMeshFactory } from '../render/CardMeshFactory.js';
 import { CARD_LABEL_CANVAS_SIZE, createCardLabelTexture } from '../render/cardLabelTexture.js';
 import { getDefaultCardBackgroundImagePath, getDefaultCardLabelLayout, resolveCardKind } from '../render/cardStyleConfig.js';
@@ -35,6 +38,9 @@ const PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE = 0.032;
 const ATTACK_TARGET_SCALE = 1.12;
 const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
+const OUTLINE_HIGHLIGHT_EDGE_STRENGTH = 8;
+const OUTLINE_HIGHLIGHT_EDGE_GLOW = 1.3;
+const OUTLINE_HIGHLIGHT_EDGE_THICKNESS = 2.4;
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -60,6 +66,7 @@ export class CardGameClient {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x000000);
     this.cardBackTexture = new THREE.TextureLoader().load(CARD_BACK_TEXTURE_URL);
+    this.highlightedCards = new Set();
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
     this.camera.position.set(0, 8.2, 4.8);
@@ -110,6 +117,7 @@ export class CardGameClient {
     };
 
     this.#buildBaseScene();
+    this.#buildPostProcessing();
     this.picker = new CardPicker({ camera: this.camera, domElement: canvas, cards: this.cards });
 
     this.handlePointerDown = this.handlePointerDown.bind(this);
@@ -131,6 +139,27 @@ export class CardGameClient {
     this.resetDemo();
     this.animationFrame = requestAnimationFrame(this.animate);
     this.loadCardState();
+  }
+
+
+  #buildPostProcessing() {
+    this.composer = new EffectComposer(this.renderer);
+    this.renderPass = new RenderPass(this.scene, this.camera);
+    this.composer.addPass(this.renderPass);
+
+    this.outlinePass = new OutlinePass(new THREE.Vector2(1, 1), this.scene, this.camera);
+    this.outlinePass.edgeStrength = OUTLINE_HIGHLIGHT_EDGE_STRENGTH;
+    this.outlinePass.edgeGlow = OUTLINE_HIGHLIGHT_EDGE_GLOW;
+    this.outlinePass.edgeThickness = OUTLINE_HIGHLIGHT_EDGE_THICKNESS;
+    this.outlinePass.pulsePeriod = 0;
+    this.outlinePass.visibleEdgeColor.setHex(0xffffff);
+    this.outlinePass.hiddenEdgeColor.setHex(0x2a2a2a);
+    this.composer.addPass(this.outlinePass);
+  }
+
+  updateHighlightOutlineSelection() {
+    if (!this.outlinePass) return;
+    this.outlinePass.selectedObjects = Array.from(this.highlightedCards);
   }
 
   #buildBaseScene() {
@@ -235,6 +264,8 @@ export class CardGameClient {
     this.camera.lookAt(0, CAMERA_LOOK_AT_Y, CAMERA_LOOK_AT_Z);
 
     this.renderer.setSize(width, height, false);
+    this.composer?.setSize(width, height);
+    this.outlinePass?.setSize(width, height);
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
 
@@ -249,14 +280,18 @@ export class CardGameClient {
       card.userData.mesh.material.emissiveIntensity = 1;
       card.scale.setScalar(card.userData.isAttackHover ? ATTACK_TARGET_SCALE : 1);
     }
+    this.highlightedCards.clear();
+    this.updateHighlightOutlineSelection();
     this.clearAttackTargetHover();
   }
 
   applySelectionGlow(card) {
     if (!card?.userData?.mesh?.material) return;
-    card.userData.mesh.material.emissive.setHex(0xffffff);
-    card.userData.mesh.material.emissiveIntensity = 0.38;
+    card.userData.mesh.material.emissive.setHex(0x000000);
+    card.userData.mesh.material.emissiveIntensity = 1;
     card.scale.setScalar(1.04);
+    this.highlightedCards.add(card);
+    this.updateHighlightOutlineSelection();
   }
 
   clearAttackTargetHover() {
@@ -1259,7 +1294,7 @@ export class CardGameClient {
     this.applyCombatAnimations(time);
     this.applyHandledCardSway(time);
     this.applyPlacedCardAmbientSway(time);
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
     this.animationFrame = requestAnimationFrame(this.animate);
   }
 
@@ -1272,6 +1307,8 @@ export class CardGameClient {
     window.removeEventListener('resize', this.updateSize);
     this.resetBtn?.removeEventListener('click', this.resetDemo);
     this.cardBackTexture?.dispose?.();
+    this.outlinePass?.dispose?.();
+    this.composer?.dispose?.();
     this.renderer.dispose();
   }
 }
