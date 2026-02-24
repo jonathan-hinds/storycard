@@ -66,7 +66,7 @@ export class CardMeshFactory {
         side: THREE.BackSide,
       }),
     );
-    outline.scale.setScalar(1.025);
+    outline.scale.setScalar(1.01);
     outline.visible = true;
     outline.renderOrder = -1;
     outline.userData.cardRoot = root;
