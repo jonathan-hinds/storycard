@@ -82,6 +82,7 @@ export class CardGameClient {
     this.planePoint = new THREE.Vector3();
 
     this.state = {
+      previewViewportVariant: 'desktop',
       activePointerId: null,
       pendingCard: null,
       pendingCardCanDrag: false,
@@ -230,6 +231,7 @@ export class CardGameClient {
   updateSize() {
     const width = this.canvas.parentElement.clientWidth;
     const compactViewport = window.innerWidth <= 900;
+    this.state.previewViewportVariant = compactViewport ? 'mobile' : 'desktop';
     const minHeight = compactViewport ? 320 : 460;
     const height = Math.max(minHeight, window.innerHeight - 140);
     const aspect = width / height;
@@ -336,6 +338,16 @@ export class CardGameClient {
     this.state.activePose.rotation.set(rotationX, rotationY, rotationZ);
   }
 
+  getResolvedPreviewOffsets() {
+    const variant = this.state.previewViewportVariant === 'mobile' ? 'previewOffsetMobile' : 'previewOffsetDesktop';
+    const offsets = this.previewTuning[variant] || this.previewTuning.previewOffsetDesktop;
+    return {
+      x: Number.isFinite(offsets?.x) ? offsets.x : this.previewTuning.previewOffsetX,
+      y: Number.isFinite(offsets?.y) ? offsets.y : this.previewTuning.previewOffsetY,
+      z: Number.isFinite(offsets?.z) ? offsets.z : this.previewTuning.cameraDistanceOffset,
+    };
+  }
+
   setPreviewTuning(nextPreviewTuning = {}) {
     this.previewTuning = sanitizePreviewTuning(nextPreviewTuning);
 
@@ -344,11 +356,12 @@ export class CardGameClient {
     this.applyCardMaterialRoughness(this.previewTuning.cardMaterialRoughness);
 
     if ((this.state.mode === 'preview' || this.state.mode === 'preview-return') && this.state.activeCard) {
+      const previewOffsets = this.getResolvedPreviewOffsets();
       this.setActiveCardPose(
         new THREE.Vector3(
-          PREVIEW_BASE_POSITION.x + this.previewTuning.previewOffsetX,
-          PREVIEW_BASE_POSITION.y + this.previewTuning.previewOffsetY,
-          PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+          PREVIEW_BASE_POSITION.x + previewOffsets.x,
+          PREVIEW_BASE_POSITION.y + previewOffsets.y,
+          PREVIEW_BASE_POSITION.z + previewOffsets.z,
         ),
         this.previewTuning.rotationX,
         0,
@@ -368,11 +381,12 @@ export class CardGameClient {
       this.state.previewOriginPose.position.copy(card.position);
       this.state.previewOriginPose.rotation.copy(card.rotation);
       beginPreviewTransition(this.state, this.state.previewStartedAt);
+      const previewOffsets = this.getResolvedPreviewOffsets();
       this.setActiveCardPose(
         new THREE.Vector3(
-          PREVIEW_BASE_POSITION.x + this.previewTuning.previewOffsetX,
-          PREVIEW_BASE_POSITION.y + this.previewTuning.previewOffsetY,
-          PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+          PREVIEW_BASE_POSITION.x + previewOffsets.x,
+          PREVIEW_BASE_POSITION.y + previewOffsets.y,
+          PREVIEW_BASE_POSITION.z + previewOffsets.z,
         ),
         this.previewTuning.rotationX,
         0,

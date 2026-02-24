@@ -107,6 +107,9 @@ export class PhaseManagerClient {
       tuningUpDownEl,
       tuningLeftRightEl,
       tuningNearFarEl,
+      tuningMobileUpDownEl,
+      tuningMobileLeftRightEl,
+      tuningMobileNearFarEl,
       tuningAmbientEl,
       tuningKeyLightEl,
       tuningRoughnessEl,
@@ -114,11 +117,18 @@ export class PhaseManagerClient {
     } = this.elements;
 
     const bounds = getPreviewTuningBounds();
+    const desktopOffsets = this.previewTuning.previewOffsetDesktop || {
+      x: this.previewTuning.previewOffsetX,
+      y: this.previewTuning.previewOffsetY,
+      z: this.previewTuning.cameraDistanceOffset,
+    };
+    const mobileOffsets = this.previewTuning.previewOffsetMobile || desktopOffsets;
+
     if (tuningUpDownEl) {
       tuningUpDownEl.min = String(bounds.previewOffsetY.min);
       tuningUpDownEl.max = String(bounds.previewOffsetY.max);
       tuningUpDownEl.step = '0.01';
-      tuningUpDownEl.value = String(this.previewTuning.previewOffsetY);
+      tuningUpDownEl.value = String(desktopOffsets.y);
       tuningUpDownEl.addEventListener('input', this.handlePreviewTuningInput);
     }
 
@@ -126,14 +136,36 @@ export class PhaseManagerClient {
       tuningLeftRightEl.min = String(bounds.previewOffsetX.min);
       tuningLeftRightEl.max = String(bounds.previewOffsetX.max);
       tuningLeftRightEl.step = '0.01';
-      tuningLeftRightEl.value = String(this.previewTuning.previewOffsetX);
+      tuningLeftRightEl.value = String(desktopOffsets.x);
       tuningLeftRightEl.addEventListener('input', this.handlePreviewTuningInput);
     }
 
     if (tuningNearFarEl) {
       tuningNearFarEl.step = '0.01';
-      tuningNearFarEl.value = String(this.previewTuning.cameraDistanceOffset);
+      tuningNearFarEl.value = String(desktopOffsets.z);
       tuningNearFarEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    if (tuningMobileUpDownEl) {
+      tuningMobileUpDownEl.min = String(bounds.previewOffsetY.min);
+      tuningMobileUpDownEl.max = String(bounds.previewOffsetY.max);
+      tuningMobileUpDownEl.step = '0.01';
+      tuningMobileUpDownEl.value = String(mobileOffsets.y);
+      tuningMobileUpDownEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    if (tuningMobileLeftRightEl) {
+      tuningMobileLeftRightEl.min = String(bounds.previewOffsetX.min);
+      tuningMobileLeftRightEl.max = String(bounds.previewOffsetX.max);
+      tuningMobileLeftRightEl.step = '0.01';
+      tuningMobileLeftRightEl.value = String(mobileOffsets.x);
+      tuningMobileLeftRightEl.addEventListener('input', this.handlePreviewTuningInput);
+    }
+
+    if (tuningMobileNearFarEl) {
+      tuningMobileNearFarEl.step = '0.01';
+      tuningMobileNearFarEl.value = String(mobileOffsets.z);
+      tuningMobileNearFarEl.addEventListener('input', this.handlePreviewTuningInput);
     }
 
     if (tuningAmbientEl) {
@@ -169,6 +201,9 @@ export class PhaseManagerClient {
       tuningUpDownEl,
       tuningLeftRightEl,
       tuningNearFarEl,
+      tuningMobileUpDownEl,
+      tuningMobileLeftRightEl,
+      tuningMobileNearFarEl,
       tuningAmbientEl,
       tuningKeyLightEl,
       tuningRoughnessEl,
@@ -178,6 +213,9 @@ export class PhaseManagerClient {
     tuningUpDownEl?.removeEventListener('input', this.handlePreviewTuningInput);
     tuningLeftRightEl?.removeEventListener('input', this.handlePreviewTuningInput);
     tuningNearFarEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningMobileUpDownEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningMobileLeftRightEl?.removeEventListener('input', this.handlePreviewTuningInput);
+    tuningMobileNearFarEl?.removeEventListener('input', this.handlePreviewTuningInput);
     tuningAmbientEl?.removeEventListener('input', this.handlePreviewTuningInput);
     tuningKeyLightEl?.removeEventListener('input', this.handlePreviewTuningInput);
     tuningRoughnessEl?.removeEventListener('input', this.handlePreviewTuningInput);
@@ -189,15 +227,28 @@ export class PhaseManagerClient {
       tuningUpDownValueEl,
       tuningLeftRightValueEl,
       tuningNearFarValueEl,
+      tuningMobileUpDownValueEl,
+      tuningMobileLeftRightValueEl,
+      tuningMobileNearFarValueEl,
       tuningAmbientValueEl,
       tuningKeyLightValueEl,
       tuningRoughnessValueEl,
       tuningExportOutputEl,
     } = this.elements;
 
-    if (tuningUpDownValueEl) tuningUpDownValueEl.textContent = `Y: ${this.previewTuning.previewOffsetY.toFixed(2)}`;
-    if (tuningLeftRightValueEl) tuningLeftRightValueEl.textContent = `X: ${this.previewTuning.previewOffsetX.toFixed(2)}`;
-    if (tuningNearFarValueEl) tuningNearFarValueEl.textContent = `Z offset: ${this.previewTuning.cameraDistanceOffset.toFixed(2)}`;
+    const desktopOffsets = this.previewTuning.previewOffsetDesktop || {
+      x: this.previewTuning.previewOffsetX,
+      y: this.previewTuning.previewOffsetY,
+      z: this.previewTuning.cameraDistanceOffset,
+    };
+    const mobileOffsets = this.previewTuning.previewOffsetMobile || desktopOffsets;
+
+    if (tuningUpDownValueEl) tuningUpDownValueEl.textContent = `Y: ${desktopOffsets.y.toFixed(2)}`;
+    if (tuningLeftRightValueEl) tuningLeftRightValueEl.textContent = `X: ${desktopOffsets.x.toFixed(2)}`;
+    if (tuningNearFarValueEl) tuningNearFarValueEl.textContent = `Z offset: ${desktopOffsets.z.toFixed(2)}`;
+    if (tuningMobileUpDownValueEl) tuningMobileUpDownValueEl.textContent = `Y: ${mobileOffsets.y.toFixed(2)}`;
+    if (tuningMobileLeftRightValueEl) tuningMobileLeftRightValueEl.textContent = `X: ${mobileOffsets.x.toFixed(2)}`;
+    if (tuningMobileNearFarValueEl) tuningMobileNearFarValueEl.textContent = `Z offset: ${mobileOffsets.z.toFixed(2)}`;
     if (tuningAmbientValueEl) tuningAmbientValueEl.textContent = `${this.previewTuning.ambientLightIntensity.toFixed(2)}`;
     if (tuningKeyLightValueEl) tuningKeyLightValueEl.textContent = `${this.previewTuning.keyLightIntensity.toFixed(2)}`;
     if (tuningRoughnessValueEl) tuningRoughnessValueEl.textContent = `${this.previewTuning.cardMaterialRoughness.toFixed(2)}`;
@@ -212,16 +263,36 @@ export class PhaseManagerClient {
       tuningUpDownEl,
       tuningLeftRightEl,
       tuningNearFarEl,
+      tuningMobileUpDownEl,
+      tuningMobileLeftRightEl,
+      tuningMobileNearFarEl,
       tuningAmbientEl,
       tuningKeyLightEl,
       tuningRoughnessEl,
     } = this.elements;
 
+    const desktopOffsets = this.previewTuning.previewOffsetDesktop || {
+      x: this.previewTuning.previewOffsetX,
+      y: this.previewTuning.previewOffsetY,
+      z: this.previewTuning.cameraDistanceOffset,
+    };
+    const mobileOffsets = this.previewTuning.previewOffsetMobile || desktopOffsets;
+
     this.previewTuning = savePreviewTuning({
       ...this.previewTuning,
-      previewOffsetY: Number(tuningUpDownEl?.value ?? this.previewTuning.previewOffsetY),
-      previewOffsetX: Number(tuningLeftRightEl?.value ?? this.previewTuning.previewOffsetX),
-      cameraDistanceOffset: Number(tuningNearFarEl?.value ?? this.previewTuning.cameraDistanceOffset),
+      previewOffsetX: Number(tuningLeftRightEl?.value ?? desktopOffsets.x),
+      previewOffsetY: Number(tuningUpDownEl?.value ?? desktopOffsets.y),
+      cameraDistanceOffset: Number(tuningNearFarEl?.value ?? desktopOffsets.z),
+      previewOffsetDesktop: {
+        x: Number(tuningLeftRightEl?.value ?? desktopOffsets.x),
+        y: Number(tuningUpDownEl?.value ?? desktopOffsets.y),
+        z: Number(tuningNearFarEl?.value ?? desktopOffsets.z),
+      },
+      previewOffsetMobile: {
+        x: Number(tuningMobileLeftRightEl?.value ?? mobileOffsets.x),
+        y: Number(tuningMobileUpDownEl?.value ?? mobileOffsets.y),
+        z: Number(tuningMobileNearFarEl?.value ?? mobileOffsets.z),
+      },
       ambientLightIntensity: Number(tuningAmbientEl?.value ?? this.previewTuning.ambientLightIntensity),
       keyLightIntensity: Number(tuningKeyLightEl?.value ?? this.previewTuning.keyLightIntensity),
       cardMaterialRoughness: Number(tuningRoughnessEl?.value ?? this.previewTuning.cardMaterialRoughness),
