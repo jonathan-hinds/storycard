@@ -589,6 +589,15 @@ export class PhaseManagerClient {
   shouldRefreshMatchScene(nextMatch) {
     if (!nextMatch || !this.match) return true;
 
+    const isSameDecisionTurn = this.match.id === nextMatch.id
+      && this.match.turnNumber === nextMatch.turnNumber
+      && this.match.phase === 1
+      && nextMatch.phase === 1;
+
+    if (isSameDecisionTurn) {
+      return false;
+    }
+
     const isSameCommitTurn = this.match.id === nextMatch.id
       && this.match.turnNumber === nextMatch.turnNumber
       && this.match.phase === 2
