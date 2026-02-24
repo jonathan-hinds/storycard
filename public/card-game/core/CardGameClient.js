@@ -959,6 +959,7 @@ export class CardGameClient {
         attackerSlotIndex: card.userData.slotIndex - boardSlotsPerSide,
         targetSlotIndex: Number.isInteger(card.userData.targetSlotIndex) ? card.userData.targetSlotIndex : null,
         targetSide: card.userData.targetSide || null,
+        selectedAbilityIndex: Number.isInteger(card.userData.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0,
       }));
   }
 
@@ -1004,6 +1005,7 @@ export class CardGameClient {
         startAtMs: now + index * interAttackDelayMs,
         durationMs: 760,
         defenderCard: defenderSlot.card,
+        resolvedDamage: Number.isFinite(step?.resolvedDamage) ? step.resolvedDamage : null,
         didHit: false,
       });
     });
@@ -1065,6 +1067,16 @@ export class CardGameClient {
 
         if (!animation.didHit && t >= 0.58 && animation.defenderCard) {
           animation.didHit = true;
+          if (Number.isFinite(animation.resolvedDamage) && animation.resolvedDamage > 0) {
+            const currentHealth = Number(animation.defenderCard.userData?.catalogCard?.health);
+            const nextHealth = Number.isFinite(currentHealth)
+              ? Math.max(0, currentHealth - animation.resolvedDamage)
+              : null;
+            if (Number.isFinite(nextHealth)) {
+              animation.defenderCard.userData.catalogCard.health = nextHealth;
+              this.refreshCardFace(animation.defenderCard);
+            }
+          }
           const collisionAxis = attackAxis.lengthSq() > 0 ? attackAxis : new THREE.Vector3(0, 0, 1);
           this.combatShakeEffects.push({
             card: animation.defenderCard,

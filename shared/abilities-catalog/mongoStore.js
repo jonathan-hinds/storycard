@@ -3,6 +3,9 @@ const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
 const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
+const ABILITY_EFFECTS = ['none', 'damage_enemy'];
+const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
+const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense'];
 
 let clientPromise;
 let legacyAbilityMigrationPromise;
@@ -70,6 +73,44 @@ async function migrateLegacyAbilities(collection) {
       },
     },
   );
+
+  await collection.updateMany(
+    {
+      $or: [
+        { effectId: { $exists: false } },
+        { effectId: null },
+      ],
+      abilityKind: 'Creature',
+    },
+    {
+      $set: {
+        effectId: 'damage_enemy',
+        valueSourceType: 'roll',
+        valueSourceStat: 'damage',
+        valueSourceFixed: null,
+        updatedAt: now,
+      },
+    },
+  );
+
+  await collection.updateMany(
+    {
+      $or: [
+        { effectId: { $exists: false } },
+        { effectId: null },
+      ],
+      abilityKind: 'Spell',
+    },
+    {
+      $set: {
+        effectId: 'none',
+        valueSourceType: 'none',
+        valueSourceStat: null,
+        valueSourceFixed: null,
+        updatedAt: now,
+      },
+    },
+  );
 }
 
 async function ensureLegacyAbilitiesMigrated() {
@@ -93,6 +134,10 @@ function toAbilityRecord(document) {
     description: document.description,
     abilityKind: document.abilityKind || 'Creature',
     target: document.target || 'none',
+    effectId: document.effectId || 'none',
+    valueSourceType: document.valueSourceType || 'none',
+    valueSourceStat: document.valueSourceStat || null,
+    valueSourceFixed: Number.isFinite(document.valueSourceFixed) ? document.valueSourceFixed : null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
   };
@@ -104,6 +149,11 @@ function normalizeAbilityInput(input = {}) {
   const description = typeof input.description === 'string' ? input.description.trim() : '';
   const abilityKind = typeof input.abilityKind === 'string' ? input.abilityKind.trim() : '';
   const target = typeof input.target === 'string' ? input.target.trim().toLowerCase() : '';
+  const effectId = typeof input.effectId === 'string' ? input.effectId.trim().toLowerCase() : 'none';
+  const valueSourceType = typeof input.valueSourceType === 'string' ? input.valueSourceType.trim().toLowerCase() : 'none';
+  const valueSourceStat = typeof input.valueSourceStat === 'string' ? input.valueSourceStat.trim().toLowerCase() : null;
+  const fixedRaw = input.valueSourceFixed;
+  const valueSourceFixed = fixedRaw === '' || fixedRaw == null ? null : Number(fixedRaw);
 
   if (!name) {
     throw new Error('name is required');
@@ -125,12 +175,37 @@ function normalizeAbilityInput(input = {}) {
     throw new Error(`target must be one of: ${ABILITY_TARGETS.join(', ')}`);
   }
 
+  if (!ABILITY_EFFECTS.includes(effectId)) {
+    throw new Error(`effectId must be one of: ${ABILITY_EFFECTS.join(', ')}`);
+  }
+
+  if (!ABILITY_VALUE_SOURCE_TYPES.includes(valueSourceType)) {
+    throw new Error(`valueSourceType must be one of: ${ABILITY_VALUE_SOURCE_TYPES.join(', ')}`);
+  }
+
+  if (valueSourceType === 'roll' && !ABILITY_ROLL_STATS.includes(valueSourceStat || '')) {
+    throw new Error(`valueSourceStat must be one of: ${ABILITY_ROLL_STATS.join(', ')}`);
+  }
+
+  if (valueSourceType === 'fixed') {
+    if (!Number.isFinite(valueSourceFixed)) {
+      throw new Error('valueSourceFixed must be a number when valueSourceType is fixed');
+    }
+    if (valueSourceFixed < 0) {
+      throw new Error('valueSourceFixed must be 0 or greater');
+    }
+  }
+
   return {
     name,
     cost,
     description,
     abilityKind,
     target,
+    effectId,
+    valueSourceType,
+    valueSourceStat: valueSourceType === 'roll' ? valueSourceStat : null,
+    valueSourceFixed: valueSourceType === 'fixed' ? valueSourceFixed : null,
   };
 }
 
@@ -208,6 +283,9 @@ async function updateAbility(abilityId, input = {}) {
 module.exports = {
   ABILITY_KINDS,
   ABILITY_TARGETS,
+  ABILITY_EFFECTS,
+  ABILITY_VALUE_SOURCE_TYPES,
+  ABILITY_ROLL_STATS,
   listAbilities,
   listAbilitiesByIds,
   createAbility,

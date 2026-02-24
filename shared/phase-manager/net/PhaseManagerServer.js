@@ -87,6 +87,7 @@ class PhaseManagerServer {
         attackCommitted: false,
         targetSlotIndex: null,
         targetSide: null,
+        selectedAbilityIndex: 0,
       }));
     }
 
@@ -101,6 +102,7 @@ class PhaseManagerServer {
         attackCommitted: false,
         targetSlotIndex: null,
         targetSide: null,
+        selectedAbilityIndex: 0,
       };
     });
   }
@@ -125,7 +127,7 @@ class PhaseManagerServer {
       const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
       for (const attack of attacks) {
         commitAttacks.push({
-          ...attack,
+          ...this.resolveCommitAttackStep(match, attackerId, attack),
           attackerId,
           attackerSide,
         });
@@ -201,9 +203,76 @@ class PhaseManagerServer {
         attackCommitted: false,
         targetSlotIndex: null,
         targetSide: null,
+        selectedAbilityIndex: 0,
       }));
     });
     this.applyDecisionPhaseStartDraw(match);
+  }
+
+
+  getAttackAbilityForCard(card, selectedAbilityIndex = 0) {
+    const catalogCard = card?.catalogCard || {};
+    const abilities = [catalogCard.ability1, catalogCard.ability2].filter(Boolean);
+    if (!abilities.length) return null;
+    if (Number.isInteger(selectedAbilityIndex) && selectedAbilityIndex >= 0 && selectedAbilityIndex < abilities.length) {
+      return abilities[selectedAbilityIndex];
+    }
+    return abilities[0];
+  }
+
+  resolveAttackValue({ ability, attackId, commitRollsByAttackId }) {
+    if (!ability || ability.valueSourceType === 'none') return 0;
+    if (ability.valueSourceType === 'fixed') {
+      const fixedValue = Number(ability.valueSourceFixed);
+      return Number.isFinite(fixedValue) ? Math.max(0, Math.floor(fixedValue)) : 0;
+    }
+
+    const rollType = ability.valueSourceStat || 'damage';
+    const rollEntry = commitRollsByAttackId.get(`${attackId}:${rollType}`);
+    const outcome = Number(rollEntry?.roll?.outcome);
+    return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : 0;
+  }
+
+  resolveCommitAttackStep(match, attackerId, attack) {
+    const attackerState = match.cardsByPlayer.get(attackerId);
+    const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
+    const ability = this.getAttackAbilityForCard(attackerCard, attack.selectedAbilityIndex);
+    const resolvedValue = this.resolveAttackValue({
+      ability,
+      attackId: attack.id,
+      commitRollsByAttackId: match.commitRollsByAttackId,
+    });
+
+    return {
+      ...attack,
+      effectId: ability?.effectId || 'none',
+      resolvedValue,
+      resolvedDamage: ability?.effectId === 'damage_enemy' ? resolvedValue : 0,
+    };
+  }
+
+  applyCommitEffects(match) {
+    match.players.forEach((attackerId) => {
+      const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
+      attacks.forEach((attack) => {
+        const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, attack);
+        if (resolvedAttack.effectId !== 'damage_enemy' || resolvedAttack.resolvedDamage <= 0) return;
+        if (!Number.isInteger(attack.targetSlotIndex)) return;
+
+        const defenderId = attack.targetSide === 'player'
+          ? attackerId
+          : match.players.find((id) => id !== attackerId);
+        if (!defenderId) return;
+
+        const defenderState = match.cardsByPlayer.get(defenderId);
+        const defenderCard = defenderState?.board?.find((card) => card.slotIndex === attack.targetSlotIndex);
+        if (!defenderCard?.catalogCard) return;
+
+        const currentHealth = Number(defenderCard.catalogCard.health);
+        if (!Number.isFinite(currentHealth)) return;
+        defenderCard.catalogCard.health = Math.max(0, currentHealth - resolvedAttack.resolvedDamage);
+      });
+    });
   }
 
   resolveCommitPhase(match) {
@@ -219,6 +288,7 @@ class PhaseManagerServer {
           attackerSlotIndex: card.slotIndex,
           targetSlotIndex: Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null,
           targetSide: card.targetSide || null,
+          selectedAbilityIndex: Number.isInteger(card.selectedAbilityIndex) ? card.selectedAbilityIndex : 0,
         })) || [];
       pendingAttacks.set(playerId, attacks);
     });
@@ -261,6 +331,7 @@ class PhaseManagerServer {
 
     match.commitCompletedPlayers.add(playerId);
     if (match.commitCompletedPlayers.size === match.players.length && !match.commitAllRolledAt) {
+      this.applyCommitEffects(match);
       match.commitAllRolledAt = Date.now();
       match.phaseEndsAt = match.commitAllRolledAt
         + this.options.commitPostRollObserveMs
@@ -377,6 +448,7 @@ class PhaseManagerServer {
         attackCommitted: false,
         targetSlotIndex: null,
         targetSide: null,
+        selectedAbilityIndex: 0,
       });
     }
 
@@ -398,6 +470,9 @@ class PhaseManagerServer {
       if (attack.targetSide != null && attack.targetSide !== 'player' && attack.targetSide !== 'opponent') {
         return { error: "targetSide must be either 'player' or 'opponent' when provided" };
       }
+      if (attack.selectedAbilityIndex != null && !Number.isInteger(attack.selectedAbilityIndex)) {
+        return { error: 'selectedAbilityIndex must be an integer when provided' };
+      }
       if (seenAttackerSlots.has(attack.attackerSlotIndex)) {
         return { error: 'a board slot may only commit one attack per turn' };
       }
@@ -411,6 +486,7 @@ class PhaseManagerServer {
       attackerCard.attackCommitted = true;
       attackerCard.targetSlotIndex = Number.isInteger(attack.targetSlotIndex) ? attack.targetSlotIndex : null;
       attackerCard.targetSide = attack.targetSide || null;
+      attackerCard.selectedAbilityIndex = Number.isInteger(attack.selectedAbilityIndex) ? attack.selectedAbilityIndex : 0;
       seenAttackerSlots.add(attack.attackerSlotIndex);
     }
 

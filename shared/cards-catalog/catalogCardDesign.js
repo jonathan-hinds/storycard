@@ -20,6 +20,10 @@ function normalizeCatalogCardDesign(catalogCard = {}) {
       name,
       description,
       target,
+      effectId: String(ability.effectId ?? 'none').trim().toLowerCase() || 'none',
+      valueSourceType: String(ability.valueSourceType ?? 'none').trim().toLowerCase() || 'none',
+      valueSourceStat: ability.valueSourceStat ? String(ability.valueSourceStat).trim().toLowerCase() : null,
+      valueSourceFixed: Number.isFinite(ability.valueSourceFixed) ? ability.valueSourceFixed : null,
     };
   };
 

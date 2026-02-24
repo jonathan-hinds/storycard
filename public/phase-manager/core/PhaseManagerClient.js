@@ -436,15 +436,29 @@ export class PhaseManagerClient {
     const allRolledAt = await this.waitForCommitAllRolledAt();
     if (!allRolledAt) return;
 
+    const latestCommitAttacks = await this.fetchLatestCommitAttacks();
+    const attackPlanToAnimate = latestCommitAttacks || commitAttacks;
+
     const waitRemainingMs = Math.max(0, (allRolledAt + this.options.commitObservationDelayMs) - Date.now());
     if (waitRemainingMs > 0) {
       await new Promise((resolve) => window.setTimeout(resolve, waitRemainingMs));
     }
 
-    this.client.playCommitPhaseAnimations(commitAttacks, {
+    this.client.playCommitPhaseAnimations(attackPlanToAnimate, {
       interAttackDelayMs: 740,
     });
     this.lastAnimatedCommitKey = commitAnimationKey;
+  }
+
+
+  async fetchLatestCommitAttacks() {
+    try {
+      const status = await this.getJson(`/api/phase-manager/matchmaking/status?playerId=${encodeURIComponent(this.playerId)}`);
+      const commitAttacks = Array.isArray(status?.matchState?.meta?.commitAttacks) ? status.matchState.meta.commitAttacks : null;
+      return commitAttacks;
+    } catch (error) {
+      return null;
+    }
   }
 
   async waitForCommitAllRolledAt() {

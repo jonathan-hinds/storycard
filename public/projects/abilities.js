@@ -7,6 +7,11 @@ const saveAbilityButton = document.getElementById('save-ability-button');
 const abilityKindInput = document.getElementById('ability-kind');
 const abilityKindLabel = document.getElementById('ability-kind-label');
 
+const effectSelect = document.getElementById('ability-effect');
+const valueSourceTypeSelect = document.getElementById('ability-value-source-type');
+const valueSourceStatSelect = document.getElementById('ability-value-source-stat');
+const valueSourceFixedInput = document.getElementById('ability-value-source-fixed');
+
 const configuredAbilityKind = document.body?.dataset.abilityKind === 'spell' ? 'Spell' : 'Creature';
 
 let selectedAbilityId = null;
@@ -17,12 +22,49 @@ function setStatus(message, isError = false) {
   status.dataset.error = isError ? 'true' : 'false';
 }
 
+function toTitle(input = '') {
+  return String(input).replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function setOptions(selectEl, values = [], fallbackValue = null) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  values.forEach((value) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = toTitle(value);
+    selectEl.append(option);
+  });
+
+  if (fallbackValue && values.includes(fallbackValue)) {
+    selectEl.value = fallbackValue;
+  } else if (values.length) {
+    selectEl.value = values[0];
+  }
+}
+
+function updateValueSourceVisibility() {
+  const valueSourceType = valueSourceTypeSelect?.value || 'none';
+  const showRoll = valueSourceType === 'roll';
+  const showFixed = valueSourceType === 'fixed';
+
+  valueSourceStatSelect.hidden = !showRoll;
+  valueSourceStatSelect.previousElementSibling.hidden = !showRoll;
+  valueSourceFixedInput.hidden = !showFixed;
+  valueSourceFixedInput.previousElementSibling.hidden = !showFixed;
+}
+
 function resetFormToCreateMode() {
   selectedAbilityId = null;
   saveAbilityButton.disabled = true;
   form.reset();
   abilityKindInput.value = configuredAbilityKind;
   form.elements.target.value = 'none';
+  if (effectSelect.options.length) effectSelect.value = effectSelect.options[0].value;
+  if (valueSourceTypeSelect.options.length) valueSourceTypeSelect.value = valueSourceTypeSelect.options[0].value;
+  if (valueSourceStatSelect.options.length) valueSourceStatSelect.value = valueSourceStatSelect.options[0].value;
+  valueSourceFixedInput.value = '';
+  updateValueSourceVisibility();
 }
 
 function renderAbilities(abilities) {
@@ -53,6 +95,13 @@ function renderAbilities(abilities) {
     target.className = 'catalog-card-type';
     target.textContent = `Target: ${ability.target || 'none'}`;
 
+    const effect = document.createElement('p');
+    effect.className = 'catalog-card-type';
+    const valueSource = ability.valueSourceType === 'roll'
+      ? `roll ${ability.valueSourceStat || 'damage'}`
+      : (ability.valueSourceType === 'fixed' ? `fixed ${ability.valueSourceFixed ?? 0}` : 'none');
+    effect.textContent = `Effect: ${toTitle(ability.effectId || 'none')} (${valueSource})`;
+
     const editButton = document.createElement('button');
     editButton.type = 'button';
     editButton.textContent = 'Edit Ability';
@@ -62,12 +111,17 @@ function renderAbilities(abilities) {
       form.elements.cost.value = ability.cost ?? '';
       form.elements.description.value = ability.description ?? '';
       form.elements.target.value = ability.target ?? 'none';
+      form.elements.effectId.value = ability.effectId ?? 'none';
+      form.elements.valueSourceType.value = ability.valueSourceType ?? 'none';
+      form.elements.valueSourceStat.value = ability.valueSourceStat ?? 'damage';
+      form.elements.valueSourceFixed.value = Number.isFinite(ability.valueSourceFixed) ? ability.valueSourceFixed : '';
       abilityKindInput.value = ability.abilityKind ?? configuredAbilityKind;
       saveAbilityButton.disabled = false;
+      updateValueSourceVisibility();
       setStatus(`Editing "${ability.name}".`);
     });
 
-    row.append(heading, description, target, editButton);
+    row.append(heading, description, target, effect, editButton);
     list.append(row);
   });
 
@@ -84,6 +138,11 @@ async function fetchAbilities() {
     if (!response.ok) {
       throw new Error(payload.error || 'Failed to load abilities');
     }
+
+    setOptions(effectSelect, payload.abilityEffects || ['none'], 'none');
+    setOptions(valueSourceTypeSelect, payload.abilityValueSourceTypes || ['none'], 'none');
+    setOptions(valueSourceStatSelect, payload.abilityRollStats || ['damage'], 'damage');
+    updateValueSourceVisibility();
 
     renderAbilities(Array.isArray(payload.abilities) ? payload.abilities : []);
     setStatus(`Loaded ${payload.abilities.length} ${configuredAbilityKind.toLowerCase()} abilit${payload.abilities.length === 1 ? 'y' : 'ies'}.`);
@@ -152,7 +211,12 @@ saveAbilityButton.addEventListener('click', async () => {
       form.elements.cost.value = updatedAbility.cost ?? '';
       form.elements.description.value = updatedAbility.description ?? '';
       form.elements.target.value = updatedAbility.target ?? 'none';
+      form.elements.effectId.value = updatedAbility.effectId ?? 'none';
+      form.elements.valueSourceType.value = updatedAbility.valueSourceType ?? 'none';
+      form.elements.valueSourceStat.value = updatedAbility.valueSourceStat ?? 'damage';
+      form.elements.valueSourceFixed.value = Number.isFinite(updatedAbility.valueSourceFixed) ? updatedAbility.valueSourceFixed : '';
       abilityKindInput.value = updatedAbility.abilityKind ?? configuredAbilityKind;
+      updateValueSourceVisibility();
     }
   } catch (error) {
     setStatus(error.message, true);
@@ -164,4 +228,5 @@ if (abilityKindLabel) {
   abilityKindLabel.textContent = `${configuredAbilityKind} Ability Kind`;
 }
 
+valueSourceTypeSelect?.addEventListener('change', updateValueSourceVisibility);
 fetchAbilities();

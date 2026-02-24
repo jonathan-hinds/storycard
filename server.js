@@ -18,6 +18,9 @@ const {
 const {
   ABILITY_KINDS,
   ABILITY_TARGETS,
+  ABILITY_EFFECTS,
+  ABILITY_VALUE_SOURCE_TYPES,
+  ABILITY_ROLL_STATS,
   listAbilities: listCatalogAbilities,
   createAbility: createCatalogAbility,
   updateAbility: updateCatalogAbility,
@@ -198,7 +201,14 @@ async function handleApi(req, res, pathname) {
       const requestUrl = new URL(req.url, `http://${req.headers.host}`);
       const abilityKind = requestUrl.searchParams.get('abilityKind');
       const abilities = await listCatalogAbilities({ abilityKind });
-      sendJson(res, 200, { abilities, abilityKinds: ABILITY_KINDS, abilityTargets: ABILITY_TARGETS });
+      sendJson(res, 200, {
+        abilities,
+        abilityKinds: ABILITY_KINDS,
+        abilityTargets: ABILITY_TARGETS,
+        abilityEffects: ABILITY_EFFECTS,
+        abilityValueSourceTypes: ABILITY_VALUE_SOURCE_TYPES,
+        abilityRollStats: ABILITY_ROLL_STATS,
+      });
     } catch (error) {
       sendJson(res, 500, { error: 'Unable to load abilities from database' });
     }
@@ -214,7 +224,11 @@ async function handleApi(req, res, pathname) {
       const isValidationError =
         error.message.includes('required')
         || error.message.includes('abilityKind must be one of')
-        || error.message.includes('target must be one of');
+        || error.message.includes('target must be one of')
+        || error.message.includes('effectId must be one of')
+        || error.message.includes('valueSourceType must be one of')
+        || error.message.includes('valueSourceStat must be one of')
+        || error.message.includes('valueSourceFixed must be');
       sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create ability' });
     }
     return true;
@@ -230,7 +244,11 @@ async function handleApi(req, res, pathname) {
       const isValidationError =
         error.message.includes('required')
         || error.message.includes('abilityKind must be one of')
-        || error.message.includes('target must be one of');
+        || error.message.includes('target must be one of')
+        || error.message.includes('effectId must be one of')
+        || error.message.includes('valueSourceType must be one of')
+        || error.message.includes('valueSourceStat must be one of')
+        || error.message.includes('valueSourceFixed must be');
       const isNotFound = error.message === 'Ability not found';
       const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to update ability' });

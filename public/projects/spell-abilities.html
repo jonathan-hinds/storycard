@@ -68,6 +68,18 @@
             <option value="friendly">Friendly</option>
           </select>
 
+          <label for="ability-effect">Effect</label>
+          <select id="ability-effect" name="effectId" required></select>
+
+          <label for="ability-value-source-type">Value Source</label>
+          <select id="ability-value-source-type" name="valueSourceType" required></select>
+
+          <label for="ability-value-source-stat">Roll Stat</label>
+          <select id="ability-value-source-stat" name="valueSourceStat"></select>
+
+          <label for="ability-value-source-fixed">Fixed Value</label>
+          <input id="ability-value-source-fixed" name="valueSourceFixed" type="number" min="0" step="1" />
+
           <button type="submit">Create Ability</button>
           <button id="save-ability-button" type="button" disabled>Save Ability</button>
           <p id="create-ability-status" class="cards-status" aria-live="polite"></p>
