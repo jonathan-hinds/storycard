@@ -1,4 +1,4 @@
-import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, getPreviewTuningBounds, loadPreviewTuning, savePreviewTuning } from '/public/card-game/index.js';
+import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
 import { CardRollerOverlay } from './CardRollerOverlay.js';
 
 const PLAYER_SIDE = 'player';
@@ -39,8 +39,6 @@ export class PhaseManagerClient {
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
     this.readyUp = this.readyUp.bind(this);
     this.resetMatch = this.resetMatch.bind(this);
-    this.handlePreviewTuningInput = this.handlePreviewTuningInput.bind(this);
-    this.exportPreviewTuningJson = this.exportPreviewTuningJson.bind(this);
   }
 
   async postJson(url, body) {
@@ -71,8 +69,6 @@ export class PhaseManagerClient {
     matchmakingBtn.addEventListener('click', this.beginMatchmaking);
     readyBtn.addEventListener('click', this.readyUp);
     resetBtn.addEventListener('click', this.resetMatch);
-    this.setupPreviewTuningControls();
-
     this.renderMatch();
     this.matchmakingPollTimer = window.setInterval(() => this.pollMatchmakingStatus(), this.options.pollIntervalMs);
     this.pollMatchmakingStatus();
@@ -84,7 +80,6 @@ export class PhaseManagerClient {
     matchmakingBtn.removeEventListener('click', this.beginMatchmaking);
     readyBtn.removeEventListener('click', this.readyUp);
     resetBtn.removeEventListener('click', this.resetMatch);
-    this.teardownPreviewTuningControls();
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -100,211 +95,6 @@ export class PhaseManagerClient {
       window.clearInterval(this.matchmakingPollTimer);
       this.matchmakingPollTimer = 0;
     }
-  }
-
-  setupPreviewTuningControls() {
-    const {
-      tuningUpDownEl,
-      tuningLeftRightEl,
-      tuningNearFarEl,
-      tuningMobileUpDownEl,
-      tuningMobileLeftRightEl,
-      tuningMobileNearFarEl,
-      tuningAmbientEl,
-      tuningKeyLightEl,
-      tuningRoughnessEl,
-      tuningExportBtn,
-    } = this.elements;
-
-    const bounds = getPreviewTuningBounds();
-    const desktopOffsets = this.previewTuning.previewOffsetDesktop || {
-      x: this.previewTuning.previewOffsetX,
-      y: this.previewTuning.previewOffsetY,
-      z: this.previewTuning.cameraDistanceOffset,
-    };
-    const mobileOffsets = this.previewTuning.previewOffsetMobile || desktopOffsets;
-
-    if (tuningUpDownEl) {
-      tuningUpDownEl.min = String(bounds.previewOffsetY.min);
-      tuningUpDownEl.max = String(bounds.previewOffsetY.max);
-      tuningUpDownEl.step = '0.01';
-      tuningUpDownEl.value = String(desktopOffsets.y);
-      tuningUpDownEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    if (tuningLeftRightEl) {
-      tuningLeftRightEl.min = String(bounds.previewOffsetX.min);
-      tuningLeftRightEl.max = String(bounds.previewOffsetX.max);
-      tuningLeftRightEl.step = '0.01';
-      tuningLeftRightEl.value = String(desktopOffsets.x);
-      tuningLeftRightEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    if (tuningNearFarEl) {
-      tuningNearFarEl.step = '0.01';
-      tuningNearFarEl.value = String(desktopOffsets.z);
-      tuningNearFarEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    if (tuningMobileUpDownEl) {
-      const mobileUpDownBounds = bounds.previewOffsetYMobile || bounds.previewOffsetY;
-      tuningMobileUpDownEl.min = String(mobileUpDownBounds.min);
-      tuningMobileUpDownEl.max = String(mobileUpDownBounds.max);
-      tuningMobileUpDownEl.step = '0.01';
-      tuningMobileUpDownEl.value = String(mobileOffsets.y);
-      tuningMobileUpDownEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    if (tuningMobileLeftRightEl) {
-      tuningMobileLeftRightEl.min = String(bounds.previewOffsetX.min);
-      tuningMobileLeftRightEl.max = String(bounds.previewOffsetX.max);
-      tuningMobileLeftRightEl.step = '0.01';
-      tuningMobileLeftRightEl.value = String(mobileOffsets.x);
-      tuningMobileLeftRightEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    if (tuningMobileNearFarEl) {
-      tuningMobileNearFarEl.step = '0.01';
-      tuningMobileNearFarEl.value = String(mobileOffsets.z);
-      tuningMobileNearFarEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    if (tuningAmbientEl) {
-      tuningAmbientEl.min = String(bounds.ambientLightIntensity.min);
-      tuningAmbientEl.max = String(bounds.ambientLightIntensity.max);
-      tuningAmbientEl.step = '0.01';
-      tuningAmbientEl.value = String(this.previewTuning.ambientLightIntensity);
-      tuningAmbientEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    if (tuningKeyLightEl) {
-      tuningKeyLightEl.min = String(bounds.keyLightIntensity.min);
-      tuningKeyLightEl.max = String(bounds.keyLightIntensity.max);
-      tuningKeyLightEl.step = '0.01';
-      tuningKeyLightEl.value = String(this.previewTuning.keyLightIntensity);
-      tuningKeyLightEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    if (tuningRoughnessEl) {
-      tuningRoughnessEl.min = String(bounds.cardMaterialRoughness.min);
-      tuningRoughnessEl.max = String(bounds.cardMaterialRoughness.max);
-      tuningRoughnessEl.step = '0.01';
-      tuningRoughnessEl.value = String(this.previewTuning.cardMaterialRoughness);
-      tuningRoughnessEl.addEventListener('input', this.handlePreviewTuningInput);
-    }
-
-    tuningExportBtn?.addEventListener('click', this.exportPreviewTuningJson);
-    this.renderPreviewTuningReadouts();
-  }
-
-  teardownPreviewTuningControls() {
-    const {
-      tuningUpDownEl,
-      tuningLeftRightEl,
-      tuningNearFarEl,
-      tuningMobileUpDownEl,
-      tuningMobileLeftRightEl,
-      tuningMobileNearFarEl,
-      tuningAmbientEl,
-      tuningKeyLightEl,
-      tuningRoughnessEl,
-      tuningExportBtn,
-    } = this.elements;
-
-    tuningUpDownEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningLeftRightEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningNearFarEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningMobileUpDownEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningMobileLeftRightEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningMobileNearFarEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningAmbientEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningKeyLightEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningRoughnessEl?.removeEventListener('input', this.handlePreviewTuningInput);
-    tuningExportBtn?.removeEventListener('click', this.exportPreviewTuningJson);
-  }
-
-  renderPreviewTuningReadouts() {
-    const {
-      tuningUpDownValueEl,
-      tuningLeftRightValueEl,
-      tuningNearFarValueEl,
-      tuningMobileUpDownValueEl,
-      tuningMobileLeftRightValueEl,
-      tuningMobileNearFarValueEl,
-      tuningAmbientValueEl,
-      tuningKeyLightValueEl,
-      tuningRoughnessValueEl,
-      tuningExportOutputEl,
-    } = this.elements;
-
-    const desktopOffsets = this.previewTuning.previewOffsetDesktop || {
-      x: this.previewTuning.previewOffsetX,
-      y: this.previewTuning.previewOffsetY,
-      z: this.previewTuning.cameraDistanceOffset,
-    };
-    const mobileOffsets = this.previewTuning.previewOffsetMobile || desktopOffsets;
-
-    if (tuningUpDownValueEl) tuningUpDownValueEl.textContent = `Y: ${desktopOffsets.y.toFixed(2)}`;
-    if (tuningLeftRightValueEl) tuningLeftRightValueEl.textContent = `X: ${desktopOffsets.x.toFixed(2)}`;
-    if (tuningNearFarValueEl) tuningNearFarValueEl.textContent = `Z offset: ${desktopOffsets.z.toFixed(2)}`;
-    if (tuningMobileUpDownValueEl) tuningMobileUpDownValueEl.textContent = `Y: ${mobileOffsets.y.toFixed(2)}`;
-    if (tuningMobileLeftRightValueEl) tuningMobileLeftRightValueEl.textContent = `X: ${mobileOffsets.x.toFixed(2)}`;
-    if (tuningMobileNearFarValueEl) tuningMobileNearFarValueEl.textContent = `Z offset: ${mobileOffsets.z.toFixed(2)}`;
-    if (tuningAmbientValueEl) tuningAmbientValueEl.textContent = `${this.previewTuning.ambientLightIntensity.toFixed(2)}`;
-    if (tuningKeyLightValueEl) tuningKeyLightValueEl.textContent = `${this.previewTuning.keyLightIntensity.toFixed(2)}`;
-    if (tuningRoughnessValueEl) tuningRoughnessValueEl.textContent = `${this.previewTuning.cardMaterialRoughness.toFixed(2)}`;
-
-    if (tuningExportOutputEl) {
-      tuningExportOutputEl.value = JSON.stringify(this.previewTuning, null, 2);
-    }
-  }
-
-  handlePreviewTuningInput() {
-    const {
-      tuningUpDownEl,
-      tuningLeftRightEl,
-      tuningNearFarEl,
-      tuningMobileUpDownEl,
-      tuningMobileLeftRightEl,
-      tuningMobileNearFarEl,
-      tuningAmbientEl,
-      tuningKeyLightEl,
-      tuningRoughnessEl,
-    } = this.elements;
-
-    const desktopOffsets = this.previewTuning.previewOffsetDesktop || {
-      x: this.previewTuning.previewOffsetX,
-      y: this.previewTuning.previewOffsetY,
-      z: this.previewTuning.cameraDistanceOffset,
-    };
-    const mobileOffsets = this.previewTuning.previewOffsetMobile || desktopOffsets;
-
-    this.previewTuning = savePreviewTuning({
-      ...this.previewTuning,
-      previewOffsetX: Number(tuningLeftRightEl?.value ?? desktopOffsets.x),
-      previewOffsetY: Number(tuningUpDownEl?.value ?? desktopOffsets.y),
-      cameraDistanceOffset: Number(tuningNearFarEl?.value ?? desktopOffsets.z),
-      previewOffsetDesktop: {
-        x: Number(tuningLeftRightEl?.value ?? desktopOffsets.x),
-        y: Number(tuningUpDownEl?.value ?? desktopOffsets.y),
-        z: Number(tuningNearFarEl?.value ?? desktopOffsets.z),
-      },
-      previewOffsetMobile: {
-        x: Number(tuningMobileLeftRightEl?.value ?? mobileOffsets.x),
-        y: Number(tuningMobileUpDownEl?.value ?? mobileOffsets.y),
-        z: Number(tuningMobileNearFarEl?.value ?? mobileOffsets.z),
-      },
-      ambientLightIntensity: Number(tuningAmbientEl?.value ?? this.previewTuning.ambientLightIntensity),
-      keyLightIntensity: Number(tuningKeyLightEl?.value ?? this.previewTuning.keyLightIntensity),
-      cardMaterialRoughness: Number(tuningRoughnessEl?.value ?? this.previewTuning.cardMaterialRoughness),
-    });
-
-    if (this.client?.setPreviewTuning) this.client.setPreviewTuning(this.previewTuning);
-    this.renderPreviewTuningReadouts();
-  }
-
-  exportPreviewTuningJson() {
-    this.renderPreviewTuningReadouts();
   }
 
   getBoardSlotLayout() {
