@@ -57,6 +57,7 @@ export class CardGameClient {
     this.options = options;
     this.previewTuning = sanitizePreviewTuning(options.previewTuning || DEFAULT_PREVIEW_TUNING);
     this.onCardStateCommitted = options.onCardStateCommitted;
+    this.onSpellResolutionCommitted = options.onSpellResolutionCommitted;
     this.cardAnimationHooks = Array.isArray(options.cardAnimationHooks) ? options.cardAnimationHooks : [];
     this.net = new CardGameHttpClient(options.net || {});
 
@@ -664,7 +665,27 @@ export class CardGameClient {
     });
   }
 
-  async runSpellResolution({ card, targetCard, selectedAbility }) {
+  async notifySpellResolutionCommitted(payload) {
+    if (typeof this.onSpellResolutionCommitted !== 'function') return;
+    try {
+      await this.onSpellResolutionCommitted(payload);
+    } catch (error) {
+      this.setStatus(`Spell sync callback error: ${error.message}`);
+    }
+  }
+
+  async playResolvedSpellSequence({ cardId, targetCardId = null, rollType = 'damage', outcome = null, skipSync = false, selectedAbilityIndex = 0, effectId = 'none', targetSide = null, dieSides = null }) {
+    const card = this.getCardById(cardId);
+    if (!card) return;
+    const targetCard = this.getCardById(targetCardId);
+    const selectedAbility = Number.isInteger(selectedAbilityIndex)
+      ? (selectedAbilityIndex === 0 ? card.userData.catalogCard?.ability1 : card.userData.catalogCard?.ability2)
+      : card.userData.catalogCard?.ability1;
+    const resolvedRollType = selectedAbility?.valueSourceStat === 'efct' ? 'damage' : (selectedAbility?.valueSourceStat || rollType || 'damage');
+    const resolvedDieSides = Number.isFinite(dieSides)
+      ? Math.max(2, Math.floor(dieSides))
+      : this.parseDieSides(card.userData.catalogCard?.[resolvedRollType], 6);
+
     this.state.spellResolutionInProgress = true;
     this.options = { ...this.options, interactionLocked: true };
     this.clearHighlights();
@@ -693,10 +714,9 @@ export class CardGameClient {
     }
 
     const centerPosition = SPELL_CENTER_POSITION.clone();
-    const centerStart = performance.now();
     this.cardAnimations.push({
       card,
-      startAtMs: centerStart,
+      startAtMs: performance.now(),
       durationMs: 760,
       fromPosition: startPosition,
       fromRotation: startRotation,
@@ -710,30 +730,33 @@ export class CardGameClient {
     });
 
     await new Promise((resolve) => window.setTimeout(resolve, 860));
-    const rollType = selectedAbility?.valueSourceStat === 'efct' ? 'damage' : (selectedAbility?.valueSourceStat || 'damage');
-    const dieSides = this.parseDieSides(card.userData.catalogCard?.[rollType], 6);
-    let outcome = null;
-    try {
-      outcome = await this.waitForSpellRoll({ card, rollType, dieSides });
-    } catch (error) {
-      this.setStatus(`Spell roll failed: ${error.message}`);
-    } finally {
-      this.clearSpellRollerPanel();
+    let resolvedOutcome = Number(outcome);
+
+    if (!Number.isFinite(resolvedOutcome) && !skipSync) {
+      try {
+        resolvedOutcome = await this.waitForSpellRoll({ card, rollType: resolvedRollType, dieSides: resolvedDieSides });
+      } catch (error) {
+        this.setStatus(`Spell roll failed: ${error.message}`);
+      } finally {
+        this.clearSpellRollerPanel();
+      }
     }
-    if (!Number.isFinite(outcome)) {
-      outcome = 1 + Math.floor(Math.random() * dieSides);
+
+    if (!Number.isFinite(resolvedOutcome)) {
+      resolvedOutcome = 1 + Math.floor(Math.random() * resolvedDieSides);
     }
-    this.setCardStatDisplayOverride(card.userData.cardId, rollType, outcome);
+    this.setCardStatDisplayOverride(card.userData.cardId, resolvedRollType, resolvedOutcome);
 
     if (targetCard) {
       this.queueSpellAttackAnimation(card, targetCard);
       await new Promise((resolve) => window.setTimeout(resolve, 760));
     }
 
-    if (selectedAbility?.effectId === 'damage_enemy' && targetCard) {
+    const resolvedEffectId = effectId || selectedAbility?.effectId;
+    if (resolvedEffectId === 'damage_enemy' && targetCard && !skipSync) {
       const currentHealth = Number(targetCard.userData?.catalogCard?.health);
       if (Number.isFinite(currentHealth)) {
-        targetCard.userData.catalogCard.health = currentHealth - outcome;
+        targetCard.userData.catalogCard.health = currentHealth - resolvedOutcome;
         this.refreshCardFace(targetCard);
       }
     }
@@ -742,11 +765,36 @@ export class CardGameClient {
     this.beginCardDeathAnimation(card, new THREE.Vector3(0, 0, -1), performance.now());
     card.userData.zone = CARD_ZONE_TYPES.DISCARD;
     card.userData.slotIndex = null;
-    await this.notifyCardStateCommitted(card);
+
+    if (!skipSync) {
+      await this.notifyCardStateCommitted(card);
+      await this.notifySpellResolutionCommitted({
+        cardId: card.userData.cardId,
+        targetCardId: targetCard?.userData?.cardId || null,
+        targetSide,
+        selectedAbilityIndex,
+        rollType: resolvedRollType,
+        dieSides: resolvedDieSides,
+        outcome: resolvedOutcome,
+        effectId: resolvedEffectId || 'none',
+      });
+    }
+
     await new Promise((resolve) => window.setTimeout(resolve, SPELL_DEATH_SETTLE_WAIT_MS));
 
     this.state.spellResolutionInProgress = false;
     this.options = { ...this.options, interactionLocked: false };
+  }
+
+  async runSpellResolution({ card, targetCard, selectedAbility }) {
+    return this.playResolvedSpellSequence({
+      cardId: card?.userData?.cardId,
+      targetCardId: targetCard?.userData?.cardId || null,
+      selectedAbilityIndex: Number.isInteger(card?.userData?.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0,
+      effectId: selectedAbility?.effectId || 'none',
+      targetSide: targetCard ? (targetCard.userData?.owner === card.userData?.owner ? 'player' : 'opponent') : null,
+      skipSync: false,
+    });
   }
 
   async commitAbilitySelection({ card, targetSlotIndex, targetSide, targetCard = null }) {
