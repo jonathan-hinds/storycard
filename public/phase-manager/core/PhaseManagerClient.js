@@ -34,7 +34,6 @@ export class PhaseManagerClient {
     this.activeCommitSequenceKey = null;
     this.cardRollerOverlay = null;
     this.previewTuning = loadPreviewTuning();
-    this.lastAnimatedSpellResolutionIds = new Set();
     this.playerId = createTabPlayerId();
 
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
@@ -297,7 +296,6 @@ export class PhaseManagerClient {
         template,
         options: {
           onCardStateCommitted: () => this.syncMatchStateAfterCardCommit(),
-          onSpellResolutionCommitted: (payload) => this.submitSpellResolution(payload),
           previewTuning: this.previewTuning,
           cardAnimationHooks: [
             createDeckToHandDealHook({
@@ -358,7 +356,6 @@ export class PhaseManagerClient {
         : 'Decision phase: click/tap a ready board card to preview it, choose an ability, then choose a valid target and click Ready Up.')
       : 'Commit phase: roll each die overlay to resolve attacks.';
 
-    this.playPendingSpellResolutions();
     this.setReadyLockState();
     this.updateSummaryPanels();
   }
@@ -493,38 +490,6 @@ export class PhaseManagerClient {
     return null;
   }
 
-  async submitSpellResolution(payload) {
-    await this.postJson('/api/phase-manager/match/spell-resolution', {
-      playerId: this.playerId,
-      ...payload,
-    });
-  }
-
-  async playPendingSpellResolutions() {
-    if (!this.client || !this.match || this.match.phase !== 1) return;
-    const spellResolutions = Array.isArray(this.match.meta?.spellResolutions) ? this.match.meta.spellResolutions : [];
-    for (const resolution of spellResolutions) {
-      if (!resolution?.id || this.lastAnimatedSpellResolutionIds.has(resolution.id)) continue;
-      this.lastAnimatedSpellResolutionIds.add(resolution.id);
-      if (resolution.casterSide !== OPPONENT_SIDE) continue;
-      try {
-        await this.client.playResolvedSpellSequence({
-          cardId: resolution.cardId,
-          targetCardId: resolution.targetCardId || null,
-          selectedAbilityIndex: resolution.selectedAbilityIndex,
-          rollType: resolution.rollType,
-          dieSides: resolution.dieSides,
-          outcome: resolution.outcome,
-          effectId: resolution.effectId,
-          targetSide: resolution.targetSide,
-          skipSync: true,
-        });
-      } catch (error) {
-        this.elements.statusEl.textContent = `Spell animation sync error: ${error.message}`;
-      }
-    }
-  }
-
   async syncMatchStateAfterCardCommit() {
     const { statusEl } = this.elements;
     if (!this.match || this.match.phase !== 1 || this.match.youAreReady || this.stateSyncInFlight) return;
@@ -569,7 +534,6 @@ export class PhaseManagerClient {
       }
 
       if (nextMatch && !this.match) {
-        this.lastAnimatedSpellResolutionIds.clear();
         nextMatch.meta = {
           ...nextMatch.meta,
           animatedDrawCardIds: [],
@@ -599,7 +563,6 @@ export class PhaseManagerClient {
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
-    this.lastAnimatedSpellResolutionIds.clear();
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -698,7 +661,6 @@ export class PhaseManagerClient {
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
-    this.lastAnimatedSpellResolutionIds.clear();
     if (this.client) {
       this.client.destroy();
       this.client = null;
