@@ -5,6 +5,8 @@ export const DEFAULT_PREVIEW_TUNING = Object.freeze({
   previewOffsetX: 0,
   previewOffsetY: 0,
   cameraDistanceOffset: 1.2,
+  previewOffsetDesktop: Object.freeze({ x: 0, y: 0, z: 1.2 }),
+  previewOffsetMobile: Object.freeze({ x: 0, y: 0, z: 1.2 }),
   ambientLightIntensity: 0.9,
   keyLightIntensity: 1.1,
   cardMaterialRoughness: 0.62,
@@ -28,21 +30,39 @@ function clamp(value, bounds) {
   return Math.min(bounds.max, Math.max(bounds.min, value));
 }
 
+function sanitizeVariantOffsets(input = {}, fallback = {}) {
+  return {
+    x: clamp(
+      toNumber(input.x, fallback.x),
+      PREVIEW_TUNING_BOUNDS.previewOffsetX,
+    ),
+    y: clamp(
+      toNumber(input.y, fallback.y),
+      PREVIEW_TUNING_BOUNDS.previewOffsetY,
+    ),
+    z: toNumber(input.z, fallback.z),
+  };
+}
+
 export function sanitizePreviewTuning(input = {}) {
+  const desktopFallback = {
+    x: toNumber(input.previewOffsetX, DEFAULT_PREVIEW_TUNING.previewOffsetDesktop.x),
+    y: toNumber(input.previewOffsetY, DEFAULT_PREVIEW_TUNING.previewOffsetDesktop.y),
+    z: toNumber(input.cameraDistanceOffset, DEFAULT_PREVIEW_TUNING.previewOffsetDesktop.z),
+  };
+  const desktop = sanitizeVariantOffsets(input.previewOffsetDesktop, desktopFallback);
+  const mobile = sanitizeVariantOffsets(input.previewOffsetMobile, desktop);
+
   return {
     rotationX: clamp(
       toNumber(input.rotationX, DEFAULT_PREVIEW_TUNING.rotationX),
       PREVIEW_TUNING_BOUNDS.rotationX,
     ),
-    previewOffsetX: clamp(
-      toNumber(input.previewOffsetX, DEFAULT_PREVIEW_TUNING.previewOffsetX),
-      PREVIEW_TUNING_BOUNDS.previewOffsetX,
-    ),
-    previewOffsetY: clamp(
-      toNumber(input.previewOffsetY, DEFAULT_PREVIEW_TUNING.previewOffsetY),
-      PREVIEW_TUNING_BOUNDS.previewOffsetY,
-    ),
-    cameraDistanceOffset: toNumber(input.cameraDistanceOffset, DEFAULT_PREVIEW_TUNING.cameraDistanceOffset),
+    previewOffsetX: desktop.x,
+    previewOffsetY: desktop.y,
+    cameraDistanceOffset: desktop.z,
+    previewOffsetDesktop: desktop,
+    previewOffsetMobile: mobile,
     ambientLightIntensity: clamp(
       toNumber(input.ambientLightIntensity, DEFAULT_PREVIEW_TUNING.ambientLightIntensity),
       PREVIEW_TUNING_BOUNDS.ambientLightIntensity,
