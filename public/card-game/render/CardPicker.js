@@ -13,7 +13,7 @@ export class CardPicker {
     this.cards = cards;
   }
 
-  pick(pointerEvent) {
+  pickHit(pointerEvent) {
     if (!this.cards.length) {
       return null;
     }
@@ -30,16 +30,22 @@ export class CardPicker {
     this.raycaster.setFromCamera(this.ndc, this.camera);
 
     const targets = this.cards
-      .map((card) => card.userData?.mesh)
+      .flatMap((card) => [card.userData?.face, card.userData?.mesh])
       .filter((mesh) => mesh && mesh.visible);
 
     const hits = this.raycaster.intersectObjects(targets, false);
-    if (!hits.length) {
-      return null;
-    }
+    if (!hits.length) return null;
 
-    const firstHit = hits[0].object;
-    return firstHit.userData.cardRoot ?? null;
+    const firstHit = hits[0];
+    return {
+      card: firstHit.object?.userData?.cardRoot ?? null,
+      hitObject: firstHit.object ?? null,
+      uv: firstHit.uv ?? null,
+    };
+  }
+
+  pick(pointerEvent) {
+    return this.pickHit(pointerEvent)?.card ?? null;
   }
 
   #extractClientPoint(pointerEvent) {
