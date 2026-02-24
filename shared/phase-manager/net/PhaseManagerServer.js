@@ -270,7 +270,17 @@ class PhaseManagerServer {
 
         const currentHealth = Number(defenderCard.catalogCard.health);
         if (!Number.isFinite(currentHealth)) return;
-        defenderCard.catalogCard.health = Math.max(0, currentHealth - resolvedAttack.resolvedDamage);
+        defenderCard.catalogCard.health = currentHealth - resolvedAttack.resolvedDamage;
+      });
+    });
+
+    match.players.forEach((playerId) => {
+      const playerState = match.cardsByPlayer.get(playerId);
+      if (!playerState?.board) return;
+      playerState.board = playerState.board.filter((card) => {
+        const health = Number(card?.catalogCard?.health);
+        if (!Number.isFinite(health)) return true;
+        return health >= 0;
       });
     });
   }

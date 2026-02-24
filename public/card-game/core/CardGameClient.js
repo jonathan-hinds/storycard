@@ -75,6 +75,7 @@ export class CardGameClient {
     this.cardAnimations = [];
     this.combatAnimations = [];
     this.combatShakeEffects = [];
+    this.deathAnimations = [];
     this.pointerNdc = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -680,6 +681,32 @@ export class CardGameClient {
     card.userData.face.material.needsUpdate = true;
   }
 
+  updateCardOpacity(card, opacity) {
+    if (!card) return;
+    card.traverse((node) => {
+      if (!node?.isMesh || !node.material) return;
+      const materials = Array.isArray(node.material) ? node.material : [node.material];
+      materials.forEach((material) => {
+        material.transparent = true;
+        material.opacity = opacity;
+      });
+    });
+  }
+
+  queueDeathAnimation(card, time, driftDirection = new THREE.Vector3(0, 0, -1)) {
+    if (!card || card.userData.isDying) return;
+    card.userData.isDying = true;
+    card.userData.locked = true;
+    this.deathAnimations.push({
+      card,
+      startAtMs: time,
+      durationMs: 900,
+      originPosition: card.position.clone(),
+      driftDirection: driftDirection.clone().setY(0).normalize(),
+      baseRotationZ: card.rotation.z,
+    });
+  }
+
   setCardStatDisplayOverride(cardId, statKey, value) {
     const card = this.getCardById(cardId);
     if (!card) return false;
@@ -732,6 +759,7 @@ export class CardGameClient {
       card.userData.shouldDealAnimate = cfg.shouldDealAnimate === true;
       card.userData.locked = false;
       card.userData.isAnimating = false;
+      card.userData.isDying = false;
       card.userData.canAttack = cfg.canAttack === true;
       card.userData.attackCommitted = cfg.attackCommitted === true;
       card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
@@ -1070,11 +1098,17 @@ export class CardGameClient {
           if (Number.isFinite(animation.resolvedDamage) && animation.resolvedDamage > 0) {
             const currentHealth = Number(animation.defenderCard.userData?.catalogCard?.health);
             const nextHealth = Number.isFinite(currentHealth)
-              ? Math.max(0, currentHealth - animation.resolvedDamage)
+              ? currentHealth - animation.resolvedDamage
               : null;
             if (Number.isFinite(nextHealth)) {
               animation.defenderCard.userData.catalogCard.health = nextHealth;
               this.refreshCardFace(animation.defenderCard);
+              if (nextHealth < 0) {
+                const deathAxis = attackAxis.lengthSq() > 0
+                  ? attackAxis.clone()
+                  : new THREE.Vector3(0, 0, animation.defenderCard.userData.owner === this.template.playerSide ? 1 : -1);
+                this.queueDeathAnimation(animation.defenderCard, time, deathAxis.multiplyScalar(-1));
+              }
             }
           }
           const collisionAxis = attackAxis.lengthSq() > 0 ? attackAxis : new THREE.Vector3(0, 0, 1);
@@ -1112,30 +1146,64 @@ export class CardGameClient {
       this.combatAnimations = pending;
     }
 
-    if (!this.combatShakeEffects.length) return;
-    const remaining = [];
-    for (const shake of this.combatShakeEffects) {
-      const elapsed = time - shake.startAtMs;
-      const progress = THREE.MathUtils.clamp(elapsed / shake.durationMs, 0, 1);
-      const envelope = (1 - progress) ** 2;
-      const axis = shake.axis || new THREE.Vector3(1, 0, 0);
-      const swayAxis = new THREE.Vector3(-axis.z, 0, axis.x);
-      const impulse = Math.sin(progress * Math.PI * 3.5) * (shake.amplitude ?? 0.08) * envelope;
-      const sway = Math.sin(progress * Math.PI * 7) * (shake.swayAmplitude ?? 0.04) * envelope;
-      shake.card.position.set(
-        shake.basePosition.x + axis.x * impulse + swayAxis.x * sway,
-        shake.basePosition.y + Math.abs(Math.sin(progress * Math.PI * 6)) * 0.03 * envelope,
-        shake.basePosition.z + axis.z * impulse + swayAxis.z * sway,
+    if (this.combatShakeEffects.length) {
+      const remaining = [];
+      for (const shake of this.combatShakeEffects) {
+        const elapsed = time - shake.startAtMs;
+        const progress = THREE.MathUtils.clamp(elapsed / shake.durationMs, 0, 1);
+        const envelope = (1 - progress) ** 2;
+        const axis = shake.axis || new THREE.Vector3(1, 0, 0);
+        const swayAxis = new THREE.Vector3(-axis.z, 0, axis.x);
+        const impulse = Math.sin(progress * Math.PI * 3.5) * (shake.amplitude ?? 0.08) * envelope;
+        const sway = Math.sin(progress * Math.PI * 7) * (shake.swayAmplitude ?? 0.04) * envelope;
+        shake.card.position.set(
+          shake.basePosition.x + axis.x * impulse + swayAxis.x * sway,
+          shake.basePosition.y + Math.abs(Math.sin(progress * Math.PI * 6)) * 0.03 * envelope,
+          shake.basePosition.z + axis.z * impulse + swayAxis.z * sway,
+        );
+        shake.card.rotation.z = (shake.baseRotationZ ?? 0) + Math.sin(progress * Math.PI * 6) * (shake.rollAmplitude ?? 0.05) * envelope;
+        if (progress >= 1) {
+          shake.card.position.copy(shake.basePosition);
+          shake.card.rotation.z = shake.baseRotationZ ?? 0;
+        } else {
+          remaining.push(shake);
+        }
+      }
+      this.combatShakeEffects = remaining;
+    }
+
+    if (!this.deathAnimations.length) return;
+    const activeDeaths = [];
+    for (const death of this.deathAnimations) {
+      const elapsed = time - death.startAtMs;
+      const progress = THREE.MathUtils.clamp(elapsed / death.durationMs, 0, 1);
+      const ease = THREE.MathUtils.smootherstep(progress, 0, 1);
+      const driftDistance = 1.55 * ease;
+      const sinkDistance = 0.72 * (ease ** 1.25);
+      death.card.position.set(
+        death.originPosition.x + death.driftDirection.x * driftDistance,
+        death.originPosition.y + 0.18 * Math.sin(progress * Math.PI) - sinkDistance,
+        death.originPosition.z + death.driftDirection.z * driftDistance,
       );
-      shake.card.rotation.z = (shake.baseRotationZ ?? 0) + Math.sin(progress * Math.PI * 6) * (shake.rollAmplitude ?? 0.05) * envelope;
+      death.card.rotation.z = death.baseRotationZ + ease * 0.48;
+      death.card.rotation.y += 0.02;
+      this.updateCardOpacity(death.card, 1 - ease);
+
       if (progress >= 1) {
-        shake.card.position.copy(shake.basePosition);
-        shake.card.rotation.z = shake.baseRotationZ ?? 0;
+        if (death.card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(death.card.userData.slotIndex)) {
+          const slot = this.boardSlots[death.card.userData.slotIndex];
+          if (slot?.card === death.card) slot.card = null;
+        }
+        death.card.userData.zone = CARD_ZONE_TYPES.DISCARD;
+        death.card.userData.slotIndex = null;
+        death.card.userData.locked = false;
+        death.card.userData.isDying = false;
+        this.scene.remove(death.card);
       } else {
-        remaining.push(shake);
+        activeDeaths.push(death);
       }
     }
-    this.combatShakeEffects = remaining;
+    this.deathAnimations = activeDeaths;
   }
 
   async handlePointerUp(event) {
