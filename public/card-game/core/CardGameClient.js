@@ -1126,10 +1126,18 @@ export class CardGameClient {
     if (transitionCompleted) {
       this.state.previewTransition.isActive = false;
       if (this.state.mode === 'preview-return') {
-        this.clearHighlights();
+        const pendingAbilitySelection = this.state.pendingAbilitySelection;
+        if (!pendingAbilitySelection) {
+          this.clearHighlights();
+        }
         this.clearActiveCard({ restore: true });
         this.relayoutBoardAndHand();
-        this.setStatus(`Preview closed for ${card.userData.cardId}.`);
+        if (pendingAbilitySelection) {
+          this.highlightValidTargetsForPendingAbility();
+          this.setStatus(`Select a ${pendingAbilitySelection.targetType} target for ${card.userData.cardId}.`);
+        } else {
+          this.setStatus(`Preview closed for ${card.userData.cardId}.`);
+        }
       }
     }
   }
