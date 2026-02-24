@@ -158,6 +158,11 @@ class PhaseManagerServer {
       meta: {
         drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
         phaseStartedAt: match.phaseStartedAt,
+        spellResolutions: Array.from(match.spellResolutions || []).map((entry) => ({
+          ...entry,
+          casterSide: entry.casterId === playerId ? 'player' : 'opponent',
+          targetSide: entry.targetPlayerId === playerId ? 'player' : 'opponent',
+        })),
         commitAllRolledAt: match.commitAllRolledAt || null,
         commitAttacks,
         commitRolls: Array.from(match.commitRollsByAttackId?.values() || []).map((rollEntry) => ({
@@ -197,6 +202,7 @@ class PhaseManagerServer {
     match.phaseEndsAt = null;
     match.readyPlayers.clear();
     match.pendingCommitAttacksByPlayer = new Map();
+    match.spellResolutions = [];
     match.commitRollsByAttackId = new Map();
     match.commitExecutionByAttackId = new Map();
     match.commitAnimationCompletedPlayers = new Set();
@@ -452,6 +458,62 @@ class PhaseManagerServer {
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
 
+  submitSpellResolution(payload) {
+    const {
+      playerId,
+      cardId,
+      targetCardId = null,
+      targetSide = null,
+      selectedAbilityIndex = 0,
+      rollType = 'damage',
+      dieSides = null,
+      outcome = null,
+      effectId = 'none',
+    } = payload;
+    const status = this.phaseMatchmakingState.get(playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      return { error: 'player is not in an active match', statusCode: 409 };
+    }
+
+    const match = this.phaseMatches.get(status.matchId);
+    if (!match) {
+      return { error: 'active match not found', statusCode: 409 };
+    }
+
+    if (match.phase !== 1) {
+      return { error: 'cannot submit spell resolutions outside decision phase', statusCode: 409 };
+    }
+
+    const playerState = match.cardsByPlayer.get(playerId);
+    if (!playerState) {
+      return { error: 'player state not found in active match', statusCode: 409 };
+    }
+
+    const spellCard = playerState.discard.find((card) => card.id === cardId) || playerState.hand.find((card) => card.id === cardId);
+    if (!spellCard || spellCard?.catalogCard?.cardKind !== 'Spell') {
+      return { error: 'spell card not found for player', statusCode: 400 };
+    }
+
+    const opponentId = match.players.find((id) => id !== playerId) || null;
+    const targetPlayerId = targetSide === 'player' ? playerId : (targetSide === 'opponent' ? opponentId : null);
+    const event = {
+      id: `spell:${playerId}:${cardId}:${Date.now()}`,
+      casterId: playerId,
+      cardId,
+      targetCardId: typeof targetCardId === 'string' ? targetCardId : null,
+      targetPlayerId,
+      selectedAbilityIndex: Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0,
+      rollType: typeof rollType === 'string' && rollType.trim() ? rollType.trim() : 'damage',
+      dieSides: Number.isFinite(dieSides) ? Math.max(2, Math.floor(dieSides)) : null,
+      outcome: Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : null,
+      effectId: typeof effectId === 'string' && effectId.trim() ? effectId : 'none',
+      createdAt: Date.now(),
+    };
+    match.spellResolutions.push(event);
+
+    return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
+  }
+
   readyPlayerInMatch(match, playerId) {
     match.readyPlayers.add(playerId);
 
@@ -637,6 +699,7 @@ class PhaseManagerServer {
         readyPlayers: new Set(),
         lastDrawnCardsByPlayer: new Map(),
         pendingCommitAttacksByPlayer: new Map(),
+        spellResolutions: [],
         commitRollsByAttackId: new Map(),
         commitExecutionByAttackId: new Map(),
         commitCompletedPlayers: new Set(),
