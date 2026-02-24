@@ -670,24 +670,46 @@ export class CardGameClient {
     this.clearHighlights();
     card.userData.locked = true;
 
-    const startPosition = card.position.clone();
+    const startedFromPreview = this.state.activeCard === card
+      && (this.state.mode === 'preview' || this.state.mode === 'preview-return');
+    const startPosition = startedFromPreview
+      ? this.state.previewOriginPose.position.clone()
+      : card.position.clone();
+    const startRotation = startedFromPreview
+      ? this.state.previewOriginPose.rotation.clone()
+      : card.rotation.clone();
+
+    if (startedFromPreview) {
+      this.updateAbilityPanelHighlights(card, { interactive: false });
+      this.state.activeCard = null;
+      this.state.mode = 'idle';
+      this.state.previewTransition.isActive = false;
+      card.renderOrder = 0;
+      card.userData.mesh.material.color.setHex(0x000000);
+      card.userData.tiltPivot.rotation.set(0, 0, 0);
+      card.scale.setScalar(1);
+      card.position.copy(startPosition);
+      card.rotation.copy(startRotation);
+    }
+
     const centerPosition = SPELL_CENTER_POSITION.clone();
     const centerStart = performance.now();
     this.cardAnimations.push({
       card,
       startAtMs: centerStart,
-      durationMs: 520,
+      durationMs: 760,
       fromPosition: startPosition,
-      fromRotation: card.rotation.clone(),
+      fromRotation: startRotation,
       targetPosition: centerPosition,
       targetRotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
-      arcHeight: 0.24,
+      arcHeight: 0.7,
+      swirlAmplitude: 0.15,
       scaleFrom: 1,
       scaleTo: 1.06,
       onComplete: () => {},
     });
 
-    await new Promise((resolve) => window.setTimeout(resolve, 650));
+    await new Promise((resolve) => window.setTimeout(resolve, 860));
     const rollType = selectedAbility?.valueSourceStat === 'efct' ? 'damage' : (selectedAbility?.valueSourceStat || 'damage');
     const dieSides = this.parseDieSides(card.userData.catalogCard?.[rollType], 6);
     let outcome = null;
