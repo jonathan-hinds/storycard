@@ -12,12 +12,14 @@ function normalizeCatalogCardDesign(catalogCard = {}) {
     const cost = String(ability.cost ?? '').trim();
     const name = String(ability.name ?? '').trim();
     const description = String(ability.description ?? '').trim();
+    const target = String(ability.target ?? 'none').trim().toLowerCase() || 'none';
     if (!cost && !name && !description) return null;
     return {
       id: ability.id || null,
       cost,
       name,
       description,
+      target,
     };
   };
 
