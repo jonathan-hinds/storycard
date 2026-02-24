@@ -16,6 +16,7 @@ const PREVIEW_TUNING_BOUNDS = Object.freeze({
   rotationX: { min: -1.2, max: -0.2 },
   previewOffsetX: { min: -2.5, max: 2.5 },
   previewOffsetY: { min: -2.5, max: 2.5 },
+  previewOffsetYMobile: { min: -2.5, max: 7.5 },
   ambientLightIntensity: { min: 0, max: 3 },
   keyLightIntensity: { min: 0, max: 4 },
   cardMaterialRoughness: { min: 0, max: 1 },
@@ -30,7 +31,7 @@ function clamp(value, bounds) {
   return Math.min(bounds.max, Math.max(bounds.min, value));
 }
 
-function sanitizeVariantOffsets(input = {}, fallback = {}) {
+function sanitizeVariantOffsets(input = {}, fallback = {}, yBounds = PREVIEW_TUNING_BOUNDS.previewOffsetY) {
   return {
     x: clamp(
       toNumber(input.x, fallback.x),
@@ -38,7 +39,7 @@ function sanitizeVariantOffsets(input = {}, fallback = {}) {
     ),
     y: clamp(
       toNumber(input.y, fallback.y),
-      PREVIEW_TUNING_BOUNDS.previewOffsetY,
+      yBounds,
     ),
     z: toNumber(input.z, fallback.z),
   };
@@ -51,7 +52,7 @@ export function sanitizePreviewTuning(input = {}) {
     z: toNumber(input.cameraDistanceOffset, DEFAULT_PREVIEW_TUNING.previewOffsetDesktop.z),
   };
   const desktop = sanitizeVariantOffsets(input.previewOffsetDesktop, desktopFallback);
-  const mobile = sanitizeVariantOffsets(input.previewOffsetMobile, desktop);
+  const mobile = sanitizeVariantOffsets(input.previewOffsetMobile, desktop, PREVIEW_TUNING_BOUNDS.previewOffsetYMobile);
 
   return {
     rotationX: clamp(

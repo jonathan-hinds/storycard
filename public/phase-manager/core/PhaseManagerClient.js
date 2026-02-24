@@ -147,8 +147,9 @@ export class PhaseManagerClient {
     }
 
     if (tuningMobileUpDownEl) {
-      tuningMobileUpDownEl.min = String(bounds.previewOffsetY.min);
-      tuningMobileUpDownEl.max = String(bounds.previewOffsetY.max);
+      const mobileUpDownBounds = bounds.previewOffsetYMobile || bounds.previewOffsetY;
+      tuningMobileUpDownEl.min = String(mobileUpDownBounds.min);
+      tuningMobileUpDownEl.max = String(mobileUpDownBounds.max);
       tuningMobileUpDownEl.step = '0.01';
       tuningMobileUpDownEl.value = String(mobileOffsets.y);
       tuningMobileUpDownEl.addEventListener('input', this.handlePreviewTuningInput);
