@@ -253,6 +253,7 @@ class PhaseManagerServer {
       effectId: ability?.effectId || 'none',
       resolvedValue,
       resolvedDamage: ability?.effectId === 'damage_enemy' ? resolvedValue : 0,
+      resolvedHealing: ability?.effectId === 'heal_target' ? resolvedValue : 0,
     };
   }
 
@@ -270,8 +271,18 @@ class PhaseManagerServer {
         }
 
         const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, attack);
-        if (resolvedAttack.effectId !== 'damage_enemy' || resolvedAttack.resolvedDamage <= 0) {
-          commitExecutionByAttackId.set(attack.id, { executed: true, reason: 'no_damage' });
+        if (
+          resolvedAttack.effectId !== 'damage_enemy'
+          && resolvedAttack.effectId !== 'heal_target'
+        ) {
+          commitExecutionByAttackId.set(attack.id, { executed: true, reason: 'no_effect' });
+          continue;
+        }
+
+        const hasDamage = resolvedAttack.effectId === 'damage_enemy' && resolvedAttack.resolvedDamage > 0;
+        const hasHealing = resolvedAttack.effectId === 'heal_target' && resolvedAttack.resolvedHealing > 0;
+        if (!hasDamage && !hasHealing) {
+          commitExecutionByAttackId.set(attack.id, { executed: true, reason: 'no_value' });
           continue;
         }
         if (!Number.isInteger(attack.targetSlotIndex)) {
@@ -301,7 +312,9 @@ class PhaseManagerServer {
         }
 
         commitExecutionByAttackId.set(attack.id, { executed: true });
-        const nextHealth = currentHealth - resolvedAttack.resolvedDamage;
+        const nextHealth = hasDamage
+          ? currentHealth - resolvedAttack.resolvedDamage
+          : currentHealth + resolvedAttack.resolvedHealing;
         defenderCard.catalogCard.health = nextHealth;
 
         if (nextHealth < 0) {
