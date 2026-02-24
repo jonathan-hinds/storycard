@@ -669,6 +669,8 @@ export class CardGameClient {
     this.options = { ...this.options, interactionLocked: true };
     this.clearHighlights();
     card.userData.locked = true;
+    card.userData.zone = CARD_ZONE_TYPES.RESOLVING;
+    card.userData.slotIndex = null;
 
     const startedFromPreview = this.state.activeCard === card
       && (this.state.mode === 'preview' || this.state.mode === 'preview-return');
