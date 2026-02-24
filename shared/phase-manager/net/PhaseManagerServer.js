@@ -122,11 +122,18 @@ class PhaseManagerServer {
       const attackerSide = attackerId === playerId ? 'player' : 'opponent';
       const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
       for (const attack of attacks) {
-        commitAttacks.push({
+        const resolvedAttack = {
           ...this.resolveCommitAttackStep(match, attackerId, attack),
           attackerId,
           attackerSide,
-        });
+        };
+
+        const executionState = match.commitExecutionByAttackId?.get(attack.id);
+        if (executionState && executionState.executed === false) {
+          continue;
+        }
+
+        commitAttacks.push(resolvedAttack);
       }
     }
 
@@ -191,6 +198,7 @@ class PhaseManagerServer {
     match.readyPlayers.clear();
     match.pendingCommitAttacksByPlayer = new Map();
     match.commitRollsByAttackId = new Map();
+    match.commitExecutionByAttackId = new Map();
     match.commitAnimationCompletedPlayers = new Set();
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
@@ -249,28 +257,50 @@ class PhaseManagerServer {
   }
 
   applyCommitEffects(match) {
+    const commitExecutionByAttackId = new Map();
+
     for (const attackerId of match.players) {
       const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
       for (const attack of attacks) {
         const attackerState = match.cardsByPlayer.get(attackerId);
         const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
-        if (!attackerCard?.catalogCard) continue;
+        if (!attackerCard?.catalogCard) {
+          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'attacker_missing' });
+          continue;
+        }
 
         const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, attack);
-        if (resolvedAttack.effectId !== 'damage_enemy' || resolvedAttack.resolvedDamage <= 0) continue;
-        if (!Number.isInteger(attack.targetSlotIndex)) continue;
+        if (resolvedAttack.effectId !== 'damage_enemy' || resolvedAttack.resolvedDamage <= 0) {
+          commitExecutionByAttackId.set(attack.id, { executed: true, reason: 'no_damage' });
+          continue;
+        }
+        if (!Number.isInteger(attack.targetSlotIndex)) {
+          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'target_missing' });
+          continue;
+        }
 
         const defenderId = attack.targetSide === 'player'
           ? attackerId
           : match.players.find((id) => id !== attackerId);
-        if (!defenderId) continue;
+        if (!defenderId) {
+          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'target_missing' });
+          continue;
+        }
 
         const defenderState = match.cardsByPlayer.get(defenderId);
         const defenderCard = defenderState?.board?.find((card) => card.slotIndex === attack.targetSlotIndex);
-        if (!defenderCard?.catalogCard) continue;
+        if (!defenderCard?.catalogCard) {
+          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'target_missing' });
+          continue;
+        }
 
         const currentHealth = Number(defenderCard.catalogCard.health);
-        if (!Number.isFinite(currentHealth)) continue;
+        if (!Number.isFinite(currentHealth)) {
+          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'target_invalid' });
+          continue;
+        }
+
+        commitExecutionByAttackId.set(attack.id, { executed: true });
         const nextHealth = currentHealth - resolvedAttack.resolvedDamage;
         defenderCard.catalogCard.health = nextHealth;
 
@@ -279,6 +309,8 @@ class PhaseManagerServer {
         }
       }
     }
+
+    match.commitExecutionByAttackId = commitExecutionByAttackId;
   }
 
   resolveCommitPhase(match) {
@@ -300,6 +332,7 @@ class PhaseManagerServer {
     });
     match.pendingCommitAttacksByPlayer = pendingAttacks;
     match.commitRollsByAttackId = new Map();
+    match.commitExecutionByAttackId = new Map();
     match.commitCompletedPlayers = new Set();
     match.commitAnimationCompletedPlayers = new Set();
     match.commitAllRolledAt = null;
@@ -586,6 +619,7 @@ class PhaseManagerServer {
         lastDrawnCardsByPlayer: new Map(),
         pendingCommitAttacksByPlayer: new Map(),
         commitRollsByAttackId: new Map(),
+        commitExecutionByAttackId: new Map(),
         commitCompletedPlayers: new Set(),
         commitAnimationCompletedPlayers: new Set(),
         commitAllRolledAt: null,
