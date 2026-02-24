@@ -21,7 +21,6 @@ export class PhaseManagerClient {
     this.elements = elements;
     this.options = {
       pollIntervalMs: 1200,
-      commitObservationDelayMs: 5000,
       ...options,
     };
     this.client = null;
@@ -439,14 +438,22 @@ export class PhaseManagerClient {
     const latestCommitAttacks = await this.fetchLatestCommitAttacks();
     const attackPlanToAnimate = latestCommitAttacks || commitAttacks;
 
-    const waitRemainingMs = Math.max(0, (allRolledAt + this.options.commitObservationDelayMs) - Date.now());
-    if (waitRemainingMs > 0) {
-      await new Promise((resolve) => window.setTimeout(resolve, waitRemainingMs));
+    await new Promise((resolve) => {
+      this.client.playCommitPhaseAnimations(attackPlanToAnimate, {
+        interAttackDelayMs: 740,
+        onDone: resolve,
+      });
+    });
+
+    try {
+      await this.postJson('/api/phase-manager/match/commit-animation-complete', {
+        playerId: this.playerId,
+      });
+    } catch (error) {
+      this.elements.statusEl.textContent = `Commit animation sync error: ${error.message}`;
+      return;
     }
 
-    this.client.playCommitPhaseAnimations(attackPlanToAnimate, {
-      interAttackDelayMs: 740,
-    });
     this.lastAnimatedCommitKey = commitAnimationKey;
   }
 

@@ -8,10 +8,6 @@ const DEFAULT_OPTIONS = {
   startingHandSize: 3,
   maxHandSize: 7,
   boardSlotsPerSide: 3,
-  commitInterAttackDelayMs: 740,
-  commitAttackAnimationDurationMs: 760,
-  commitSettleBufferMs: 80,
-  commitPostRollObserveMs: 5000,
 };
 
 class PhaseManagerServer {
@@ -195,6 +191,7 @@ class PhaseManagerServer {
     match.readyPlayers.clear();
     match.pendingCommitAttacksByPlayer = new Map();
     match.commitRollsByAttackId = new Map();
+    match.commitAnimationCompletedPlayers = new Set();
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
       if (!playerState) return;
@@ -295,22 +292,9 @@ class PhaseManagerServer {
     match.pendingCommitAttacksByPlayer = pendingAttacks;
     match.commitRollsByAttackId = new Map();
     match.commitCompletedPlayers = new Set();
+    match.commitAnimationCompletedPlayers = new Set();
     match.commitAllRolledAt = null;
     match.phaseEndsAt = null;
-  }
-
-  getCommitPhaseAnimationDurationMs(match) {
-    const commitAttackCount = Array
-      .from(match.pendingCommitAttacksByPlayer.values())
-      .reduce((sum, attacks) => sum + (Array.isArray(attacks) ? attacks.length : 0), 0);
-
-    if (commitAttackCount <= 0) {
-      return this.options.commitSettleBufferMs;
-    }
-
-    return ((commitAttackCount - 1) * this.options.commitInterAttackDelayMs)
-      + this.options.commitAttackAnimationDurationMs
-      + this.options.commitSettleBufferMs;
   }
 
   completeCommitRolls(payload) {
@@ -333,9 +317,35 @@ class PhaseManagerServer {
     if (match.commitCompletedPlayers.size === match.players.length && !match.commitAllRolledAt) {
       this.applyCommitEffects(match);
       match.commitAllRolledAt = Date.now();
-      match.phaseEndsAt = match.commitAllRolledAt
-        + this.options.commitPostRollObserveMs
-        + this.getCommitPhaseAnimationDurationMs(match);
+    }
+
+    return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
+  }
+
+
+  completeCommitAnimations(payload) {
+    const { playerId } = payload;
+    const status = this.phaseMatchmakingState.get(playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      return { error: 'player is not in an active match', statusCode: 409 };
+    }
+
+    const match = this.phaseMatches.get(status.matchId);
+    if (!match) {
+      return { error: 'active match not found', statusCode: 409 };
+    }
+
+    if (match.phase !== 2) {
+      return { error: 'cannot complete commit animations outside commit phase', statusCode: 409 };
+    }
+
+    if (!Number.isFinite(match.commitAllRolledAt)) {
+      return { error: 'all commit rolls are not complete yet', statusCode: 409 };
+    }
+
+    match.commitAnimationCompletedPlayers.add(playerId);
+    if (match.commitAnimationCompletedPlayers.size === match.players.length) {
+      this.advanceMatchToDecisionPhase(match);
     }
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
@@ -512,10 +522,6 @@ class PhaseManagerServer {
         this.phaseMatchmakingState.set(playerId, { status: 'idle' });
         return { status: 'idle', queueCount: this.phaseQueue.length };
       }
-      if (match.phase === 2 && Number.isFinite(match.phaseEndsAt) && Date.now() >= match.phaseEndsAt) {
-        this.advanceMatchToDecisionPhase(match);
-      }
-
       const opponentId = match.players.find((id) => id !== playerId) || null;
       return {
         status: 'matched',
@@ -572,6 +578,7 @@ class PhaseManagerServer {
         pendingCommitAttacksByPlayer: new Map(),
         commitRollsByAttackId: new Map(),
         commitCompletedPlayers: new Set(),
+        commitAnimationCompletedPlayers: new Set(),
         commitAllRolledAt: null,
         createdAt: Date.now(),
       };
