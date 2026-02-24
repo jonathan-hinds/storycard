@@ -164,10 +164,6 @@ class PhaseManagerServer {
           ...rollEntry,
           attackerSide: rollEntry.attackerId === playerId ? 'player' : 'opponent',
         })),
-        spellCasts: (match.spellCasts || []).map((spellCast) => ({
-          ...spellCast,
-          casterSide: spellCast.casterId === playerId ? 'player' : 'opponent',
-        })),
       },
     };
   }
@@ -204,7 +200,6 @@ class PhaseManagerServer {
     match.commitRollsByAttackId = new Map();
     match.commitExecutionByAttackId = new Map();
     match.commitAnimationCompletedPlayers = new Set();
-    match.spellCasts = [];
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
       if (!playerState) return;
@@ -564,58 +559,11 @@ class PhaseManagerServer {
       seenAttackerSlots.add(attack.attackerSlotIndex);
     }
 
-    const spellCasts = Array.isArray(payload.spellCasts) ? payload.spellCasts : [];
-    const knownSpellCardIds = new Set(
-      hand
-        .map((card) => knownCards.get(card.id))
-        .filter((card) => card?.catalogCard?.cardKind === 'Spell')
-        .map((card) => card.id),
-    );
-    for (const spellCast of spellCasts) {
-      if (!spellCast || typeof spellCast !== 'object') {
-        return { error: 'spellCasts entries must be objects' };
-      }
-      if (typeof spellCast.id !== 'string' || !spellCast.id.trim()) {
-        return { error: 'spell cast id is required' };
-      }
-      if (typeof spellCast.cardId !== 'string' || !knownCards.has(spellCast.cardId)) {
-        return { error: 'spell cast cardId must reference a known card' };
-      }
-      if (!knownSpellCardIds.has(spellCast.cardId)) {
-        return { error: `spell cast card ${spellCast.cardId} must be in hand as a spell` };
-      }
-      if (spellCast.targetCardId != null && (typeof spellCast.targetCardId !== 'string' || !knownCards.has(spellCast.targetCardId))) {
-        return { error: 'spell cast targetCardId must reference a known card when provided' };
-      }
-    }
-
     return {
       hand: hand.map((card) => knownCards.get(card.id)),
       board: normalizedBoard,
       discard: discard.map((card) => knownCards.get(card.id)),
-      spellCasts,
     };
-  }
-
-  mergeSpellCasts(match, playerId, spellCasts = []) {
-    if (!Array.isArray(spellCasts) || !spellCasts.length) return;
-    if (!Array.isArray(match.spellCasts)) match.spellCasts = [];
-    const knownIds = new Set(match.spellCasts.map((entry) => entry.id));
-    spellCasts.forEach((spellCast) => {
-      if (!spellCast?.id || knownIds.has(spellCast.id)) return;
-      match.spellCasts.push({
-        id: spellCast.id,
-        casterId: playerId,
-        cardId: spellCast.cardId,
-        targetCardId: spellCast.targetCardId || null,
-        abilityIndex: Number.isInteger(spellCast.abilityIndex) ? spellCast.abilityIndex : 0,
-        rollType: typeof spellCast.rollType === 'string' ? spellCast.rollType : 'damage',
-        dieSides: Number.isFinite(spellCast.dieSides) ? spellCast.dieSides : null,
-        outcome: Number.isFinite(spellCast.outcome) ? spellCast.outcome : null,
-        submittedAt: Date.now(),
-      });
-      knownIds.add(spellCast.id);
-    });
   }
 
   getPlayerPhaseStatus(playerId) {
@@ -694,7 +642,6 @@ class PhaseManagerServer {
         commitCompletedPlayers: new Set(),
         commitAnimationCompletedPlayers: new Set(),
         commitAllRolledAt: null,
-        spellCasts: [],
         createdAt: Date.now(),
       };
       this.phaseMatches.set(matchId, match);
@@ -746,7 +693,6 @@ class PhaseManagerServer {
     playerState.hand = validated.hand;
     playerState.board = validated.board;
     playerState.discard = validated.discard;
-    this.mergeSpellCasts(match, playerId, validated.spellCasts);
     this.readyPlayerInMatch(match, playerId);
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
@@ -784,7 +730,6 @@ class PhaseManagerServer {
     playerState.hand = validated.hand;
     playerState.board = validated.board;
     playerState.discard = validated.discard;
-    this.mergeSpellCasts(match, playerId, validated.spellCasts);
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }

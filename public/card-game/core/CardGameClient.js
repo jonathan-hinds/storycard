@@ -120,7 +120,6 @@ export class CardGameClient {
       spellResolutionInProgress: false,
       activeSpellRoller: null,
       spellRollerLayer: null,
-      pendingSpellCasts: [],
     };
 
     this.#buildBaseScene();
@@ -726,19 +725,6 @@ export class CardGameClient {
     }
     this.setCardStatDisplayOverride(card.userData.cardId, rollType, outcome);
 
-    const resolvedAbilityIndex = Number.isInteger(card.userData.selectedAbilityIndex)
-      ? card.userData.selectedAbilityIndex
-      : 0;
-    this.state.pendingSpellCasts.push({
-      id: `${card.userData.cardId}:${Date.now()}`,
-      cardId: card.userData.cardId,
-      targetCardId: targetCard?.userData?.cardId || null,
-      abilityIndex: resolvedAbilityIndex,
-      rollType,
-      dieSides,
-      outcome,
-    });
-
     if (targetCard) {
       this.queueSpellAttackAnimation(card, targetCard);
       await new Promise((resolve) => window.setTimeout(resolve, 760));
@@ -761,45 +747,6 @@ export class CardGameClient {
 
     this.state.spellResolutionInProgress = false;
     this.options = { ...this.options, interactionLocked: false };
-  }
-
-  consumePendingSpellCasts() {
-    if (!Array.isArray(this.state.pendingSpellCasts) || !this.state.pendingSpellCasts.length) return [];
-    const snapshot = [...this.state.pendingSpellCasts];
-    this.state.pendingSpellCasts.length = 0;
-    return snapshot;
-  }
-
-  async playObservedSpellCast(spellCast) {
-    const sourceCard = this.getCardById(spellCast?.cardId);
-    const targetCard = this.getCardById(spellCast?.targetCardId);
-    const outcome = Number(spellCast?.outcome);
-    const rollType = typeof spellCast?.rollType === 'string' && spellCast.rollType ? spellCast.rollType : 'damage';
-
-    if (sourceCard) {
-      this.setCardStatDisplayOverride(sourceCard.userData.cardId, rollType, Number.isFinite(outcome) ? outcome : null);
-      const centerStart = performance.now();
-      this.cardAnimations.push({
-        card: sourceCard,
-        startAtMs: centerStart,
-        durationMs: 760,
-        fromPosition: sourceCard.position.clone(),
-        fromRotation: sourceCard.rotation.clone(),
-        targetPosition: SPELL_CENTER_POSITION.clone(),
-        targetRotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
-        arcHeight: 0.7,
-        swirlAmplitude: 0.15,
-        scaleFrom: 1,
-        scaleTo: 1.06,
-        onComplete: () => {},
-      });
-      await new Promise((resolve) => window.setTimeout(resolve, 860));
-    }
-
-    if (sourceCard && targetCard) {
-      this.queueSpellAttackAnimation(sourceCard, targetCard);
-      await new Promise((resolve) => window.setTimeout(resolve, 760));
-    }
   }
 
   async commitAbilitySelection({ card, targetSlotIndex, targetSide, targetCard = null }) {
