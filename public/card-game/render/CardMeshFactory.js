@@ -49,7 +49,7 @@ export class CardMeshFactory {
     geometry.center();
 
     const material = new THREE.MeshStandardMaterial({
-      color,
+      color: 0x000000,
       roughness: 0.62,
       metalness: 0.08,
     });
@@ -59,6 +59,19 @@ export class CardMeshFactory {
     mesh.receiveShadow = true;
     mesh.userData.cardRoot = root;
 
+    const outline = new THREE.Mesh(
+      geometry.clone(),
+      new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        side: THREE.BackSide,
+      }),
+    );
+    outline.scale.setScalar(1.025);
+    outline.visible = true;
+    outline.renderOrder = -1;
+    outline.userData.cardRoot = root;
+
+    dragPivot.add(outline);
     dragPivot.add(mesh);
     tiltPivot.add(dragPivot);
     root.add(tiltPivot);
@@ -66,7 +79,9 @@ export class CardMeshFactory {
     root.userData.tiltPivot = tiltPivot;
     root.userData.dragPivot = dragPivot;
     root.userData.mesh = mesh;
+    root.userData.outline = outline;
     root.userData.params = { width, height, thickness, cornerRadius };
+    root.userData.baseColor = color;
 
     if (faceTexture) {
       const face = new THREE.Mesh(

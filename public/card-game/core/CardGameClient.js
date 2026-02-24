@@ -33,6 +33,10 @@ const PLACED_CARD_SWIRL_AMPLITUDE = 0.024;
 const PLACED_CARD_VERTICAL_SWAY_AMPLITUDE = 0.028;
 const PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE = 0.032;
 const ATTACK_TARGET_SCALE = 1.12;
+const CARD_OUTLINE_BASE_SCALE = 1.025;
+const CARD_OUTLINE_HIGHLIGHT_SCALE = 1.06;
+const CARD_OUTLINE_BASE_COLOR = 0x000000;
+const CARD_OUTLINE_HIGHLIGHT_COLOR = 0xffd54a;
 const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 
@@ -245,8 +249,12 @@ export class CardGameClient {
   clearHighlights() {
     for (const slot of this.boardSlots) slot.mesh.material.opacity = slot.side === this.template.playerSide ? 0.2 : 0.17;
     for (const card of this.cards) {
-      card.userData.mesh.material.emissive.setHex(0x000000);
-      card.userData.mesh.material.emissiveIntensity = 1;
+      if (card.userData?.mesh?.material?.color) card.userData.mesh.material.color.setHex(0x000000);
+      const outline = card.userData?.outline;
+      if (outline?.material?.color) {
+        outline.material.color.setHex(CARD_OUTLINE_BASE_COLOR);
+        outline.scale.setScalar(CARD_OUTLINE_BASE_SCALE);
+      }
       card.scale.setScalar(card.userData.isAttackHover ? ATTACK_TARGET_SCALE : 1);
     }
     this.clearAttackTargetHover();
@@ -254,8 +262,12 @@ export class CardGameClient {
 
   applySelectionGlow(card) {
     if (!card?.userData?.mesh?.material) return;
-    card.userData.mesh.material.emissive.setHex(0xffffff);
-    card.userData.mesh.material.emissiveIntensity = 0.38;
+    card.userData.mesh.material.color.setHex(0x000000);
+    const outline = card.userData?.outline;
+    if (outline?.material?.color) {
+      outline.material.color.setHex(CARD_OUTLINE_HIGHLIGHT_COLOR);
+      outline.scale.setScalar(CARD_OUTLINE_HIGHLIGHT_SCALE);
+    }
     card.scale.setScalar(1.04);
   }
 
@@ -371,7 +383,7 @@ export class CardGameClient {
     if (!this.state.activeCard) return;
     const card = this.state.activeCard;
     card.renderOrder = 0;
-    card.userData.mesh.material.emissive.setHex(0x000000);
+    card.userData.mesh.material.color.setHex(0x000000);
     card.userData.tiltPivot.rotation.set(0, 0, 0);
     card.scale.setScalar(1);
     if (restore) this.relayoutBoardAndHand();
