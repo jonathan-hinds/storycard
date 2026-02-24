@@ -249,27 +249,36 @@ class PhaseManagerServer {
   }
 
   applyCommitEffects(match) {
-    match.players.forEach((attackerId) => {
+    for (const attackerId of match.players) {
       const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
-      attacks.forEach((attack) => {
+      for (const attack of attacks) {
+        const attackerState = match.cardsByPlayer.get(attackerId);
+        const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
+        if (!attackerCard?.catalogCard) continue;
+
         const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, attack);
-        if (resolvedAttack.effectId !== 'damage_enemy' || resolvedAttack.resolvedDamage <= 0) return;
-        if (!Number.isInteger(attack.targetSlotIndex)) return;
+        if (resolvedAttack.effectId !== 'damage_enemy' || resolvedAttack.resolvedDamage <= 0) continue;
+        if (!Number.isInteger(attack.targetSlotIndex)) continue;
 
         const defenderId = attack.targetSide === 'player'
           ? attackerId
           : match.players.find((id) => id !== attackerId);
-        if (!defenderId) return;
+        if (!defenderId) continue;
 
         const defenderState = match.cardsByPlayer.get(defenderId);
         const defenderCard = defenderState?.board?.find((card) => card.slotIndex === attack.targetSlotIndex);
-        if (!defenderCard?.catalogCard) return;
+        if (!defenderCard?.catalogCard) continue;
 
         const currentHealth = Number(defenderCard.catalogCard.health);
-        if (!Number.isFinite(currentHealth)) return;
-        defenderCard.catalogCard.health = Math.max(0, currentHealth - resolvedAttack.resolvedDamage);
-      });
-    });
+        if (!Number.isFinite(currentHealth)) continue;
+        const nextHealth = currentHealth - resolvedAttack.resolvedDamage;
+        defenderCard.catalogCard.health = nextHealth;
+
+        if (nextHealth < 0) {
+          defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
+        }
+      }
+    }
   }
 
   resolveCommitPhase(match) {

@@ -75,6 +75,7 @@ export class CardGameClient {
     this.cardAnimations = [];
     this.combatAnimations = [];
     this.combatShakeEffects = [];
+    this.deathAnimations = [];
     this.pointerNdc = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -970,43 +971,16 @@ export class CardGameClient {
     }
 
     const now = performance.now();
-    const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
-    const resolveAttackSlots = (step) => {
-      const preferredSide = step?.attackerSide === 'opponent' ? 'opponent' : 'player';
-      const orderedSides = preferredSide === 'opponent' ? ['opponent', 'player'] : ['player', 'opponent'];
-
-      for (const side of orderedSides) {
-        const isOpponentAttack = side === 'opponent';
-        const attackerGlobalSlotIndex = isOpponentAttack
-          ? step.attackerSlotIndex
-          : boardSlotsPerSide + step.attackerSlotIndex;
-        const defenderGlobalSlotIndex = isOpponentAttack
-          ? boardSlotsPerSide + step.targetSlotIndex
-          : step.targetSlotIndex;
-        const attackerSlot = this.boardSlots[attackerGlobalSlotIndex];
-        const defenderSlot = this.boardSlots[defenderGlobalSlotIndex];
-
-        if (!attackerSlot?.card || !defenderSlot) continue;
-        return { attackerSlot, defenderSlot };
-      }
-
-      return null;
-    };
-
     attackPlan.forEach((step, index) => {
-      const resolvedSlots = resolveAttackSlots(step);
-      if (!resolvedSlots) return;
-
-      const { attackerSlot, defenderSlot } = resolvedSlots;
       this.combatAnimations.push({
-        attackerCard: attackerSlot.card,
-        originPosition: new THREE.Vector3(attackerSlot.x, 0, attackerSlot.z),
-        defenderPosition: new THREE.Vector3(defenderSlot.x, 0, defenderSlot.z),
+        attackerSlotIndex: step?.attackerSlotIndex,
+        targetSlotIndex: step?.targetSlotIndex,
+        attackerSide: step?.attackerSide === 'opponent' ? 'opponent' : 'player',
         startAtMs: now + index * interAttackDelayMs,
         durationMs: 760,
-        defenderCard: defenderSlot.card,
         resolvedDamage: Number.isFinite(step?.resolvedDamage) ? step.resolvedDamage : null,
         didHit: false,
+        initialized: false,
       });
     });
 
@@ -1024,8 +998,21 @@ export class CardGameClient {
           continue;
         }
 
+        if (!animation.initialized) {
+          animation.initialized = true;
+          const resolved = this.resolveCombatAnimationSlots(animation);
+          if (!resolved?.attackerSlot?.card || !resolved?.defenderSlot?.card) {
+            continue;
+          }
+          animation.attackerCard = resolved.attackerSlot.card;
+          animation.defenderCard = resolved.defenderSlot.card;
+          animation.originPosition = new THREE.Vector3(resolved.attackerSlot.x, 0, resolved.attackerSlot.z);
+          animation.defenderPosition = new THREE.Vector3(resolved.defenderSlot.x, 0, resolved.defenderSlot.z);
+        }
+
         const t = THREE.MathUtils.clamp(elapsed / animation.durationMs, 0, 1);
         const card = animation.attackerCard;
+        if (!card || !animation.defenderCard) continue;
         card.userData.locked = true;
         const origin = animation.originPosition;
         const defender = animation.defenderPosition;
@@ -1067,18 +1054,23 @@ export class CardGameClient {
 
         if (!animation.didHit && t >= 0.58 && animation.defenderCard) {
           animation.didHit = true;
+          const collisionAxis = attackAxis.lengthSq() > 0 ? attackAxis : new THREE.Vector3(0, 0, 1);
+          let defenderDied = false;
           if (Number.isFinite(animation.resolvedDamage) && animation.resolvedDamage > 0) {
             const currentHealth = Number(animation.defenderCard.userData?.catalogCard?.health);
             const nextHealth = Number.isFinite(currentHealth)
-              ? Math.max(0, currentHealth - animation.resolvedDamage)
+              ? currentHealth - animation.resolvedDamage
               : null;
             if (Number.isFinite(nextHealth)) {
               animation.defenderCard.userData.catalogCard.health = nextHealth;
               this.refreshCardFace(animation.defenderCard);
+              if (nextHealth < 0) {
+                defenderDied = true;
+                this.beginCardDeathAnimation(animation.defenderCard, collisionAxis.clone(), time);
+              }
             }
           }
-          const collisionAxis = attackAxis.lengthSq() > 0 ? attackAxis : new THREE.Vector3(0, 0, 1);
-          this.combatShakeEffects.push({
+          if (!defenderDied) this.combatShakeEffects.push({
             card: animation.defenderCard,
             startAtMs: time,
             durationMs: 240,
@@ -1112,6 +1104,31 @@ export class CardGameClient {
       this.combatAnimations = pending;
     }
 
+    if (this.deathAnimations.length) {
+      const remainingDeaths = [];
+      for (const death of this.deathAnimations) {
+        const elapsed = time - death.startAtMs;
+        const progress = THREE.MathUtils.clamp(elapsed / death.durationMs, 0, 1);
+        const eased = THREE.MathUtils.smootherstep(progress, 0, 1);
+        death.card.position.copy(death.startPosition)
+          .addScaledVector(death.driftAxis, eased * 1.25);
+        death.card.position.y = death.startPosition.y + Math.sin(eased * Math.PI) * 0.35 + eased * 0.45;
+        death.card.rotation.z = death.startRotationZ + eased * death.rollAmount;
+
+        const opacity = Math.max(0, 1 - eased);
+        death.materials.forEach((material) => {
+          material.opacity = opacity;
+        });
+
+        if (progress >= 1) {
+          this.removeCardFromScene(death.card);
+        } else {
+          remainingDeaths.push(death);
+        }
+      }
+      this.deathAnimations = remainingDeaths;
+    }
+
     if (!this.combatShakeEffects.length) return;
     const remaining = [];
     for (const shake of this.combatShakeEffects) {
@@ -1136,6 +1153,62 @@ export class CardGameClient {
       }
     }
     this.combatShakeEffects = remaining;
+  }
+
+  resolveCombatAnimationSlots(animation) {
+    if (!Number.isInteger(animation?.attackerSlotIndex) || !Number.isInteger(animation?.targetSlotIndex)) return null;
+    const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
+    const isOpponentAttack = animation.attackerSide === 'opponent';
+    const attackerGlobalSlotIndex = isOpponentAttack
+      ? animation.attackerSlotIndex
+      : boardSlotsPerSide + animation.attackerSlotIndex;
+    const defenderGlobalSlotIndex = isOpponentAttack
+      ? boardSlotsPerSide + animation.targetSlotIndex
+      : animation.targetSlotIndex;
+    const attackerSlot = this.boardSlots[attackerGlobalSlotIndex];
+    const defenderSlot = this.boardSlots[defenderGlobalSlotIndex];
+    if (!attackerSlot || !defenderSlot) return null;
+    return { attackerSlot, defenderSlot };
+  }
+
+  beginCardDeathAnimation(card, axis = new THREE.Vector3(0, 0, 1), time = performance.now()) {
+    if (!card || card.userData?.isDying) return;
+    card.userData.isDying = true;
+    card.userData.locked = true;
+    const materials = [];
+    card.traverse((child) => {
+      if (!child?.isMesh || !child.material) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((mat) => {
+        mat.transparent = true;
+        mat.depthWrite = false;
+        materials.push(mat);
+      });
+    });
+    const driftAxis = axis.lengthSq() > 0 ? axis.clone().normalize() : new THREE.Vector3(0, 0, 1);
+    this.combatShakeEffects = this.combatShakeEffects.filter((shake) => shake.card !== card);
+    this.deathAnimations.push({
+      card,
+      startAtMs: time,
+      durationMs: 620,
+      startPosition: card.position.clone(),
+      startRotationZ: card.rotation.z,
+      driftAxis,
+      rollAmount: (Math.random() * 0.5 + 0.35) * (Math.random() > 0.5 ? 1 : -1),
+      materials,
+    });
+  }
+
+  removeCardFromScene(card) {
+    if (!card) return;
+    if (card.userData?.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(card.userData.slotIndex)) {
+      const slot = this.boardSlots[card.userData.slotIndex];
+      if (slot?.card === card) slot.card = null;
+    }
+    this.scene.remove(card);
+    const cardIndex = this.cards.indexOf(card);
+    if (cardIndex >= 0) this.cards.splice(cardIndex, 1);
+    this.picker.setCards(this.cards);
   }
 
   async handlePointerUp(event) {
