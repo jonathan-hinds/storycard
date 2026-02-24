@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
+import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js?module';
 
 export class CardPicker {
   constructor({ camera, domElement, cards = [] }) {
