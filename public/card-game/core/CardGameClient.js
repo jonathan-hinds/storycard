@@ -7,7 +7,7 @@ import { CardGameHttpClient } from '../net/httpClient.js';
 import { SINGLE_CARD_TEMPLATE } from '../templates/singleCardTemplate.js';
 import { CARD_ZONE_TYPES, isKnownZone, validateZoneTemplate } from './zoneFramework.js';
 import { DEFAULT_PREVIEW_TUNING, sanitizePreviewTuning } from './previewTuning.js';
-import { PREVIEW_HOLD_DELAY_MS, PREVIEW_TRANSITION_IN_MS, PREVIEW_BASE_POSITION, beginPreviewTransition, beginPreviewReturnTransition, getPreviewPose } from './previewMotion.js';
+import { PREVIEW_TRANSITION_IN_MS, PREVIEW_BASE_POSITION, beginPreviewTransition, beginPreviewReturnTransition, getPreviewPose } from './previewMotion.js';
 
 const CAMERA_BASE_FOV = 45;
 const CAMERA_BASE_Y = 8.2;
@@ -33,6 +33,7 @@ const PLACED_CARD_SWIRL_AMPLITUDE = 0.024;
 const PLACED_CARD_VERTICAL_SWAY_AMPLITUDE = 0.028;
 const PLACED_CARD_ROTATIONAL_FLARE_AMPLITUDE = 0.032;
 const ATTACK_TARGET_SCALE = 1.12;
+const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 
 export class CardGameClient {
@@ -89,6 +90,8 @@ export class CardGameClient {
       dragOrigin: null,
       dropSlotIndex: null,
       dropTargetSlotIndex: null,
+      pendingAbilitySelection: null,
+      selectedAbilityByCardId: new Map(),
       activePose: {
         position: new THREE.Vector3(),
         rotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
@@ -107,6 +110,7 @@ export class CardGameClient {
     };
 
     this.#buildBaseScene();
+    this.#buildAbilityOverlay();
     this.picker = new CardPicker({ camera: this.camera, domElement: canvas, cards: this.cards });
 
     this.handlePointerDown = this.handlePointerDown.bind(this);
@@ -214,6 +218,13 @@ export class CardGameClient {
     });
   }
 
+  #buildAbilityOverlay() {
+    this.abilityOverlay = document.createElement('div');
+    this.abilityOverlay.className = 'card-ability-overlay';
+    this.abilityOverlay.hidden = true;
+    this.canvasContainer.append(this.abilityOverlay);
+  }
+
   setStatus(message) {
     if (this.statusEl) this.statusEl.textContent = message;
   }
@@ -241,8 +252,19 @@ export class CardGameClient {
 
   clearHighlights() {
     for (const slot of this.boardSlots) slot.mesh.material.opacity = slot.side === this.template.playerSide ? 0.2 : 0.17;
-    for (const card of this.cards) card.userData.mesh.material.emissive.setHex(0x000000);
+    for (const card of this.cards) {
+      card.userData.mesh.material.emissive.setHex(0x000000);
+      card.userData.mesh.material.emissiveIntensity = 1;
+      card.scale.setScalar(card.userData.isAttackHover ? ATTACK_TARGET_SCALE : 1);
+    }
     this.clearAttackTargetHover();
+  }
+
+  applySelectionGlow(card) {
+    if (!card?.userData?.mesh?.material) return;
+    card.userData.mesh.material.emissive.setHex(0xffffff);
+    card.userData.mesh.material.emissiveIntensity = 0.38;
+    card.scale.setScalar(1.04);
   }
 
   clearAttackTargetHover() {
@@ -329,7 +351,7 @@ export class CardGameClient {
     this.state.mode = mode;
     this.state.previewStartedAt = performance.now();
     card.renderOrder = 10;
-    card.userData.mesh.material.emissive.setHex(0x111111);
+    this.applySelectionGlow(card);
     card.userData.tiltPivot.rotation.set(0, 0, 0);
     if (mode === 'preview') {
       this.state.previewOriginPose.position.copy(card.position);
@@ -349,7 +371,8 @@ export class CardGameClient {
     else this.setActiveCardPose(card.position, CARD_FACE_ROTATION_X + 0.24, 0, 0);
     this.setStatus(mode === 'drag'
       ? `Dragging ${card.userData.cardId}. Release to commit to a board slot.`
-      : `Previewing ${card.userData.cardId}. Move to drag or release to return.`);
+      : `Previewing ${card.userData.cardId}.`);
+    if (mode === 'preview') this.renderAbilityOverlay(card);
   }
 
   clearActiveCard({ restore = true } = {}) {
@@ -358,11 +381,94 @@ export class CardGameClient {
     card.renderOrder = 0;
     card.userData.mesh.material.emissive.setHex(0x000000);
     card.userData.tiltPivot.rotation.set(0, 0, 0);
+    card.scale.setScalar(1);
     if (restore) this.relayoutBoardAndHand();
     this.state.activeCard = null;
     this.state.mode = 'idle';
     this.state.dropSlotIndex = null;
     this.state.previewTransition.isActive = false;
+    this.hideAbilityOverlay();
+  }
+
+  renderAbilityOverlay(card) {
+    const abilities = [card?.userData?.catalogCard?.ability1, card?.userData?.catalogCard?.ability2].filter(Boolean);
+    if (!abilities.length) {
+      this.hideAbilityOverlay();
+      return;
+    }
+    this.abilityOverlay.hidden = false;
+    this.abilityOverlay.innerHTML = '';
+    abilities.forEach((ability, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'card-ability-button';
+      button.textContent = `${ability.name || `Ability ${index + 1}`} (${ability.target || 'none'})`;
+      button.addEventListener('click', () => this.selectAbilityForActiveCard(ability, index));
+      this.abilityOverlay.append(button);
+    });
+  }
+
+  hideAbilityOverlay() {
+    if (!this.abilityOverlay) return;
+    this.abilityOverlay.hidden = true;
+    this.abilityOverlay.innerHTML = '';
+  }
+
+  getAbilityTargetType(ability) {
+    const target = String(ability?.target || '').toLowerCase();
+    return TARGET_TYPES[target] || TARGET_TYPES.none;
+  }
+
+  selectAbilityForActiveCard(ability, index) {
+    const card = this.state.activeCard;
+    if (!card || this.state.mode !== 'preview') return;
+    const targetType = this.getAbilityTargetType(ability);
+    this.state.selectedAbilityByCardId.set(card.userData.cardId, {
+      index,
+      targetType,
+      name: ability?.name || `Ability ${index + 1}`,
+    });
+    this.state.pendingAbilitySelection = {
+      sourceCardId: card.userData.cardId,
+      sourceSlotIndex: card.userData.slotIndex,
+      targetType,
+    };
+    this.beginPreviewReturn();
+    if (targetType === TARGET_TYPES.none) {
+      this.commitAbilitySelection({ card, targetSlotIndex: null, targetSide: null });
+      return;
+    }
+    this.highlightValidTargetsForPendingAbility();
+    this.setStatus(`Select a ${targetType} target for ${card.userData.cardId}.`);
+  }
+
+  getCardsForTargetType(targetType, sourceCard) {
+    if (!sourceCard) return [];
+    if (targetType === TARGET_TYPES.self) return [sourceCard];
+    if (targetType === TARGET_TYPES.friendly) {
+      return this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner === sourceCard.userData.owner);
+    }
+    if (targetType === TARGET_TYPES.enemy) {
+      return this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner !== sourceCard.userData.owner);
+    }
+    return [];
+  }
+
+  highlightValidTargetsForPendingAbility() {
+    const pending = this.state.pendingAbilitySelection;
+    const sourceCard = this.getCardById(pending?.sourceCardId);
+    if (!pending || !sourceCard) return;
+    this.clearHighlights();
+    this.getCardsForTargetType(pending.targetType, sourceCard).forEach((card) => this.applySelectionGlow(card));
+  }
+
+  async commitAbilitySelection({ card, targetSlotIndex, targetSide }) {
+    card.userData.attackCommitted = true;
+    card.userData.targetSlotIndex = Number.isInteger(targetSlotIndex) ? targetSlotIndex : null;
+    card.userData.targetSide = targetSide || null;
+    await this.notifyCardStateCommitted(card);
+    this.state.pendingAbilitySelection = null;
+    this.clearHighlights();
   }
 
   beginPreviewReturn() {
@@ -463,6 +569,11 @@ export class CardGameClient {
 
   beginDrag(card) {
     if (!card) return;
+    if (!this.state.pendingCardDidPickup && this.state.dragOrigin) {
+      if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(card.userData.slotIndex)) this.boardSlots[card.userData.slotIndex].card = null;
+      this.sendCardEvent(card.userData.cardId, 'pickup', { zone: this.state.dragOrigin.zone });
+      this.state.pendingCardDidPickup = true;
+    }
     if (this.state.mode === 'idle') this.setCardAsActive(card, 'drag');
     else {
       this.state.mode = 'drag';
@@ -485,7 +596,6 @@ export class CardGameClient {
   canCardDrag(card) {
     if (!card) return false;
     if (card.userData.zone === CARD_ZONE_TYPES.HAND && card.userData.owner === this.template.playerSide) return true;
-    if (this.canCardAttack(card)) return true;
     return false;
   }
 
@@ -594,6 +704,7 @@ export class CardGameClient {
       card.userData.canAttack = cfg.canAttack === true;
       card.userData.attackCommitted = cfg.attackCommitted === true;
       card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
+      card.userData.targetSide = cfg.targetSide || null;
       card.userData.catalogCard = cfg.catalogCard ?? null;
       card.userData.statDisplayOverrides = null;
       card.userData.isAttackHover = false;
@@ -632,6 +743,9 @@ export class CardGameClient {
 
     const card = this.picker.pick(event);
     if (!card) {
+      if (this.state.mode === 'preview' && this.beginPreviewReturn()) {
+        this.clearHighlights();
+      }
       this.state.activePointerId = null;
       this.state.pendingCard = null;
       this.state.pendingCardCanDrag = false;
@@ -651,24 +765,39 @@ export class CardGameClient {
       return;
     }
 
+    if (this.state.pendingAbilitySelection) {
+      const pending = this.state.pendingAbilitySelection;
+      const sourceCard = this.getCardById(pending.sourceCardId);
+      const validTargets = this.getCardsForTargetType(pending.targetType, sourceCard);
+      if (!validTargets.includes(card)) {
+        this.setStatus('Invalid target for selected ability.');
+        this.state.activePointerId = null;
+        this.state.pendingCard = null;
+        this.state.pendingCardCanDrag = false;
+        this.state.pendingCardDidPickup = false;
+        if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+        return;
+      }
+      await this.commitAbilitySelection({
+        card: sourceCard,
+        targetSlotIndex: card.userData.slotIndex,
+        targetSide: card.userData.owner,
+      });
+      this.setStatus(`Ability queued from ${sourceCard.userData.cardId}.`);
+      this.state.activePointerId = null;
+      this.state.pendingCard = null;
+      this.state.pendingCardCanDrag = false;
+      this.state.pendingCardDidPickup = false;
+      if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+      return;
+    }
+
     this.state.pendingCard = card;
     this.state.pendingCardCanDrag = this.canCardDrag(card);
     this.state.pendingCardDidPickup = false;
     this.clearHighlights();
     this.state.dragOrigin = { zone: card.userData.zone, slotIndex: card.userData.slotIndex };
 
-    if (this.canCardAttack(card)) {
-      this.state.dropTargetSlotIndex = card.userData.targetSlotIndex;
-    } else if (this.state.pendingCardCanDrag) {
-      if (card.userData.zone === CARD_ZONE_TYPES.BOARD && Number.isInteger(card.userData.slotIndex)) this.boardSlots[card.userData.slotIndex].card = null;
-      await this.sendCardEvent(card.userData.cardId, 'pickup', { zone: this.state.dragOrigin.zone });
-      this.state.pendingCardDidPickup = true;
-    }
-
-    this.state.holdTimer = window.setTimeout(() => {
-      if (this.state.activePointerId !== event.pointerId || this.state.mode !== 'idle') return;
-      this.setCardAsActive(card, 'preview');
-    }, PREVIEW_HOLD_DELAY_MS);
   }
 
   handlePointerMove(event) {
@@ -683,11 +812,9 @@ export class CardGameClient {
       this.beginDrag(card);
     }
 
-    if (this.state.mode === 'preview' && this.state.pendingCardCanDrag && distance > DRAG_START_DISTANCE_PX && this.state.activeCard) this.beginDrag(this.state.activeCard);
     if (this.state.mode === 'drag' && this.state.activeCard) {
       event.preventDefault();
-      if (this.canCardAttack(this.state.activeCard)) this.updateAttackTargetPoseFromPointer(event);
-      else this.updateDragPoseFromPointer(event);
+      this.updateDragPoseFromPointer(event);
     }
   }
 
@@ -700,12 +827,17 @@ export class CardGameClient {
     const card = this.state.activeCard;
     const prevOrigin = this.state.dragOrigin;
 
-    if (card && commitDrop && this.state.mode === 'drag' && this.canCardAttack(card) && this.state.dropTargetSlotIndex != null) {
-      card.userData.attackCommitted = true;
-      card.userData.targetSlotIndex = this.state.dropTargetSlotIndex;
-      await this.notifyCardStateCommitted(card);
-      this.setStatus(`Attack queued: ${card.userData.cardId} -> enemy slot ${this.state.dropTargetSlotIndex + 1}.`);
-    } else if (card && commitDrop && this.state.mode === 'drag' && this.state.dropSlotIndex != null) {
+    if (!card && this.state.pendingCard && this.state.mode === 'idle') {
+      this.setCardAsActive(this.state.pendingCard, 'preview');
+      this.state.activePointerId = null;
+      this.state.pendingCard = null;
+      this.state.pendingCardCanDrag = false;
+      this.state.pendingCardDidPickup = false;
+      this.state.dragOrigin = null;
+      return;
+    }
+
+    if (card && commitDrop && this.state.mode === 'drag' && this.state.dropSlotIndex != null) {
       const slot = this.boardSlots[this.state.dropSlotIndex];
       slot.card = card;
       card.userData.zone = CARD_ZONE_TYPES.BOARD;
@@ -764,10 +896,11 @@ export class CardGameClient {
     const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
     return this.cards
       .filter((card) => card.userData.owner === this.template.playerSide && card.userData.zone === CARD_ZONE_TYPES.BOARD)
-      .filter((card) => card.userData.attackCommitted === true && Number.isInteger(card.userData.slotIndex) && Number.isInteger(card.userData.targetSlotIndex))
+      .filter((card) => card.userData.attackCommitted === true && Number.isInteger(card.userData.slotIndex))
       .map((card) => ({
         attackerSlotIndex: card.userData.slotIndex - boardSlotsPerSide,
-        targetSlotIndex: card.userData.targetSlotIndex,
+        targetSlotIndex: Number.isInteger(card.userData.targetSlotIndex) ? card.userData.targetSlotIndex : null,
+        targetSide: card.userData.targetSide || null,
       }));
   }
 
@@ -1107,6 +1240,7 @@ export class CardGameClient {
     this.canvasContainer.removeEventListener('pointercancel', this.handlePointerCancel);
     window.removeEventListener('resize', this.updateSize);
     this.resetBtn?.removeEventListener('click', this.resetDemo);
+    this.abilityOverlay?.remove();
     this.cardBackTexture?.dispose?.();
     this.renderer.dispose();
   }

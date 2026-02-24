@@ -155,6 +155,7 @@ export class PhaseManagerClient {
         canAttack: card.canAttack === true,
         attackCommitted: card.attackCommitted === true,
         targetSlotIndex: Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null,
+        targetSide: card.targetSide || null,
         catalogCard: card.catalogCard || null,
       });
     });
@@ -348,7 +349,7 @@ export class PhaseManagerClient {
     statusEl.textContent = this.match.phase === 1
       ? (this.match.youAreReady
         ? 'You are readied up. Waiting for opponent to ready…'
-        : 'Decision phase: play cards, then drag ready board cards onto enemy cards to queue attacks, then click Ready Up.')
+        : 'Decision phase: click/tap a ready board card to preview it, choose an ability, then choose a valid target and click Ready Up.')
       : 'Commit phase: roll each die overlay to resolve attacks.';
 
     this.setReadyLockState();
