@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js?module';
+import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 import {
   DEFAULT_CARD_BACKGROUND_IMAGE_PATH,
   DEFAULT_CARD_LABEL_LAYOUT,

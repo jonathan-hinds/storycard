@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js?module';
+import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 
 export const PREVIEW_HOLD_DELAY_MS = 230;
 export const PREVIEW_TRANSITION_IN_MS = 260;

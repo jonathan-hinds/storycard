@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js?module';
+import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 
 function createRoundedRectShape(width, height, radius) {
   const halfW = width / 2;
