@@ -1111,6 +1111,18 @@ export class CardGameClient {
         if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
         return;
       }
+
+      // Release pointer interaction before awaiting spell/ability resolution.
+      // Pointer-up can fire while resolution is in-flight; if we leave this pointer active,
+      // endPointerInteraction may run preview-return logic and snap the source card back to hand.
+      this.state.activePointerId = null;
+      this.state.pendingCard = null;
+      this.state.pendingCardCanDrag = false;
+      this.state.pendingCardDidPickup = false;
+      this.state.dragOrigin = null;
+      this.state.dropTargetSlotIndex = null;
+      if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+
       await this.commitAbilitySelection({
         card: sourceCard,
         targetSlotIndex: card.userData.slotIndex,
@@ -1118,11 +1130,6 @@ export class CardGameClient {
         targetCard: card,
       });
       this.setStatus(`Ability queued from ${sourceCard.userData.cardId}.`);
-      this.state.activePointerId = null;
-      this.state.pendingCard = null;
-      this.state.pendingCardCanDrag = false;
-      this.state.pendingCardDidPickup = false;
-      if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
       return;
     }
 
