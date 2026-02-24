@@ -569,6 +569,7 @@ export class CardGameClient {
     const roller = new DieRollerClient({ container: panel, assets: {} });
     this.state.activeSpellRoller = { panel, roller, card };
     roller.renderStaticPreview(dieSides);
+    this.positionSpellRollerPanel();
     const dieId = `${card.userData.cardId}-${rollType}`;
 
     return new Promise((resolve, reject) => {
@@ -587,10 +588,16 @@ export class CardGameClient {
         panel.dataset.state = 'rolling';
         cleanup();
         try {
+          const settled = new Promise((settledResolve, settledReject) => {
+            roller.handlers.onSettled = ({ value }) => settledResolve(value ?? null);
+            roller.handlers.onError = (error) => settledReject(error);
+          });
           const payload = await roller.roll({ dice: [{ id: dieId, sides: dieSides }] });
+          const settledValue = await settled;
           const outcome = Number(payload?.results?.[0]?.roll?.outcome);
+          const normalizedOutcome = Number.isFinite(settledValue) ? settledValue : outcome;
           panel.dataset.state = 'settled';
-          resolve(Number.isFinite(outcome) ? outcome : null);
+          resolve(Number.isFinite(normalizedOutcome) ? normalizedOutcome : null);
         } catch (error) {
           reject(error);
         }
