@@ -2,9 +2,10 @@ const DEFAULT_MONGO_URI = 'mongodb+srv://jonathandhd:Bluecow3@cluster0.fwdtteo.m
 const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
 const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
+const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
 
 let clientPromise;
-let legacyAbilityKindMigrationPromise;
+let legacyAbilityMigrationPromise;
 
 function getMongoClientConstructor() {
   try {
@@ -37,7 +38,9 @@ async function getCollection() {
   return db.collection(COLLECTION_NAME);
 }
 
-async function assignLegacyAbilitiesToCreature(collection) {
+async function migrateLegacyAbilities(collection) {
+  const now = new Date().toISOString();
+
   await collection.updateMany(
     {
       $or: [
@@ -48,23 +51,38 @@ async function assignLegacyAbilitiesToCreature(collection) {
     {
       $set: {
         abilityKind: 'Creature',
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
+      },
+    },
+  );
+
+  await collection.updateMany(
+    {
+      $or: [
+        { target: { $exists: false } },
+        { target: null },
+      ],
+    },
+    {
+      $set: {
+        target: 'none',
+        updatedAt: now,
       },
     },
   );
 }
 
-async function ensureLegacyAbilityKindsMigrated() {
-  if (!legacyAbilityKindMigrationPromise) {
-    legacyAbilityKindMigrationPromise = getCollection()
-      .then((collection) => assignLegacyAbilitiesToCreature(collection))
+async function ensureLegacyAbilitiesMigrated() {
+  if (!legacyAbilityMigrationPromise) {
+    legacyAbilityMigrationPromise = getCollection()
+      .then((collection) => migrateLegacyAbilities(collection))
       .catch((error) => {
-        legacyAbilityKindMigrationPromise = null;
+        legacyAbilityMigrationPromise = null;
         throw error;
       });
   }
 
-  return legacyAbilityKindMigrationPromise;
+  return legacyAbilityMigrationPromise;
 }
 
 function toAbilityRecord(document) {
@@ -74,6 +92,7 @@ function toAbilityRecord(document) {
     cost: document.cost,
     description: document.description,
     abilityKind: document.abilityKind || 'Creature',
+    target: document.target || 'none',
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
   };
@@ -84,6 +103,7 @@ function normalizeAbilityInput(input = {}) {
   const cost = typeof input.cost === 'string' ? input.cost.trim() : String(input.cost ?? '').trim();
   const description = typeof input.description === 'string' ? input.description.trim() : '';
   const abilityKind = typeof input.abilityKind === 'string' ? input.abilityKind.trim() : '';
+  const target = typeof input.target === 'string' ? input.target.trim().toLowerCase() : '';
 
   if (!name) {
     throw new Error('name is required');
@@ -101,11 +121,21 @@ function normalizeAbilityInput(input = {}) {
     throw new Error(`abilityKind must be one of: ${ABILITY_KINDS.join(', ')}`);
   }
 
-  return { name, cost, description, abilityKind };
+  if (!ABILITY_TARGETS.includes(target)) {
+    throw new Error(`target must be one of: ${ABILITY_TARGETS.join(', ')}`);
+  }
+
+  return {
+    name,
+    cost,
+    description,
+    abilityKind,
+    target,
+  };
 }
 
 async function listAbilities({ abilityKind } = {}) {
-  await ensureLegacyAbilityKindsMigrated();
+  await ensureLegacyAbilitiesMigrated();
   const collection = await getCollection();
   const normalizedAbilityKind = typeof abilityKind === 'string' ? abilityKind.trim() : '';
   if (normalizedAbilityKind && !ABILITY_KINDS.includes(normalizedAbilityKind)) {
@@ -118,7 +148,7 @@ async function listAbilities({ abilityKind } = {}) {
 }
 
 async function listAbilitiesByIds(ids = []) {
-  await ensureLegacyAbilityKindsMigrated();
+  await ensureLegacyAbilitiesMigrated();
   const { ObjectId } = getMongoClientConstructor();
   const validObjectIds = ids
     .filter((id) => typeof id === 'string' && ObjectId.isValid(id))
@@ -134,7 +164,7 @@ async function listAbilitiesByIds(ids = []) {
 }
 
 async function createAbility(input = {}) {
-  await ensureLegacyAbilityKindsMigrated();
+  await ensureLegacyAbilitiesMigrated();
   const collection = await getCollection();
   const validated = normalizeAbilityInput(input);
   const abilityToInsert = {
@@ -148,7 +178,7 @@ async function createAbility(input = {}) {
 }
 
 async function updateAbility(abilityId, input = {}) {
-  await ensureLegacyAbilityKindsMigrated();
+  await ensureLegacyAbilitiesMigrated();
   const { ObjectId } = getMongoClientConstructor();
   if (!ObjectId.isValid(abilityId)) {
     throw new Error('Ability not found');
@@ -177,6 +207,7 @@ async function updateAbility(abilityId, input = {}) {
 
 module.exports = {
   ABILITY_KINDS,
+  ABILITY_TARGETS,
   listAbilities,
   listAbilitiesByIds,
   createAbility,

@@ -13,5 +13,6 @@ export function toAbilityInput(formData, defaultAbilityKind = 'Creature') {
     cost: formData.get('cost'),
     description: formData.get('description'),
     abilityKind,
+    target: formData.get('target') || 'none',
   };
 }

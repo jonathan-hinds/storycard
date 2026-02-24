@@ -17,6 +17,7 @@ const {
 } = require('./shared/cards-catalog/mongoStore');
 const {
   ABILITY_KINDS,
+  ABILITY_TARGETS,
   listAbilities: listCatalogAbilities,
   createAbility: createCatalogAbility,
   updateAbility: updateCatalogAbility,
@@ -197,7 +198,7 @@ async function handleApi(req, res, pathname) {
       const requestUrl = new URL(req.url, `http://${req.headers.host}`);
       const abilityKind = requestUrl.searchParams.get('abilityKind');
       const abilities = await listCatalogAbilities({ abilityKind });
-      sendJson(res, 200, { abilities, abilityKinds: ABILITY_KINDS });
+      sendJson(res, 200, { abilities, abilityKinds: ABILITY_KINDS, abilityTargets: ABILITY_TARGETS });
     } catch (error) {
       sendJson(res, 500, { error: 'Unable to load abilities from database' });
     }
@@ -212,7 +213,8 @@ async function handleApi(req, res, pathname) {
     } catch (error) {
       const isValidationError =
         error.message.includes('required')
-        || error.message.includes('abilityKind must be one of');
+        || error.message.includes('abilityKind must be one of')
+        || error.message.includes('target must be one of');
       sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create ability' });
     }
     return true;
@@ -227,7 +229,8 @@ async function handleApi(req, res, pathname) {
     } catch (error) {
       const isValidationError =
         error.message.includes('required')
-        || error.message.includes('abilityKind must be one of');
+        || error.message.includes('abilityKind must be one of')
+        || error.message.includes('target must be one of');
       const isNotFound = error.message === 'Ability not found';
       const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to update ability' });
