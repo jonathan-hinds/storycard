@@ -425,7 +425,8 @@ export class CardGameClient {
 
   updateAbilityPanelHighlights(card, { interactive = false } = {}) {
     if (!card?.userData?.catalogCard) return;
-    const outlineIndices = interactive
+    const canInteract = interactive && this.canInteractWithCardAbilities(card);
+    const outlineIndices = canInteract
       ? [card.userData.catalogCard.ability1, card.userData.catalogCard.ability2]
         .map((ability, index) => (ability ? index : null))
         .filter(Number.isInteger)
@@ -440,9 +441,14 @@ export class CardGameClient {
     return TARGET_TYPES[target] || TARGET_TYPES.none;
   }
 
+  canInteractWithCardAbilities(card) {
+    return this.canCardAttack(card);
+  }
+
   selectAbilityForActiveCard(ability, index) {
     const card = this.state.activeCard;
     if (!card || this.state.mode !== 'preview') return;
+    if (!this.canInteractWithCardAbilities(card)) return;
     const targetType = this.getAbilityTargetType(ability);
     card.userData.selectedAbilityIndex = index;
     this.refreshCardFace(card);
@@ -794,6 +800,15 @@ export class CardGameClient {
     if (this.state.mode === 'preview' && this.state.activeCard === card) {
       const abilityIndex = this.getAbilityPanelIndexFromHit(card, hit);
       if (abilityIndex != null) {
+        if (!this.canInteractWithCardAbilities(card)) {
+          this.setStatus(`${card.userData.cardId} cannot use abilities right now.`);
+          this.state.activePointerId = null;
+          this.state.pendingCard = null;
+          this.state.pendingCardCanDrag = false;
+          this.state.pendingCardDidPickup = false;
+          if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+          return;
+        }
         const ability = abilityIndex === 0 ? card.userData.catalogCard?.ability1 : card.userData.catalogCard?.ability2;
         if (ability) {
           this.selectAbilityForActiveCard(ability, abilityIndex);
