@@ -22,6 +22,7 @@ function resetFormToCreateMode() {
   saveAbilityButton.disabled = true;
   form.reset();
   abilityKindInput.value = configuredAbilityKind;
+  form.elements.target.value = 'none';
 }
 
 function renderAbilities(abilities) {
@@ -48,6 +49,10 @@ function renderAbilities(abilities) {
     description.className = 'catalog-card-type';
     description.textContent = ability.description;
 
+    const target = document.createElement('p');
+    target.className = 'catalog-card-type';
+    target.textContent = `Target: ${ability.target || 'none'}`;
+
     const editButton = document.createElement('button');
     editButton.type = 'button';
     editButton.textContent = 'Edit Ability';
@@ -56,12 +61,13 @@ function renderAbilities(abilities) {
       form.elements.name.value = ability.name ?? '';
       form.elements.cost.value = ability.cost ?? '';
       form.elements.description.value = ability.description ?? '';
+      form.elements.target.value = ability.target ?? 'none';
       abilityKindInput.value = ability.abilityKind ?? configuredAbilityKind;
       saveAbilityButton.disabled = false;
       setStatus(`Editing "${ability.name}".`);
     });
 
-    row.append(heading, description, editButton);
+    row.append(heading, description, target, editButton);
     list.append(row);
   });
 
@@ -145,6 +151,7 @@ saveAbilityButton.addEventListener('click', async () => {
       form.elements.name.value = updatedAbility.name ?? '';
       form.elements.cost.value = updatedAbility.cost ?? '';
       form.elements.description.value = updatedAbility.description ?? '';
+      form.elements.target.value = updatedAbility.target ?? 'none';
       abilityKindInput.value = updatedAbility.abilityKind ?? configuredAbilityKind;
     }
   } catch (error) {

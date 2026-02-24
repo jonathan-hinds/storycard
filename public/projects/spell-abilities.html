@@ -60,6 +60,13 @@
 
           <label for="ability-description">Description</label>
           <textarea id="ability-description" name="description" rows="4" maxlength="140" required></textarea>
+          <label for="ability-target">Target</label>
+          <select id="ability-target" name="target" required>
+            <option value="none">None</option>
+            <option value="self">Self</option>
+            <option value="enemy">Enemy</option>
+            <option value="friendly">Friendly</option>
+          </select>
 
           <button type="submit">Create Ability</button>
           <button id="save-ability-button" type="button" disabled>Save Ability</button>
