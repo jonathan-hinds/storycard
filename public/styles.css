@@ -633,3 +633,28 @@ button {
     border-top: 1px solid #252b3a;
   }
 }
+
+.card-ability-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.5rem;
+  z-index: 22;
+}
+
+.card-ability-button {
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.12) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.12) 25%, transparent 25%),
+    rgba(15, 20, 33, 0.95);
+  background-size: 8px 8px;
+  color: #f6f8ff;
+  border-radius: 0.5rem;
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.42);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}

@@ -86,6 +86,7 @@ class PhaseManagerServer {
         summonedTurn: null,
         attackCommitted: false,
         targetSlotIndex: null,
+        targetSide: null,
       }));
     }
 
@@ -99,6 +100,7 @@ class PhaseManagerServer {
         summonedTurn: null,
         attackCommitted: false,
         targetSlotIndex: null,
+        targetSide: null,
       };
     });
   }
@@ -198,6 +200,7 @@ class PhaseManagerServer {
         ...card,
         attackCommitted: false,
         targetSlotIndex: null,
+        targetSide: null,
       }));
     });
     this.applyDecisionPhaseStartDraw(match);
@@ -210,11 +213,12 @@ class PhaseManagerServer {
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
       const attacks = playerState?.board
-        ?.filter((card) => card.attackCommitted === true && Number.isInteger(card.slotIndex) && Number.isInteger(card.targetSlotIndex))
+        ?.filter((card) => card.attackCommitted === true && Number.isInteger(card.slotIndex))
         .map((card) => ({
-          id: `${playerId}:${card.slotIndex}:${card.targetSlotIndex}`,
+          id: `${playerId}:${card.slotIndex}:${card.targetSide || 'none'}:${Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : 'none'}`,
           attackerSlotIndex: card.slotIndex,
-          targetSlotIndex: card.targetSlotIndex,
+          targetSlotIndex: Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null,
+          targetSide: card.targetSide || null,
         })) || [];
       pendingAttacks.set(playerId, attacks);
     });
@@ -372,20 +376,27 @@ class PhaseManagerServer {
         summonedTurn: cardWasAlreadyOnBoard ? knownCard.summonedTurn : currentTurnNumber,
         attackCommitted: false,
         targetSlotIndex: null,
+        targetSide: null,
       });
     }
 
     const attacks = Array.isArray(payload.attacks) ? payload.attacks : [];
     const seenAttackerSlots = new Set();
     for (const attack of attacks) {
-      if (!Number.isInteger(attack.attackerSlotIndex) || !Number.isInteger(attack.targetSlotIndex)) {
-        return { error: 'attacks must include integer attackerSlotIndex and targetSlotIndex' };
+      if (!Number.isInteger(attack.attackerSlotIndex)) {
+        return { error: 'attacks must include integer attackerSlotIndex' };
       }
       if (attack.attackerSlotIndex < 0 || attack.attackerSlotIndex >= this.options.boardSlotsPerSide) {
         return { error: `attackerSlotIndex must be between 0 and ${this.options.boardSlotsPerSide - 1}` };
       }
-      if (attack.targetSlotIndex < 0 || attack.targetSlotIndex >= this.options.boardSlotsPerSide) {
+      if (attack.targetSlotIndex != null && !Number.isInteger(attack.targetSlotIndex)) {
+        return { error: 'targetSlotIndex must be an integer when provided' };
+      }
+      if (Number.isInteger(attack.targetSlotIndex) && (attack.targetSlotIndex < 0 || attack.targetSlotIndex >= this.options.boardSlotsPerSide)) {
         return { error: `targetSlotIndex must be between 0 and ${this.options.boardSlotsPerSide - 1}` };
+      }
+      if (attack.targetSide != null && attack.targetSide !== 'player' && attack.targetSide !== 'opponent') {
+        return { error: "targetSide must be either 'player' or 'opponent' when provided" };
       }
       if (seenAttackerSlots.has(attack.attackerSlotIndex)) {
         return { error: 'a board slot may only commit one attack per turn' };
@@ -398,7 +409,8 @@ class PhaseManagerServer {
         return { error: `card in slot ${attack.attackerSlotIndex} has summoning sickness` };
       }
       attackerCard.attackCommitted = true;
-      attackerCard.targetSlotIndex = attack.targetSlotIndex;
+      attackerCard.targetSlotIndex = Number.isInteger(attack.targetSlotIndex) ? attack.targetSlotIndex : null;
+      attackerCard.targetSide = attack.targetSide || null;
       seenAttackerSlots.add(attack.attackerSlotIndex);
     }
 
