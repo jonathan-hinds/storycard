@@ -10,6 +10,8 @@ const DEFAULT_OPTIONS = {
   boardSlotsPerSide: 3,
 };
 
+const MAX_UPKEEP = 10;
+
 class PhaseManagerServer {
   constructor(options = {}) {
     this.options = {
@@ -183,6 +185,7 @@ class PhaseManagerServer {
     return {
       id: match.id,
       turnNumber: match.turnNumber,
+      upkeep: match.upkeep,
       phase: match.phase,
       youAreReady: match.readyPlayers.has(playerId),
       opponentIsReady: opponentId ? match.readyPlayers.has(opponentId) : false,
@@ -236,6 +239,7 @@ class PhaseManagerServer {
 
   advanceMatchToDecisionPhase(match) {
     match.turnNumber += 1;
+    match.upkeep = Math.min(MAX_UPKEEP, match.upkeep + 1);
     match.phase = 1;
     match.phaseStartedAt = Date.now();
     match.phaseEndsAt = null;
@@ -819,6 +823,7 @@ class PhaseManagerServer {
         players,
         cardsByPlayer,
         turnNumber: 1,
+        upkeep: 1,
         phase: 1,
         phaseStartedAt: Date.now(),
         phaseEndsAt: null,

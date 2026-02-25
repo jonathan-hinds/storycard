@@ -1,9 +1,14 @@
 import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
 import { CardRollerOverlay } from './CardRollerOverlay.js';
+import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 
 const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
+const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
+const UPKEEP_PLANE_SIZE = { width: 1.65, height: 0.38 };
+const UPKEEP_CAMERA_DISTANCE = 3;
+const UPKEEP_MARGIN = 0.08;
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -33,6 +38,7 @@ export class PhaseManagerClient {
     this.commitSequencePromise = null;
     this.activeCommitSequenceKey = null;
     this.cardRollerOverlay = null;
+    this.upkeepDisplay = null;
     this.playedRemoteSpellResolutionIds = new Set();
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
@@ -88,6 +94,94 @@ export class PhaseManagerClient {
     if (this.cardRollerOverlay) {
       this.cardRollerOverlay.destroy();
       this.cardRollerOverlay = null;
+    }
+    this.teardownUpkeepDisplay();
+  }
+
+  createUpkeepTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = UPKEEP_TEXT_CANVAS_SIZE.width;
+    canvas.height = UPKEEP_TEXT_CANVAS_SIZE.height;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    return { canvas, texture };
+  }
+
+  ensureUpkeepDisplay() {
+    if (!this.client?.camera) return;
+    if (this.upkeepDisplay) return;
+
+    const { canvas, texture } = this.createUpkeepTexture();
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(UPKEEP_PLANE_SIZE.width, UPKEEP_PLANE_SIZE.height), material);
+    mesh.renderOrder = 1000;
+    this.client.camera.add(mesh);
+
+    this.upkeepDisplay = {
+      canvas,
+      texture,
+      material,
+      mesh,
+      value: null,
+    };
+  }
+
+  teardownUpkeepDisplay() {
+    if (!this.upkeepDisplay) return;
+    const { mesh, material, texture } = this.upkeepDisplay;
+    mesh.parent?.remove(mesh);
+    mesh.geometry.dispose();
+    material.dispose();
+    texture.dispose();
+    this.upkeepDisplay = null;
+  }
+
+  positionUpkeepDisplay() {
+    if (!this.upkeepDisplay || !this.client?.camera) return;
+    const { mesh } = this.upkeepDisplay;
+    const camera = this.client.camera;
+    const halfHeight = Math.tan((camera.fov * Math.PI) / 360) * UPKEEP_CAMERA_DISTANCE;
+    const halfWidth = halfHeight * camera.aspect;
+    mesh.position.set(
+      halfWidth - (UPKEEP_PLANE_SIZE.width / 2) - UPKEEP_MARGIN,
+      halfHeight - (UPKEEP_PLANE_SIZE.height / 2) - UPKEEP_MARGIN,
+      -UPKEEP_CAMERA_DISTANCE,
+    );
+  }
+
+  drawUpkeepDisplay(upkeepValue) {
+    if (!this.upkeepDisplay) return;
+    const { canvas, texture } = this.upkeepDisplay;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '900 126px Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = '#000000';
+    ctx.fillStyle = '#ffffff';
+
+    const text = `Upkeep ${upkeepValue}`;
+    const x = canvas.width - 40;
+    const y = canvas.height / 2;
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+
+    texture.needsUpdate = true;
+    this.upkeepDisplay.value = upkeepValue;
+  }
+
+  syncUpkeepDisplay() {
+    if (!this.client || !this.match) return;
+    const upkeepValue = Number.isInteger(this.match.upkeep) ? this.match.upkeep : 1;
+    this.ensureUpkeepDisplay();
+    this.positionUpkeepDisplay();
+    if (this.upkeepDisplay?.value !== upkeepValue) {
+      this.drawUpkeepDisplay(upkeepValue);
     }
   }
 
@@ -376,6 +470,7 @@ export class PhaseManagerClient {
     const { canvas, statusEl } = this.elements;
     if (!this.match) {
       statusEl.textContent = 'Click matchmaking to create a 1v1 phase test.';
+      this.teardownUpkeepDisplay();
       this.setReadyLockState();
       this.updateSummaryPanels();
       return;
@@ -427,6 +522,8 @@ export class PhaseManagerClient {
       this.client.resetDemo();
       this.client.setPreviewTuning(this.previewTuning);
     }
+
+    this.syncUpkeepDisplay();
 
     if (shouldAnimateInitialDeal) this.lastAnimatedMatchId = this.match.id;
     if (shouldAnimateTurnDraw) this.lastAnimatedTurnKey = turnAnimationKey;
