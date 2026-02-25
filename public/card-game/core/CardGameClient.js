@@ -825,7 +825,13 @@ export class CardGameClient {
     const resolvedDamage = Number.isFinite(targetCard?.userData?.pendingSpellDamage)
       ? targetCard.userData.pendingSpellDamage
       : null;
-    if (targetCard?.userData) targetCard.userData.pendingSpellDamage = null;
+    const resolvedHealing = Number.isFinite(targetCard?.userData?.pendingSpellHealing)
+      ? targetCard.userData.pendingSpellHealing
+      : null;
+    if (targetCard?.userData) {
+      targetCard.userData.pendingSpellDamage = null;
+      targetCard.userData.pendingSpellHealing = null;
+    }
     const startAtMs = performance.now();
     this.combatAnimations.push({
       attackerCard: card,
@@ -835,6 +841,7 @@ export class CardGameClient {
       startAtMs,
       durationMs: 760,
       resolvedDamage,
+      resolvedHealing,
       didHit: false,
       initialized: true,
     });
@@ -951,6 +958,7 @@ export class CardGameClient {
     if (targetCard) {
       const resolvedValue = this.resolveSpellAbilityValue(selectedAbility, outcome);
       targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' ? resolvedValue : null;
+      targetCard.userData.pendingSpellHealing = selectedAbility?.effectId === 'heal_target' ? resolvedValue : null;
       this.queueSpellAttackAnimation(card, targetCard);
       await new Promise((resolve) => window.setTimeout(resolve, 760));
     }
@@ -1060,7 +1068,11 @@ export class CardGameClient {
         const resolvedDamage = Number.isFinite(liveSpellResolution?.resolvedDamage)
           ? Math.max(0, Math.floor(Number(liveSpellResolution.resolvedDamage)))
           : null;
+        const resolvedHealing = Number.isFinite(liveSpellResolution?.resolvedHealing)
+          ? Math.max(0, Math.floor(Number(liveSpellResolution.resolvedHealing)))
+          : null;
         targetCard.userData.pendingSpellDamage = resolvedDamage;
+        targetCard.userData.pendingSpellHealing = resolvedHealing;
         this.queueSpellAttackAnimation(card, targetCard);
         await new Promise((resolve) => window.setTimeout(resolve, 760));
       }
