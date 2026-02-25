@@ -7,8 +7,7 @@ const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
 const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
 const UPKEEP_PLANE_SIZE = { width: 1.65, height: 0.38 };
-const UPKEEP_CAMERA_DISTANCE = 3;
-const UPKEEP_MARGIN = 0.08;
+const DEFAULT_UPKEEP_POSITION = { x: 0, y: 0, z: -3 };
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -39,6 +38,7 @@ export class PhaseManagerClient {
     this.activeCommitSequenceKey = null;
     this.cardRollerOverlay = null;
     this.upkeepDisplay = null;
+    this.upkeepPosition = { ...DEFAULT_UPKEEP_POSITION };
     this.playedRemoteSpellResolutionIds = new Set();
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
@@ -46,6 +46,8 @@ export class PhaseManagerClient {
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
     this.readyUp = this.readyUp.bind(this);
     this.resetMatch = this.resetMatch.bind(this);
+    this.handleUpkeepPositionInput = this.handleUpkeepPositionInput.bind(this);
+    this.exportUpkeepPosition = this.exportUpkeepPosition.bind(this);
   }
 
   async postJson(url, body) {
@@ -71,22 +73,62 @@ export class PhaseManagerClient {
     return payload;
   }
 
+  parseUpkeepPositionValue(value, fallback) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  syncUpkeepPositionInputs() {
+    const { upkeepXInput, upkeepYInput, upkeepZInput } = this.elements;
+    if (upkeepXInput) upkeepXInput.value = this.upkeepPosition.x.toFixed(2);
+    if (upkeepYInput) upkeepYInput.value = this.upkeepPosition.y.toFixed(2);
+    if (upkeepZInput) upkeepZInput.value = this.upkeepPosition.z.toFixed(2);
+  }
+
+  handleUpkeepPositionInput() {
+    const { upkeepXInput, upkeepYInput, upkeepZInput } = this.elements;
+    this.upkeepPosition = {
+      x: this.parseUpkeepPositionValue(upkeepXInput?.value, this.upkeepPosition.x),
+      y: this.parseUpkeepPositionValue(upkeepYInput?.value, this.upkeepPosition.y),
+      z: this.parseUpkeepPositionValue(upkeepZInput?.value, this.upkeepPosition.z),
+    };
+    this.positionUpkeepDisplay();
+  }
+
+  exportUpkeepPosition() {
+    const { upkeepExportOutputEl } = this.elements;
+    const serialized = JSON.stringify(this.upkeepPosition);
+    if (upkeepExportOutputEl) upkeepExportOutputEl.textContent = serialized;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(serialized).catch(() => {});
+    }
+  }
+
   start() {
-    const { matchmakingBtn, readyBtn, resetBtn } = this.elements;
+    const { matchmakingBtn, readyBtn, resetBtn, upkeepXInput, upkeepYInput, upkeepZInput, upkeepExportBtn } = this.elements;
     matchmakingBtn.addEventListener('click', this.beginMatchmaking);
     readyBtn.addEventListener('click', this.readyUp);
     resetBtn.addEventListener('click', this.resetMatch);
+    upkeepXInput?.addEventListener('input', this.handleUpkeepPositionInput);
+    upkeepYInput?.addEventListener('input', this.handleUpkeepPositionInput);
+    upkeepZInput?.addEventListener('input', this.handleUpkeepPositionInput);
+    upkeepExportBtn?.addEventListener('click', this.exportUpkeepPosition);
+    this.syncUpkeepPositionInputs();
     this.renderMatch();
     this.matchmakingPollTimer = window.setInterval(() => this.pollMatchmakingStatus(), this.options.pollIntervalMs);
     this.pollMatchmakingStatus();
   }
 
   destroy() {
-    const { matchmakingBtn, readyBtn, resetBtn } = this.elements;
+    const { matchmakingBtn, readyBtn, resetBtn, upkeepXInput, upkeepYInput, upkeepZInput, upkeepExportBtn } = this.elements;
     this.stopMatchmakingPolling();
     matchmakingBtn.removeEventListener('click', this.beginMatchmaking);
     readyBtn.removeEventListener('click', this.readyUp);
     resetBtn.removeEventListener('click', this.resetMatch);
+    upkeepXInput?.removeEventListener('input', this.handleUpkeepPositionInput);
+    upkeepYInput?.removeEventListener('input', this.handleUpkeepPositionInput);
+    upkeepZInput?.removeEventListener('input', this.handleUpkeepPositionInput);
+    upkeepExportBtn?.removeEventListener('click', this.exportUpkeepPosition);
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -138,16 +180,9 @@ export class PhaseManagerClient {
   }
 
   positionUpkeepDisplay() {
-    if (!this.upkeepDisplay || !this.client?.camera) return;
+    if (!this.upkeepDisplay) return;
     const { mesh } = this.upkeepDisplay;
-    const camera = this.client.camera;
-    const halfHeight = Math.tan((camera.fov * Math.PI) / 360) * UPKEEP_CAMERA_DISTANCE;
-    const halfWidth = halfHeight * camera.aspect;
-    mesh.position.set(
-      halfWidth - (UPKEEP_PLANE_SIZE.width / 2) - UPKEEP_MARGIN,
-      halfHeight - (UPKEEP_PLANE_SIZE.height / 2) - UPKEEP_MARGIN,
-      -UPKEEP_CAMERA_DISTANCE,
-    );
+    mesh.position.set(this.upkeepPosition.x, this.upkeepPosition.y, this.upkeepPosition.z);
   }
 
   drawUpkeepDisplay(upkeepValue) {

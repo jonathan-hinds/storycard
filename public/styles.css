@@ -308,6 +308,22 @@ button {
   padding: 0;
 }
 
+
+.phase-manager-upkeep-controls {
+  margin-top: 0.8rem;
+}
+
+.phase-manager-upkeep-controls label {
+  font-size: 0.82rem;
+  color: #d2dbf2;
+}
+
+.phase-manager-upkeep-controls output {
+  display: block;
+  min-height: 1.2em;
+  word-break: break-word;
+}
+
 .phase-manager-stage-wrap {
   position: relative;
 }
