@@ -520,7 +520,7 @@ export class CardGameClient {
     }
   }
 
-  clearActiveCard({ restore = true } = {}) {
+  clearActiveCard({ restore = true, preserveSelectedAbility = false } = {}) {
     if (!this.state.activeCard) return;
     const card = this.state.activeCard;
     card.renderOrder = 0;
@@ -532,7 +532,7 @@ export class CardGameClient {
     this.state.mode = 'idle';
     this.state.dropSlotIndex = null;
     this.state.previewTransition.isActive = false;
-    this.updateAbilityPanelHighlights(card, { interactive: false });
+    this.updateAbilityPanelHighlights(card, { interactive: false, preserveSelectedAbility });
   }
 
 
@@ -564,7 +564,7 @@ export class CardGameClient {
     return null;
   }
 
-  updateAbilityPanelHighlights(card, { interactive = false } = {}) {
+  updateAbilityPanelHighlights(card, { interactive = false, preserveSelectedAbility = false } = {}) {
     if (!card?.userData?.catalogCard) return;
     const canInteract = interactive && this.canInteractWithCardAbilities(card);
     const outlineIndices = canInteract
@@ -573,7 +573,7 @@ export class CardGameClient {
         .filter(Number.isInteger)
       : null;
     card.userData.abilityOutlineIndices = outlineIndices;
-    if (!interactive) card.userData.selectedAbilityIndex = null;
+    if (!interactive && !preserveSelectedAbility) card.userData.selectedAbilityIndex = null;
     this.refreshCardFace(card);
   }
 
@@ -1925,7 +1925,10 @@ export class CardGameClient {
         if (!pendingAbilitySelection) {
           this.clearHighlights();
         }
-        this.clearActiveCard({ restore: true });
+        this.clearActiveCard({
+          restore: true,
+          preserveSelectedAbility: Boolean(pendingAbilitySelection),
+        });
         this.relayoutBoardAndHand();
         if (pendingAbilitySelection) {
           this.highlightValidTargetsForPendingAbility();
