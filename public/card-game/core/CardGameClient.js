@@ -57,6 +57,10 @@ export class CardGameClient {
     this.options = options;
     this.previewTuning = sanitizePreviewTuning(options.previewTuning || DEFAULT_PREVIEW_TUNING);
     this.onCardStateCommitted = options.onCardStateCommitted;
+    this.onSpellResolutionRequested = options.onSpellResolutionRequested;
+    this.onSpellRollResolved = options.onSpellRollResolved;
+    this.onSpellResolutionFinished = options.onSpellResolutionFinished;
+    this.getSpellResolutionSnapshot = options.getSpellResolutionSnapshot;
     this.cardAnimationHooks = Array.isArray(options.cardAnimationHooks) ? options.cardAnimationHooks : [];
     this.net = new CardGameHttpClient(options.net || {});
 
@@ -120,6 +124,8 @@ export class CardGameClient {
       spellResolutionInProgress: false,
       activeSpellRoller: null,
       spellRollerLayer: null,
+      activeSpellResolutionId: null,
+      remoteSpellResolutionPromise: null,
     };
 
     this.#buildBaseScene();
@@ -665,7 +671,28 @@ export class CardGameClient {
   }
 
   async runSpellResolution({ card, targetCard, selectedAbility }) {
+    const rollType = selectedAbility?.valueSourceStat === 'efct' ? 'damage' : (selectedAbility?.valueSourceStat || 'damage');
+    const dieSides = this.parseDieSides(card.userData.catalogCard?.[rollType], 6);
+
+    let spellResolutionId = null;
+    if (typeof this.onSpellResolutionRequested === 'function') {
+      try {
+        const response = await this.onSpellResolutionRequested({
+          card,
+          targetCard,
+          selectedAbility,
+          rollType,
+          dieSides,
+        });
+        spellResolutionId = response?.id || null;
+      } catch (error) {
+        this.setStatus(`Spell start sync failed: ${error.message}`);
+        return;
+      }
+    }
+
     this.state.spellResolutionInProgress = true;
+    this.state.activeSpellResolutionId = spellResolutionId;
     this.options = { ...this.options, interactionLocked: true };
     this.clearHighlights();
     card.userData.locked = true;
@@ -710,8 +737,6 @@ export class CardGameClient {
     });
 
     await new Promise((resolve) => window.setTimeout(resolve, 860));
-    const rollType = selectedAbility?.valueSourceStat === 'efct' ? 'damage' : (selectedAbility?.valueSourceStat || 'damage');
-    const dieSides = this.parseDieSides(card.userData.catalogCard?.[rollType], 6);
     let outcome = null;
     try {
       outcome = await this.waitForSpellRoll({ card, rollType, dieSides });
@@ -724,6 +749,18 @@ export class CardGameClient {
       outcome = 1 + Math.floor(Math.random() * dieSides);
     }
     this.setCardStatDisplayOverride(card.userData.cardId, rollType, outcome);
+
+    if (spellResolutionId && typeof this.onSpellRollResolved === 'function') {
+      try {
+        await this.onSpellRollResolved({
+          spellId: spellResolutionId,
+          rollOutcome: outcome,
+          rollType,
+        });
+      } catch (error) {
+        this.setStatus(`Spell roll sync failed: ${error.message}`);
+      }
+    }
 
     if (targetCard) {
       this.queueSpellAttackAnimation(card, targetCard);
@@ -745,8 +782,97 @@ export class CardGameClient {
     await this.notifyCardStateCommitted(card);
     await new Promise((resolve) => window.setTimeout(resolve, SPELL_DEATH_SETTLE_WAIT_MS));
 
+    if (spellResolutionId && typeof this.onSpellResolutionFinished === 'function') {
+      try {
+        await this.onSpellResolutionFinished({ spellId: spellResolutionId });
+      } catch (error) {
+        this.setStatus(`Spell completion sync failed: ${error.message}`);
+      }
+    }
+
+    this.state.activeSpellResolutionId = null;
     this.state.spellResolutionInProgress = false;
     this.options = { ...this.options, interactionLocked: false };
+  }
+
+  async playRemoteSpellResolution(spellResolution) {
+    if (!spellResolution || !spellResolution.id) return;
+    if (this.state.remoteSpellResolutionPromise && this.state.activeSpellResolutionId === spellResolution.id) return;
+
+    const card = this.getCardById(spellResolution.cardId);
+    if (!card) return;
+
+    const targetSlotIndex = Number.isInteger(spellResolution.targetSlotIndex) ? spellResolution.targetSlotIndex : null;
+    const targetSide = spellResolution.targetSide === 'player' || spellResolution.targetSide === 'opponent'
+      ? spellResolution.targetSide
+      : null;
+    const resolvedTargetSlot = targetSlotIndex == null
+      ? null
+      : (targetSide === this.template.playerSide ? targetSlotIndex + this.zoneFramework.boardSlotsPerSide : targetSlotIndex);
+    const targetCard = resolvedTargetSlot == null
+      ? null
+      : this.cards.find((entry) => entry.userData.zone === CARD_ZONE_TYPES.BOARD && entry.userData.slotIndex === resolvedTargetSlot) || null;
+
+    const run = async () => {
+      this.state.activeSpellResolutionId = spellResolution.id;
+      this.state.spellResolutionInProgress = true;
+      this.options = { ...this.options, interactionLocked: true };
+      card.userData.locked = true;
+      this.clearHighlights();
+
+      const startPosition = card.position.clone();
+      const startRotation = card.rotation.clone();
+      this.cardAnimations.push({
+        card,
+        startAtMs: performance.now(),
+        durationMs: 760,
+        fromPosition: startPosition,
+        fromRotation: startRotation,
+        targetPosition: SPELL_CENTER_POSITION.clone(),
+        targetRotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
+        arcHeight: 0.7,
+        swirlAmplitude: 0.15,
+        scaleFrom: 1,
+        scaleTo: 1.06,
+        onComplete: () => {},
+      });
+      await new Promise((resolve) => window.setTimeout(resolve, 860));
+
+      let liveSpellResolution = spellResolution;
+      let outcome = Number(liveSpellResolution.rollOutcome);
+      if (!Number.isFinite(outcome) && typeof this.getSpellResolutionSnapshot === 'function') {
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+          const latest = this.getSpellResolutionSnapshot();
+          if (!latest || latest.id !== spellResolution.id) continue;
+          liveSpellResolution = latest;
+          outcome = Number(latest.rollOutcome);
+          if (Number.isFinite(outcome)) break;
+        }
+      }
+      if (Number.isFinite(outcome)) {
+        this.setCardStatDisplayOverride(card.userData.cardId, liveSpellResolution.rollType || 'damage', outcome);
+      }
+
+      if (targetCard) {
+        this.queueSpellAttackAnimation(card, targetCard);
+        await new Promise((resolve) => window.setTimeout(resolve, 760));
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, SPELL_ATTACK_DELAY_AFTER_IMPACT_MS));
+      this.beginCardDeathAnimation(card, new THREE.Vector3(0, 0, -1), performance.now());
+      card.userData.zone = CARD_ZONE_TYPES.DISCARD;
+      card.userData.slotIndex = null;
+      await new Promise((resolve) => window.setTimeout(resolve, SPELL_DEATH_SETTLE_WAIT_MS));
+
+      this.state.remoteSpellResolutionPromise = null;
+      this.state.activeSpellResolutionId = null;
+      this.state.spellResolutionInProgress = false;
+      this.options = { ...this.options, interactionLocked: false };
+    };
+
+    this.state.remoteSpellResolutionPromise = run();
+    await this.state.remoteSpellResolutionPromise;
   }
 
   async commitAbilitySelection({ card, targetSlotIndex, targetSide, targetCard = null }) {

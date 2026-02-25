@@ -158,6 +158,12 @@ class PhaseManagerServer {
       meta: {
         drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
         phaseStartedAt: match.phaseStartedAt,
+        activeSpellResolution: match.activeSpellResolution
+          ? {
+            ...match.activeSpellResolution,
+            casterSide: match.activeSpellResolution.casterId === playerId ? 'player' : 'opponent',
+          }
+          : null,
         commitAllRolledAt: match.commitAllRolledAt || null,
         commitAttacks,
         commitRolls: Array.from(match.commitRollsByAttackId?.values() || []).map((rollEntry) => ({
@@ -200,6 +206,7 @@ class PhaseManagerServer {
     match.commitRollsByAttackId = new Map();
     match.commitExecutionByAttackId = new Map();
     match.commitAnimationCompletedPlayers = new Set();
+    match.activeSpellResolution = null;
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
       if (!playerState) return;
@@ -642,6 +649,7 @@ class PhaseManagerServer {
         commitCompletedPlayers: new Set(),
         commitAnimationCompletedPlayers: new Set(),
         commitAllRolledAt: null,
+        activeSpellResolution: null,
         createdAt: Date.now(),
       };
       this.phaseMatches.set(matchId, match);
@@ -674,6 +682,11 @@ class PhaseManagerServer {
 
     if (match.phase !== 1) {
       return { error: 'cannot ready up outside decision phase', statusCode: 409 };
+    }
+
+    const activeSpell = match.activeSpellResolution;
+    if (activeSpell && activeSpell.completedAt == null) {
+      return { error: 'cannot ready while a spell is resolving', statusCode: 409 };
     }
 
     if (match.readyPlayers.has(playerId)) {
@@ -713,6 +726,11 @@ class PhaseManagerServer {
       return { error: 'cannot sync state outside decision phase', statusCode: 409 };
     }
 
+    const activeSpell = match.activeSpellResolution;
+    if (activeSpell && activeSpell.completedAt == null && activeSpell.casterId !== playerId) {
+      return { error: 'cannot sync state while opponent spell is resolving', statusCode: 409 };
+    }
+
     if (match.readyPlayers.has(playerId)) {
       return { error: 'cannot sync state after you are readied up', statusCode: 409 };
     }
@@ -731,6 +749,103 @@ class PhaseManagerServer {
     playerState.board = validated.board;
     playerState.discard = validated.discard;
 
+    return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
+  }
+
+  startSpellResolution(payload) {
+    const { playerId, cardId, selectedAbilityIndex, targetSlotIndex, targetSide, rollType, dieSides } = payload || {};
+    const status = this.phaseMatchmakingState.get(playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      return { error: 'player is not in an active match', statusCode: 409 };
+    }
+
+    const match = this.phaseMatches.get(status.matchId);
+    if (!match) {
+      return { error: 'active match not found', statusCode: 409 };
+    }
+
+    if (match.phase !== 1) {
+      return { error: 'cannot cast spells outside decision phase', statusCode: 409 };
+    }
+
+    const existing = match.activeSpellResolution;
+    if (existing && existing.completedAt == null) {
+      return { error: 'another spell is currently resolving', statusCode: 409 };
+    }
+
+    const playerState = match.cardsByPlayer.get(playerId);
+    const handCard = playerState?.hand?.find((card) => card.id === cardId);
+    if (!handCard || handCard?.catalogCard?.cardKind !== 'Spell') {
+      return { error: 'spell card is not available in player hand', statusCode: 400 };
+    }
+
+    const parsedDieSides = Number.parseInt(dieSides, 10);
+    const spellId = `spell-${randomUUID().slice(0, 8)}`;
+    match.activeSpellResolution = {
+      id: spellId,
+      casterId: playerId,
+      cardId,
+      selectedAbilityIndex: Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0,
+      targetSlotIndex: Number.isInteger(targetSlotIndex) ? targetSlotIndex : null,
+      targetSide: targetSide === 'player' || targetSide === 'opponent' ? targetSide : null,
+      rollType: typeof rollType === 'string' && rollType ? rollType : 'damage',
+      dieSides: Number.isFinite(parsedDieSides) ? Math.max(2, parsedDieSides) : 6,
+      rollOutcome: null,
+      startedAt: Date.now(),
+      completedAt: null,
+    };
+
+    return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
+  }
+
+  submitSpellRoll(payload) {
+    const { playerId, spellId, rollOutcome } = payload || {};
+    const status = this.phaseMatchmakingState.get(playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      return { error: 'player is not in an active match', statusCode: 409 };
+    }
+
+    const match = this.phaseMatches.get(status.matchId);
+    const active = match?.activeSpellResolution;
+    if (!match || !active || active.completedAt != null) {
+      return { error: 'no active spell to roll', statusCode: 409 };
+    }
+    if (active.id !== spellId) {
+      return { error: 'spell id does not match active spell', statusCode: 409 };
+    }
+    if (active.casterId !== playerId) {
+      return { error: 'only the caster may roll this spell', statusCode: 403 };
+    }
+
+    const parsedOutcome = Number.parseInt(rollOutcome, 10);
+    if (!Number.isFinite(parsedOutcome) || parsedOutcome < 1) {
+      return { error: 'rollOutcome must be a positive integer', statusCode: 400 };
+    }
+
+    active.rollOutcome = parsedOutcome;
+    return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
+  }
+
+  completeSpellResolution(payload) {
+    const { playerId, spellId } = payload || {};
+    const status = this.phaseMatchmakingState.get(playerId);
+    if (!status || status.status !== 'matched' || !status.matchId) {
+      return { error: 'player is not in an active match', statusCode: 409 };
+    }
+
+    const match = this.phaseMatches.get(status.matchId);
+    const active = match?.activeSpellResolution;
+    if (!match || !active || active.completedAt != null) {
+      return { error: 'no active spell to complete', statusCode: 409 };
+    }
+    if (active.id !== spellId) {
+      return { error: 'spell id does not match active spell', statusCode: 409 };
+    }
+    if (active.casterId !== playerId) {
+      return { error: 'only the caster may complete this spell', statusCode: 403 };
+    }
+
+    active.completedAt = Date.now();
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
 }
