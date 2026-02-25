@@ -678,8 +678,7 @@ export class PhaseManagerClient {
       && nextActiveSpell.casterSide === OPPONENT_SIDE
       && !this.playedRemoteSpellResolutionIds.has(nextActiveSpell.id),
     );
-    const spellResolutionInProgress = (currentActiveSpell && currentActiveSpell.completedAt == null)
-      || (nextActiveSpell && nextActiveSpell.completedAt == null);
+    const spellResolutionInProgress = Boolean(nextActiveSpell && nextActiveSpell.completedAt == null);
     const isSameDecisionTurn = this.match.id === nextMatch.id
       && this.match.turnNumber === nextMatch.turnNumber
       && this.match.phase === 1
