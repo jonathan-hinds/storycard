@@ -8,6 +8,7 @@ const DEFAULT_OPTIONS = {
   startingHandSize: 3,
   maxHandSize: 7,
   boardSlotsPerSide: 3,
+  maxUpkeep: 10,
 };
 
 class PhaseManagerServer {
@@ -183,6 +184,7 @@ class PhaseManagerServer {
     return {
       id: match.id,
       turnNumber: match.turnNumber,
+      upkeep: match.upkeep,
       phase: match.phase,
       youAreReady: match.readyPlayers.has(playerId),
       opponentIsReady: opponentId ? match.readyPlayers.has(opponentId) : false,
@@ -236,6 +238,7 @@ class PhaseManagerServer {
 
   advanceMatchToDecisionPhase(match) {
     match.turnNumber += 1;
+    match.upkeep = Math.min(this.options.maxUpkeep, match.upkeep + 1);
     match.phase = 1;
     match.phaseStartedAt = Date.now();
     match.phaseEndsAt = null;
@@ -819,6 +822,7 @@ class PhaseManagerServer {
         players,
         cardsByPlayer,
         turnNumber: 1,
+        upkeep: 1,
         phase: 1,
         phaseStartedAt: Date.now(),
         phaseEndsAt: null,
