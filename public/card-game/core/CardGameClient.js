@@ -558,6 +558,12 @@ export class CardGameClient {
     return Number.isFinite(sides) ? Math.max(2, sides) : fallback;
   }
 
+  parseSpellRollOutcome(value) {
+    const outcome = Number(value);
+    if (!Number.isFinite(outcome) || outcome < 1) return null;
+    return outcome;
+  }
+
   createSpellRollerPanel(card) {
     const host = this.canvas?.parentElement;
     if (!host || !card) return null;
@@ -664,7 +670,7 @@ export class CardGameClient {
     this.positionSpellRollerPanel();
 
     let liveSpellResolution = spellResolution;
-    let outcome = Number(liveSpellResolution?.rollOutcome);
+    let outcome = this.parseSpellRollOutcome(liveSpellResolution?.rollOutcome);
     const settled = new Promise((resolve, reject) => {
       roller.handlers.onSettled = ({ value }) => resolve(value ?? null);
       roller.handlers.onError = (error) => reject(error);
@@ -677,7 +683,7 @@ export class CardGameClient {
         : null;
       if (latest && latest.id === spellResolution.id) {
         liveSpellResolution = latest;
-        outcome = Number(latest.rollOutcome);
+        outcome = this.parseSpellRollOutcome(latest.rollOutcome);
       }
     }
 
