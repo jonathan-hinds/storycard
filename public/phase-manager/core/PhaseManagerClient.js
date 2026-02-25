@@ -333,39 +333,58 @@ export class PhaseManagerClient {
       this.client.scene.add(this.client.camera);
     }
 
-    const { canvas, texture } = this.createUpkeepTexture();
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
+    const { canvas: panelCanvas, texture: panelTexture } = this.createUpkeepTexture();
+    const panelMaterial = new THREE.MeshBasicMaterial({
+      map: panelTexture,
       transparent: true,
       depthTest: false,
       side: THREE.DoubleSide,
     });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_UPKEEP_PANEL_SIZE.width, DEFAULT_UPKEEP_PANEL_SIZE.height), material);
-    mesh.renderOrder = 1000;
-    this.client.camera.add(mesh);
+    const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_UPKEEP_PANEL_SIZE.width, DEFAULT_UPKEEP_PANEL_SIZE.height), panelMaterial);
+    panelMesh.renderOrder = 1000;
+    this.client.camera.add(panelMesh);
+
+    const { canvas: textCanvas, texture: textTexture } = this.createUpkeepTexture();
+    const textMaterial = new THREE.MeshBasicMaterial({
+      map: textTexture,
+      transparent: true,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_UPKEEP_PANEL_SIZE.width, DEFAULT_UPKEEP_PANEL_SIZE.height), textMaterial);
+    textMesh.renderOrder = 1001;
+    this.client.camera.add(textMesh);
 
     this.upkeepDisplay = {
-      canvas,
-      texture,
-      material,
-      mesh,
+      panelCanvas,
+      panelTexture,
+      panelMaterial,
+      panelMesh,
+      textCanvas,
+      textTexture,
+      textMaterial,
+      textMesh,
       value: null,
     };
   }
 
   teardownUpkeepDisplay() {
     if (!this.upkeepDisplay) return;
-    const { mesh, material, texture } = this.upkeepDisplay;
-    mesh.parent?.remove(mesh);
-    mesh.geometry.dispose();
-    material.dispose();
-    texture.dispose();
+    const { panelMesh, panelMaterial, panelTexture, textMesh, textMaterial, textTexture } = this.upkeepDisplay;
+    panelMesh.parent?.remove(panelMesh);
+    panelMesh.geometry.dispose();
+    panelMaterial.dispose();
+    panelTexture.dispose();
+    textMesh.parent?.remove(textMesh);
+    textMesh.geometry.dispose();
+    textMaterial.dispose();
+    textTexture.dispose();
     this.upkeepDisplay = null;
   }
 
   positionUpkeepDisplay() {
     if (!this.upkeepDisplay || !this.client?.camera) return;
-    const { mesh } = this.upkeepDisplay;
+    const { panelMesh, textMesh } = this.upkeepDisplay;
     const depth = Math.max(Math.abs(this.upkeepPosition.z), 0.001);
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
@@ -373,56 +392,70 @@ export class PhaseManagerClient {
     const normalizedY = this.upkeepPosition.y / referenceFrustum.halfHeight;
     const x = normalizedX * currentFrustum.halfWidth;
     const y = normalizedY * currentFrustum.halfHeight;
-    mesh.position.set(x, y, this.upkeepPosition.z);
     const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
     const widthScale = this.upkeepPanelSize.width / DEFAULT_UPKEEP_PANEL_SIZE.width;
     const heightScale = this.upkeepPanelSize.height / DEFAULT_UPKEEP_PANEL_SIZE.height;
-    mesh.scale.set(scaleFactor * widthScale, scaleFactor * heightScale, 1);
-    mesh.rotation.set(0, 0, 0);
+    panelMesh.position.set(x, y, this.upkeepPosition.z);
+    panelMesh.scale.set(scaleFactor * widthScale, scaleFactor * heightScale, 1);
+    panelMesh.rotation.set(0, 0, 0);
+
+    const textOffsetX = this.upkeepPanelSize.width * this.upkeepTextPosition.x * scaleFactor;
+    const textOffsetY = this.upkeepPanelSize.height * this.upkeepTextPosition.y * scaleFactor;
+    textMesh.position.set(x + textOffsetX, y + textOffsetY, this.upkeepPosition.z + 0.001);
+    textMesh.scale.set(scaleFactor, scaleFactor, 1);
+    textMesh.rotation.set(0, 0, 0);
   }
 
   drawUpkeepDisplay(upkeepValue) {
     if (!this.upkeepDisplay) return;
-    const { canvas, texture } = this.upkeepDisplay;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const {
+      panelCanvas,
+      panelTexture,
+      textCanvas,
+      textTexture,
+    } = this.upkeepDisplay;
+    const panelCtx = panelCanvas.getContext('2d');
+    const textCtx = textCanvas.getContext('2d');
+    if (!panelCtx || !textCtx) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    panelCtx.clearRect(0, 0, panelCanvas.width, panelCanvas.height);
+    textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
 
     if (this.upkeepBackgroundImage) {
-      ctx.drawImage(this.upkeepBackgroundImage, 0, 0, canvas.width, canvas.height);
+      panelCtx.drawImage(this.upkeepBackgroundImage, 0, 0, panelCanvas.width, panelCanvas.height);
     } else {
       const panelPadding = 14;
       const panelRadius = 24;
       const panelX = panelPadding;
       const panelY = panelPadding;
-      const panelWidth = canvas.width - (panelPadding * 2);
-      const panelHeight = canvas.height - (panelPadding * 2);
+      const panelWidth = panelCanvas.width - (panelPadding * 2);
+      const panelHeight = panelCanvas.height - (panelPadding * 2);
 
-      ctx.beginPath();
-      ctx.roundRect(panelX, panelY, panelWidth, panelHeight, panelRadius);
-      ctx.fillStyle = 'rgba(8, 11, 18, 0.72)';
-      ctx.fill();
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = 'rgba(190, 210, 255, 0.55)';
-      ctx.stroke();
+      panelCtx.beginPath();
+      panelCtx.roundRect(panelX, panelY, panelWidth, panelHeight, panelRadius);
+      panelCtx.fillStyle = 'rgba(8, 11, 18, 0.72)';
+      panelCtx.fill();
+      panelCtx.lineWidth = 5;
+      panelCtx.strokeStyle = 'rgba(190, 210, 255, 0.55)';
+      panelCtx.stroke();
     }
 
-    ctx.font = '900 126px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 16;
-    ctx.strokeStyle = '#000000';
-    ctx.fillStyle = '#ffffff';
+    textCtx.font = '900 126px Arial, sans-serif';
+    textCtx.textAlign = 'center';
+    textCtx.textBaseline = 'middle';
+    textCtx.lineJoin = 'round';
+    textCtx.lineWidth = 16;
+    textCtx.strokeStyle = '#000000';
+    textCtx.fillStyle = '#ffffff';
 
     const text = `${upkeepValue}`;
-    const x = canvas.width * (0.5 + this.upkeepTextPosition.x);
-    const y = canvas.height * (0.5 + this.upkeepTextPosition.y);
-    ctx.strokeText(text, x, y);
-    ctx.fillText(text, x, y);
+    const x = textCanvas.width * 0.5;
+    const y = textCanvas.height * 0.5;
+    textCtx.strokeText(text, x, y);
+    textCtx.fillText(text, x, y);
 
-    texture.needsUpdate = true;
+    panelTexture.needsUpdate = true;
+    textTexture.needsUpdate = true;
     this.upkeepDisplay.value = upkeepValue;
   }
 
