@@ -1557,12 +1557,20 @@ export class CardGameClient {
     return this.cards
       .filter((card) => card.userData.owner === this.template.playerSide && card.userData.zone === CARD_ZONE_TYPES.BOARD)
       .filter((card) => card.userData.attackCommitted === true && Number.isInteger(card.userData.slotIndex))
-      .map((card) => ({
-        attackerSlotIndex: card.userData.slotIndex - boardSlotsPerSide,
-        targetSlotIndex: Number.isInteger(card.userData.targetSlotIndex) ? card.userData.targetSlotIndex : null,
-        targetSide: card.userData.targetSide || null,
-        selectedAbilityIndex: Number.isInteger(card.userData.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0,
-      }));
+      .map((card) => {
+        const targetSide = card.userData.targetSide || null;
+        const rawTargetSlotIndex = Number.isInteger(card.userData.targetSlotIndex) ? card.userData.targetSlotIndex : null;
+        const targetSlotIndex = rawTargetSlotIndex == null
+          ? null
+          : (targetSide === this.template.playerSide ? rawTargetSlotIndex - boardSlotsPerSide : rawTargetSlotIndex);
+
+        return {
+          attackerSlotIndex: card.userData.slotIndex - boardSlotsPerSide,
+          targetSlotIndex,
+          targetSide,
+          selectedAbilityIndex: Number.isInteger(card.userData.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0,
+        };
+      });
   }
 
   playCommitPhaseAnimations(attackPlan = [], { onDone, interAttackDelayMs = 720 } = {}) {
