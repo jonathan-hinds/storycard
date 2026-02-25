@@ -322,8 +322,8 @@ export class PhaseManagerClient {
     const isOpponentCasting = isUnplayedOpponentSpell
       && this.client?.state?.activeSpellResolutionId !== activeSpell.id;
     if (isOpponentCasting && typeof this.client?.playRemoteSpellResolution === 'function') {
-      this.client.playRemoteSpellResolution(activeSpell).then(() => {
-        this.playedRemoteSpellResolutionIds.add(activeSpell.id);
+      this.client.playRemoteSpellResolution(activeSpell).then((played) => {
+        if (played) this.playedRemoteSpellResolutionIds.add(activeSpell.id);
       }).catch((error) => {
         this.elements.statusEl.textContent = `Spell sync error: ${error.message}`;
       });

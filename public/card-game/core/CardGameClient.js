@@ -796,11 +796,39 @@ export class CardGameClient {
   }
 
   async playRemoteSpellResolution(spellResolution) {
-    if (!spellResolution || !spellResolution.id) return;
-    if (this.state.remoteSpellResolutionPromise && this.state.activeSpellResolutionId === spellResolution.id) return;
+    if (!spellResolution || !spellResolution.id) return false;
+    if (this.state.remoteSpellResolutionPromise && this.state.activeSpellResolutionId === spellResolution.id) return false;
 
-    const card = this.getCardById(spellResolution.cardId);
-    if (!card) return;
+    let card = this.getCardById(spellResolution.cardId);
+    let createdProxyCard = false;
+    if (!card) {
+      card = CardMeshFactory.createCard({
+        id: spellResolution.cardId || `remote-spell-${spellResolution.id}`,
+        width: 1.8,
+        height: 2.5,
+        thickness: 0.08,
+        cornerRadius: 0.15,
+        color: 0x8249d0,
+      });
+      card.userData.zone = CARD_ZONE_TYPES.HAND;
+      card.userData.slotIndex = null;
+      card.userData.owner = spellResolution.casterSide === 'player' ? this.template.playerSide : 'opponent';
+      card.userData.cardId = spellResolution.cardId;
+      card.userData.locked = true;
+      card.scale.setScalar(1);
+      const { y, z } = this.getBoardRotationForCard(card);
+      card.rotation.set(CARD_FACE_ROTATION_X, y, z);
+      const opponentDeckSlot = this.deckSlots.find((slot) => slot.side !== this.template.playerSide) || null;
+      if (opponentDeckSlot) {
+        card.position.set(opponentDeckSlot.x, HAND_CARD_BASE_Y, opponentDeckSlot.z);
+      } else {
+        card.position.set(0, HAND_CARD_BASE_Y, HAND_BASE_Z - 1.2);
+      }
+      this.scene.add(card);
+      this.cards.push(card);
+      this.picker.setCards(this.cards);
+      createdProxyCard = true;
+    }
 
     const targetSlotIndex = Number.isInteger(spellResolution.targetSlotIndex) ? spellResolution.targetSlotIndex : null;
     const targetSide = spellResolution.targetSide === 'player' || spellResolution.targetSide === 'opponent'
@@ -865,6 +893,12 @@ export class CardGameClient {
       card.userData.slotIndex = null;
       await new Promise((resolve) => window.setTimeout(resolve, SPELL_DEATH_SETTLE_WAIT_MS));
 
+      if (createdProxyCard) {
+        this.scene.remove(card);
+        const cardIndex = this.cards.indexOf(card);
+        if (cardIndex >= 0) this.cards.splice(cardIndex, 1);
+        this.picker.setCards(this.cards);
+      }
       this.state.remoteSpellResolutionPromise = null;
       this.state.activeSpellResolutionId = null;
       this.state.spellResolutionInProgress = false;
@@ -873,6 +907,7 @@ export class CardGameClient {
 
     this.state.remoteSpellResolutionPromise = run();
     await this.state.remoteSpellResolutionPromise;
+    return true;
   }
 
   async commitAbilitySelection({ card, targetSlotIndex, targetSide, targetCard = null }) {
