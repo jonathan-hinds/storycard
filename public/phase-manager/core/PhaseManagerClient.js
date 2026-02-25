@@ -34,7 +34,6 @@ export class PhaseManagerClient {
     this.activeCommitSequenceKey = null;
     this.cardRollerOverlay = null;
     this.previewTuning = loadPreviewTuning();
-    this.seenSpellCastEventIds = new Set();
     this.playerId = createTabPlayerId();
 
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
@@ -491,23 +490,6 @@ export class PhaseManagerClient {
     return null;
   }
 
-  playSpellCastReveals(nextMatch) {
-    if (!this.client || !nextMatch) return;
-    const events = Array.isArray(nextMatch.meta?.spellCastEvents) ? nextMatch.meta.spellCastEvents : [];
-    events.forEach((event) => {
-      if (!event?.id || this.seenSpellCastEventIds.has(event.id)) return;
-      this.seenSpellCastEventIds.add(event.id);
-      const card = event.card || null;
-      if (!card?.catalogCard) return;
-      this.client.playTransientSpellReveal?.({
-        cardId: card.id,
-        color: card.color,
-        owner: event.casterSide === OPPONENT_SIDE ? OPPONENT_SIDE : PLAYER_SIDE,
-        catalogCard: card.catalogCard,
-      });
-    });
-  }
-
   async syncMatchStateAfterCardCommit() {
     const { statusEl } = this.elements;
     if (!this.match || this.match.phase !== 1 || this.match.youAreReady || this.stateSyncInFlight) return;
@@ -563,7 +545,6 @@ export class PhaseManagerClient {
       const currentSerialized = JSON.stringify(this.match);
       if (nextSerialized !== currentSerialized) {
         this.match = nextMatch;
-        this.playSpellCastReveals(nextMatch);
         if (shouldRefreshScene) {
           this.renderMatch();
         } else {
@@ -582,7 +563,6 @@ export class PhaseManagerClient {
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
-    this.seenSpellCastEventIds.clear();
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -681,7 +661,6 @@ export class PhaseManagerClient {
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
-    this.seenSpellCastEventIds.clear();
     if (this.client) {
       this.client.destroy();
       this.client = null;
