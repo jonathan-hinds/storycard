@@ -785,12 +785,18 @@ class PhaseManagerServer {
       id: spellId,
       casterId: playerId,
       cardId,
+      cardSnapshot: {
+        id: handCard.id,
+        color: handCard.color,
+        catalogCard: handCard.catalogCard || null,
+      },
       selectedAbilityIndex: Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0,
       targetSlotIndex: Number.isInteger(targetSlotIndex) ? targetSlotIndex : null,
       targetSide: targetSide === 'player' || targetSide === 'opponent' ? targetSide : null,
       rollType: typeof rollType === 'string' && rollType ? rollType : 'damage',
       dieSides: Number.isFinite(parsedDieSides) ? Math.max(2, parsedDieSides) : 6,
       rollOutcome: null,
+      rollData: null,
       startedAt: Date.now(),
       completedAt: null,
     };
@@ -799,7 +805,7 @@ class PhaseManagerServer {
   }
 
   submitSpellRoll(payload) {
-    const { playerId, spellId, rollOutcome } = payload || {};
+    const { playerId, spellId, rollOutcome, rollData } = payload || {};
     const status = this.phaseMatchmakingState.get(playerId);
     if (!status || status.status !== 'matched' || !status.matchId) {
       return { error: 'player is not in an active match', statusCode: 409 };
@@ -823,6 +829,16 @@ class PhaseManagerServer {
     }
 
     active.rollOutcome = parsedOutcome;
+    if (rollData && typeof rollData === 'object') {
+      const roll = rollData.roll && typeof rollData.roll === 'object' ? rollData.roll : null;
+      const sides = Number.parseInt(rollData.sides, 10);
+      active.rollData = {
+        roll,
+        sides: Number.isFinite(sides) ? Math.max(2, sides) : active.dieSides,
+      };
+    } else {
+      active.rollData = null;
+    }
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
 

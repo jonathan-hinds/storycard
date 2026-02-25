@@ -233,11 +233,12 @@ export class PhaseManagerClient {
     return this.match?.meta?.activeSpellResolution || null;
   }
 
-  async submitSpellRoll({ spellId, rollOutcome }) {
+  async submitSpellRoll({ spellId, rollOutcome, rollData = null }) {
     const status = await this.postJson('/api/phase-manager/match/spell/roll', {
       playerId: this.playerId,
       spellId,
       rollOutcome,
+      rollData,
     });
     this.match = status.matchState || this.match;
   }
@@ -355,7 +356,7 @@ export class PhaseManagerClient {
         options: {
           onCardStateCommitted: () => this.syncMatchStateAfterCardCommit(),
           onSpellResolutionRequested: (payload) => this.requestSpellResolutionStart(payload),
-          onSpellRollResolved: ({ spellId, rollOutcome }) => this.submitSpellRoll({ spellId, rollOutcome }),
+          onSpellRollResolved: ({ spellId, rollOutcome, rollData }) => this.submitSpellRoll({ spellId, rollOutcome, rollData }),
           onSpellResolutionFinished: ({ spellId }) => this.completeSpellResolution({ spellId }),
           getSpellResolutionSnapshot: () => this.getActiveSpellResolution(),
           previewTuning: this.previewTuning,
