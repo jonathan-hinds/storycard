@@ -7,7 +7,7 @@ const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
 const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
 const UPKEEP_PLANE_SIZE = { width: 1.65, height: 0.38 };
-const DEFAULT_UPKEEP_POSITION = { x: 0, y: 0, z: -3 };
+const DEFAULT_UPKEEP_POSITION = { x: -0.95, y: 0.82, z: -2.2 };
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -79,10 +79,16 @@ export class PhaseManagerClient {
   }
 
   syncUpkeepPositionInputs() {
-    const { upkeepXInput, upkeepYInput, upkeepZInput } = this.elements;
-    if (upkeepXInput) upkeepXInput.value = this.upkeepPosition.x.toFixed(2);
-    if (upkeepYInput) upkeepYInput.value = this.upkeepPosition.y.toFixed(2);
-    if (upkeepZInput) upkeepZInput.value = this.upkeepPosition.z.toFixed(2);
+    const { upkeepXInput, upkeepYInput, upkeepZInput, upkeepXValueEl, upkeepYValueEl, upkeepZValueEl } = this.elements;
+    const xValue = this.upkeepPosition.x.toFixed(2);
+    const yValue = this.upkeepPosition.y.toFixed(2);
+    const zValue = this.upkeepPosition.z.toFixed(2);
+    if (upkeepXInput) upkeepXInput.value = xValue;
+    if (upkeepYInput) upkeepYInput.value = yValue;
+    if (upkeepZInput) upkeepZInput.value = zValue;
+    if (upkeepXValueEl) upkeepXValueEl.textContent = xValue;
+    if (upkeepYValueEl) upkeepYValueEl.textContent = yValue;
+    if (upkeepZValueEl) upkeepZValueEl.textContent = zValue;
   }
 
   handleUpkeepPositionInput() {
@@ -155,7 +161,12 @@ export class PhaseManagerClient {
     if (this.upkeepDisplay) return;
 
     const { canvas, texture } = this.createUpkeepTexture();
-    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false });
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(UPKEEP_PLANE_SIZE.width, UPKEEP_PLANE_SIZE.height), material);
     mesh.renderOrder = 1000;
     this.client.camera.add(mesh);
@@ -183,6 +194,7 @@ export class PhaseManagerClient {
     if (!this.upkeepDisplay) return;
     const { mesh } = this.upkeepDisplay;
     mesh.position.set(this.upkeepPosition.x, this.upkeepPosition.y, this.upkeepPosition.z);
+    mesh.rotation.set(0, 0, 0);
   }
 
   drawUpkeepDisplay(upkeepValue) {
@@ -192,8 +204,24 @@ export class PhaseManagerClient {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const panelPadding = 14;
+    const panelRadius = 24;
+    const panelX = panelPadding;
+    const panelY = panelPadding;
+    const panelWidth = canvas.width - (panelPadding * 2);
+    const panelHeight = canvas.height - (panelPadding * 2);
+
+    ctx.beginPath();
+    ctx.roundRect(panelX, panelY, panelWidth, panelHeight, panelRadius);
+    ctx.fillStyle = 'rgba(8, 11, 18, 0.72)';
+    ctx.fill();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(190, 210, 255, 0.55)';
+    ctx.stroke();
+
     ctx.font = '900 126px Arial, sans-serif';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 16;
@@ -201,7 +229,7 @@ export class PhaseManagerClient {
     ctx.fillStyle = '#ffffff';
 
     const text = `Upkeep ${upkeepValue}`;
-    const x = canvas.width - 40;
+    const x = canvas.width / 2;
     const y = canvas.height / 2;
     ctx.strokeText(text, x, y);
     ctx.fillText(text, x, y);

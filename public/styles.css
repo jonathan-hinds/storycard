@@ -313,12 +313,36 @@ button {
   margin-top: 0.8rem;
 }
 
+.phase-manager-upkeep-note {
+  margin: 0 0 0.7rem;
+  font-size: 0.82rem;
+  color: #c2cde6;
+}
+
+.phase-manager-upkeep-slider-row {
+  display: grid;
+  grid-template-columns: 1.8rem minmax(0, 1fr) 3.25rem;
+  gap: 0.55rem;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+
 .phase-manager-upkeep-controls label {
   font-size: 0.82rem;
   color: #d2dbf2;
 }
 
-.phase-manager-upkeep-controls output {
+.phase-manager-upkeep-slider-row input[type='range'] {
+  width: 100%;
+}
+
+.phase-manager-upkeep-slider-row output {
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  color: #e9f0ff;
+}
+
+.phase-manager-upkeep-controls > output {
   display: block;
   min-height: 1.2em;
   word-break: break-word;
