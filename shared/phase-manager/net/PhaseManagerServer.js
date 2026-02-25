@@ -60,6 +60,17 @@ class PhaseManagerServer {
     return Number.parseInt(normalized.slice(1), 16);
   }
 
+  normalizeBoardTargetSlotIndex(targetSlotIndex, targetSide) {
+    if (!Number.isInteger(targetSlotIndex)) return null;
+    const boardSlotsPerSide = this.options.boardSlotsPerSide;
+    if (targetSlotIndex < 0) return null;
+    if (targetSlotIndex < boardSlotsPerSide) return targetSlotIndex;
+    if (targetSide === 'player' && targetSlotIndex < boardSlotsPerSide * 2) {
+      return targetSlotIndex - boardSlotsPerSide;
+    }
+    return null;
+  }
+
   buildDeckFromCatalog(playerId, catalogCards = []) {
     if (!Array.isArray(catalogCards) || catalogCards.length === 0) {
       return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => ({
@@ -565,11 +576,12 @@ class PhaseManagerServer {
       if (attack.targetSlotIndex != null && !Number.isInteger(attack.targetSlotIndex)) {
         return { error: 'targetSlotIndex must be an integer when provided' };
       }
-      if (Number.isInteger(attack.targetSlotIndex) && (attack.targetSlotIndex < 0 || attack.targetSlotIndex >= this.options.boardSlotsPerSide)) {
-        return { error: `targetSlotIndex must be between 0 and ${this.options.boardSlotsPerSide - 1}` };
-      }
       if (attack.targetSide != null && attack.targetSide !== 'player' && attack.targetSide !== 'opponent') {
         return { error: "targetSide must be either 'player' or 'opponent' when provided" };
+      }
+      const normalizedTargetSlotIndex = this.normalizeBoardTargetSlotIndex(attack.targetSlotIndex, attack.targetSide || null);
+      if (attack.targetSlotIndex != null && normalizedTargetSlotIndex == null) {
+        return { error: `targetSlotIndex must be between 0 and ${this.options.boardSlotsPerSide - 1}` };
       }
       if (attack.selectedAbilityIndex != null && !Number.isInteger(attack.selectedAbilityIndex)) {
         return { error: 'selectedAbilityIndex must be an integer when provided' };
@@ -585,7 +597,7 @@ class PhaseManagerServer {
         return { error: `card in slot ${attack.attackerSlotIndex} has summoning sickness` };
       }
       attackerCard.attackCommitted = true;
-      attackerCard.targetSlotIndex = Number.isInteger(attack.targetSlotIndex) ? attack.targetSlotIndex : null;
+      attackerCard.targetSlotIndex = normalizedTargetSlotIndex;
       attackerCard.targetSide = attack.targetSide || null;
       attackerCard.selectedAbilityIndex = Number.isInteger(attack.selectedAbilityIndex) ? attack.selectedAbilityIndex : 0;
       seenAttackerSlots.add(attack.attackerSlotIndex);
@@ -822,7 +834,7 @@ class PhaseManagerServer {
         catalogCard: handCard.catalogCard || null,
       },
       selectedAbilityIndex: Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0,
-      targetSlotIndex: Number.isInteger(targetSlotIndex) ? targetSlotIndex : null,
+      targetSlotIndex: this.normalizeBoardTargetSlotIndex(targetSlotIndex, targetSide),
       targetSide: targetSide === 'player' || targetSide === 'opponent' ? targetSide : null,
       rollType: typeof rollType === 'string' && rollType ? rollType : 'damage',
       dieSides: Number.isFinite(parsedDieSides) ? Math.max(2, parsedDieSides) : 6,

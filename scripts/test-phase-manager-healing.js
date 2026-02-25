@@ -101,4 +101,51 @@ const server = new PhaseManagerServer();
   assert.equal(targetCard.catalogCard.health, 11, 'roll healing should use submitted roll outcome');
 }
 
+{
+  const healAbility = {
+    effectId: 'heal_target',
+    valueSourceType: 'fixed',
+    valueSourceFixed: 2,
+  };
+  const serverWithSingleMatch = new PhaseManagerServer();
+  const playerState = {
+    hand: [],
+    board: [{
+      id: 'caster',
+      slotIndex: 1,
+      summonedTurn: 0,
+      attackCommitted: false,
+      targetSlotIndex: null,
+      targetSide: null,
+      selectedAbilityIndex: 0,
+      catalogCard: { health: 10, ability1: healAbility, ability2: null },
+    }, {
+      id: 'ally',
+      slotIndex: 0,
+      summonedTurn: 0,
+      attackCommitted: false,
+      targetSlotIndex: null,
+      targetSide: null,
+      selectedAbilityIndex: 0,
+      catalogCard: { health: 5, ability1: null, ability2: null },
+    }],
+    discard: [],
+  };
+
+  const validated = serverWithSingleMatch.validatePhaseTurnPayload({
+    hand: [],
+    board: [{ id: 'caster', slotIndex: 1 }, { id: 'ally', slotIndex: 0 }],
+    discard: [],
+    attacks: [{
+      attackerSlotIndex: 1,
+      targetSlotIndex: 3,
+      targetSide: 'player',
+      selectedAbilityIndex: 0,
+    }],
+  }, playerState, 1);
+
+  assert.ok(!validated.error, 'friendly targets should allow absolute board slot indexes');
+  assert.equal(validated.board[0].targetSlotIndex, 0, 'friendly absolute target slot should normalize to local side index');
+}
+
 console.log('phase manager healing checks passed');
