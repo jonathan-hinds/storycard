@@ -9,6 +9,7 @@ const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
 const DEFAULT_UPKEEP_PANEL_SIZE = { width: 2.27, height: 0.87 };
 const DEFAULT_UPKEEP_POSITION = { x: 2, y: 1.5, z: -5.15 };
 const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0.26, y: 0.03 };
+const DEFAULT_UPKEEP_TEXT_SCALE = 1;
 const DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH = '/public/assets/upkeepcontainer3.png';
 const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
 
@@ -53,6 +54,7 @@ export class PhaseManagerClient {
     this.upkeepPosition = { ...DEFAULT_UPKEEP_POSITION };
     this.upkeepPanelSize = { ...DEFAULT_UPKEEP_PANEL_SIZE };
     this.upkeepTextPosition = { ...DEFAULT_UPKEEP_TEXT_POSITION };
+    this.upkeepTextScale = DEFAULT_UPKEEP_TEXT_SCALE;
     this.upkeepBackgroundAssetPath = DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH;
     this.upkeepBackgroundImage = null;
     this.upkeepBackgroundCache = new Map();
@@ -115,6 +117,7 @@ export class PhaseManagerClient {
       upkeepHeightInput,
       upkeepTextXInput,
       upkeepTextYInput,
+      upkeepTextSizeInput,
       upkeepXValueEl,
       upkeepYValueEl,
       upkeepZValueEl,
@@ -122,6 +125,7 @@ export class PhaseManagerClient {
       upkeepHeightValueEl,
       upkeepTextXValueEl,
       upkeepTextYValueEl,
+      upkeepTextSizeValueEl,
     } = this.elements;
     const xValue = this.upkeepPosition.x.toFixed(2);
     const yValue = this.upkeepPosition.y.toFixed(2);
@@ -130,6 +134,7 @@ export class PhaseManagerClient {
     const heightValue = this.upkeepPanelSize.height.toFixed(2);
     const textXValue = this.upkeepTextPosition.x.toFixed(2);
     const textYValue = this.upkeepTextPosition.y.toFixed(2);
+    const textSizeValue = this.upkeepTextScale.toFixed(2);
     if (upkeepXInput) upkeepXInput.value = xValue;
     if (upkeepYInput) upkeepYInput.value = yValue;
     if (upkeepZInput) upkeepZInput.value = zValue;
@@ -137,6 +142,7 @@ export class PhaseManagerClient {
     if (upkeepHeightInput) upkeepHeightInput.value = heightValue;
     if (upkeepTextXInput) upkeepTextXInput.value = textXValue;
     if (upkeepTextYInput) upkeepTextYInput.value = textYValue;
+    if (upkeepTextSizeInput) upkeepTextSizeInput.value = textSizeValue;
     if (upkeepXValueEl) upkeepXValueEl.textContent = xValue;
     if (upkeepYValueEl) upkeepYValueEl.textContent = yValue;
     if (upkeepZValueEl) upkeepZValueEl.textContent = zValue;
@@ -144,6 +150,7 @@ export class PhaseManagerClient {
     if (upkeepHeightValueEl) upkeepHeightValueEl.textContent = heightValue;
     if (upkeepTextXValueEl) upkeepTextXValueEl.textContent = textXValue;
     if (upkeepTextYValueEl) upkeepTextYValueEl.textContent = textYValue;
+    if (upkeepTextSizeValueEl) upkeepTextSizeValueEl.textContent = textSizeValue;
   }
 
   handleUpkeepPositionInput() {
@@ -158,7 +165,7 @@ export class PhaseManagerClient {
   }
 
   handleUpkeepPanelStyleInput() {
-    const { upkeepWidthInput, upkeepHeightInput, upkeepTextXInput, upkeepTextYInput } = this.elements;
+    const { upkeepWidthInput, upkeepHeightInput, upkeepTextXInput, upkeepTextYInput, upkeepTextSizeInput } = this.elements;
     this.upkeepPanelSize = {
       width: this.parseUpkeepPositionValue(upkeepWidthInput?.value, this.upkeepPanelSize.width),
       height: this.parseUpkeepPositionValue(upkeepHeightInput?.value, this.upkeepPanelSize.height),
@@ -167,6 +174,7 @@ export class PhaseManagerClient {
       x: this.parseUpkeepPositionValue(upkeepTextXInput?.value, this.upkeepTextPosition.x),
       y: this.parseUpkeepPositionValue(upkeepTextYInput?.value, this.upkeepTextPosition.y),
     };
+    this.upkeepTextScale = this.parseUpkeepPositionValue(upkeepTextSizeInput?.value, this.upkeepTextScale);
     this.syncUpkeepPositionInputs();
     this.positionUpkeepDisplay();
     if (this.upkeepDisplay?.value != null) {
@@ -233,6 +241,7 @@ export class PhaseManagerClient {
       position: this.upkeepPosition,
       panelSize: this.upkeepPanelSize,
       textPosition: this.upkeepTextPosition,
+      textScale: this.upkeepTextScale,
       backgroundAssetPath: this.upkeepBackgroundAssetPath,
     });
     if (upkeepExportOutputEl) upkeepExportOutputEl.textContent = serialized;
@@ -253,6 +262,7 @@ export class PhaseManagerClient {
       upkeepHeightInput,
       upkeepTextXInput,
       upkeepTextYInput,
+      upkeepTextSizeInput,
       upkeepBackgroundSelect,
       upkeepExportBtn,
     } = this.elements;
@@ -266,6 +276,7 @@ export class PhaseManagerClient {
     upkeepHeightInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepTextXInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepTextYInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepTextSizeInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepBackgroundSelect?.addEventListener('change', this.handleUpkeepBackgroundChange);
     upkeepExportBtn?.addEventListener('click', this.exportUpkeepPosition);
     window.addEventListener('resize', this.handleWindowResize);
@@ -292,6 +303,7 @@ export class PhaseManagerClient {
       upkeepHeightInput,
       upkeepTextXInput,
       upkeepTextYInput,
+      upkeepTextSizeInput,
       upkeepBackgroundSelect,
       upkeepExportBtn,
     } = this.elements;
@@ -306,6 +318,7 @@ export class PhaseManagerClient {
     upkeepHeightInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepTextXInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepTextYInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepTextSizeInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepBackgroundSelect?.removeEventListener('change', this.handleUpkeepBackgroundChange);
     upkeepExportBtn?.removeEventListener('click', this.exportUpkeepPosition);
     window.removeEventListener('resize', this.handleWindowResize);
@@ -447,7 +460,7 @@ export class PhaseManagerClient {
       panelCtx.stroke();
     }
 
-    textCtx.font = '900 126px Arial, sans-serif';
+    textCtx.font = `900 ${Math.round(126 * this.upkeepTextScale)}px Arial, sans-serif`;
     textCtx.textAlign = 'center';
     textCtx.textBaseline = 'middle';
     textCtx.lineJoin = 'round';
