@@ -6,9 +6,10 @@ const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
 const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
-const DEFAULT_UPKEEP_PANEL_SIZE = { width: 1.65, height: 0.38 };
-const DEFAULT_UPKEEP_POSITION = { x: -0.95, y: 0.82, z: -2.2 };
-const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0, y: 0 };
+const DEFAULT_UPKEEP_PANEL_SIZE = { width: 2.27, height: 0.87 };
+const DEFAULT_UPKEEP_POSITION = { x: 2, y: 1.5, z: -5.15 };
+const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0.26, y: 0.03 };
+const DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH = '/public/assets/upkeepcontainer3.png';
 const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
 
 function getFrustumHalfExtents(fovDegrees, aspect, depth) {
@@ -52,7 +53,7 @@ export class PhaseManagerClient {
     this.upkeepPosition = { ...DEFAULT_UPKEEP_POSITION };
     this.upkeepPanelSize = { ...DEFAULT_UPKEEP_PANEL_SIZE };
     this.upkeepTextPosition = { ...DEFAULT_UPKEEP_TEXT_POSITION };
-    this.upkeepBackgroundAssetPath = '';
+    this.upkeepBackgroundAssetPath = DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH;
     this.upkeepBackgroundImage = null;
     this.upkeepBackgroundCache = new Map();
     this.availableUpkeepAssets = [];
@@ -270,6 +271,9 @@ export class PhaseManagerClient {
     window.addEventListener('resize', this.handleWindowResize);
     this.syncUpkeepPositionInputs();
     this.syncUpkeepBackgroundOptions();
+    this.loadUpkeepBackground(this.upkeepBackgroundAssetPath).catch(() => {
+      this.upkeepBackgroundImage = null;
+    });
     this.fetchUpkeepAssets();
     this.renderMatch();
     this.matchmakingPollTimer = window.setInterval(() => this.pollMatchmakingStatus(), this.options.pollIntervalMs);
