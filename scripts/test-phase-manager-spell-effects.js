@@ -89,6 +89,31 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
 }
 
 {
+  const { server, match, playerId, spellId } = createSpellMatch({
+    targetHealth: 6,
+    rollOutcome: 5,
+    ability: {
+      effectId: 'damage_enemy',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
+
+  const rollResult = server.submitSpellRoll({
+    playerId,
+    spellId,
+    rollOutcome: 5,
+    rollData: null,
+  });
+
+  assert.equal(rollResult.statusCode, 200);
+  assert.equal(match.activeSpellResolution.effectId, 'damage_enemy', 'rolled spells should publish effect metadata immediately');
+  assert.equal(match.activeSpellResolution.resolvedValue, 5, 'rolled spells should publish resolved values immediately');
+  assert.equal(match.activeSpellResolution.resolvedDamage, 5, 'rolled spells should publish resolved damage immediately');
+}
+
+
+{
   const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
     targetHealth: 6,
     rollOutcome: 3,

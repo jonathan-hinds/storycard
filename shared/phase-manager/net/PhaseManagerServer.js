@@ -868,6 +868,21 @@ class PhaseManagerServer {
     } else {
       active.rollData = null;
     }
+
+    // Compute deterministic effect metadata as soon as the caster roll is known so
+    // both clients can animate/preview the same resolved value before completion.
+    const spellCard = active.cardSnapshot?.catalogCard || null;
+    const spellAbility = this.getAttackAbilityForCard({ catalogCard: spellCard }, active.selectedAbilityIndex);
+    const resolvedValue = this.resolveAbilityValue({
+      ability: spellAbility,
+      rollValue: active.rollOutcome,
+    });
+    const effectId = spellAbility?.effectId || 'none';
+    active.effectId = effectId;
+    active.resolvedValue = resolvedValue;
+    active.resolvedDamage = effectId === 'damage_enemy' ? resolvedValue : 0;
+    active.resolvedHealing = effectId === 'heal_target' ? resolvedValue : 0;
+
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
 
