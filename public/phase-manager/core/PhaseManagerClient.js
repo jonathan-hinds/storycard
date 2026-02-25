@@ -8,6 +8,16 @@ const BOARD_SLOTS_PER_SIDE = 3;
 const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
 const UPKEEP_PLANE_SIZE = { width: 1.65, height: 0.38 };
 const DEFAULT_UPKEEP_POSITION = { x: -0.95, y: 0.82, z: -2.2 };
+const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
+
+function getFrustumHalfExtents(fovDegrees, aspect, depth) {
+  const safeDepth = Math.max(Math.abs(depth), 0.001);
+  const halfHeight = Math.tan(THREE.MathUtils.degToRad(fovDegrees) / 2) * safeDepth;
+  return {
+    halfHeight,
+    halfWidth: halfHeight * Math.max(aspect, 0.001),
+  };
+}
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -48,6 +58,11 @@ export class PhaseManagerClient {
     this.resetMatch = this.resetMatch.bind(this);
     this.handleUpkeepPositionInput = this.handleUpkeepPositionInput.bind(this);
     this.exportUpkeepPosition = this.exportUpkeepPosition.bind(this);
+    this.handleWindowResize = this.handleWindowResize.bind(this);
+  }
+
+  handleWindowResize() {
+    this.positionUpkeepDisplay();
   }
 
   async postJson(url, body) {
@@ -119,6 +134,7 @@ export class PhaseManagerClient {
     upkeepYInput?.addEventListener('input', this.handleUpkeepPositionInput);
     upkeepZInput?.addEventListener('input', this.handleUpkeepPositionInput);
     upkeepExportBtn?.addEventListener('click', this.exportUpkeepPosition);
+    window.addEventListener('resize', this.handleWindowResize);
     this.syncUpkeepPositionInputs();
     this.renderMatch();
     this.matchmakingPollTimer = window.setInterval(() => this.pollMatchmakingStatus(), this.options.pollIntervalMs);
@@ -135,6 +151,7 @@ export class PhaseManagerClient {
     upkeepYInput?.removeEventListener('input', this.handleUpkeepPositionInput);
     upkeepZInput?.removeEventListener('input', this.handleUpkeepPositionInput);
     upkeepExportBtn?.removeEventListener('click', this.exportUpkeepPosition);
+    window.removeEventListener('resize', this.handleWindowResize);
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -197,9 +214,18 @@ export class PhaseManagerClient {
   }
 
   positionUpkeepDisplay() {
-    if (!this.upkeepDisplay) return;
+    if (!this.upkeepDisplay || !this.client?.camera) return;
     const { mesh } = this.upkeepDisplay;
-    mesh.position.set(this.upkeepPosition.x, this.upkeepPosition.y, this.upkeepPosition.z);
+    const depth = Math.max(Math.abs(this.upkeepPosition.z), 0.001);
+    const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
+    const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
+    const normalizedX = this.upkeepPosition.x / referenceFrustum.halfWidth;
+    const normalizedY = this.upkeepPosition.y / referenceFrustum.halfHeight;
+    const x = normalizedX * currentFrustum.halfWidth;
+    const y = normalizedY * currentFrustum.halfHeight;
+    mesh.position.set(x, y, this.upkeepPosition.z);
+    const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
+    mesh.scale.set(scaleFactor, scaleFactor, 1);
     mesh.rotation.set(0, 0, 0);
   }
 
