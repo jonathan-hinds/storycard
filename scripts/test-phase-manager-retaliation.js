@@ -127,4 +127,50 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
   assert.equal(attacker.catalogCard.health, 5, 'healing caster should not take retaliation damage');
 }
 
+
+{
+  const match = {
+    id: 'match-retaliation-3',
+    players: ['p1', 'p2'],
+    turnNumber: 1,
+    cardsByPlayer: new Map(),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+  };
+
+  const attacker = createCreature({ id: 'a', slotIndex: 0, health: 5, damageValue: 3 });
+  const defender = createCreature({ id: 'b', slotIndex: 0, health: 5, damageValue: 2 });
+
+  match.cardsByPlayer.set('p1', { board: [attacker] });
+  match.cardsByPlayer.set('p2', { board: [defender] });
+  match.pendingCommitAttacksByPlayer.set('p1', [{
+    id: 'p1:0:opponent:0',
+    attackerSlotIndex: 0,
+    targetSlotIndex: 0,
+    targetSide: 'opponent',
+    selectedAbilityIndex: 0,
+  }]);
+  match.pendingCommitAttacksByPlayer.set('p2', []);
+
+  const spellResult = server.applyResolvedAbilityEffect({
+    match,
+    casterId: 'p2',
+    targetSide: 'player',
+    targetSlotIndex: 0,
+    effectId: 'retaliation_bonus',
+    resolvedValue: 3,
+  });
+
+  assert.equal(spellResult.executed, true, 'retaliation bonus spell should execute');
+  assert.equal(defender.retaliationBonus, 3, 'retaliation bonus should be stored on defender card');
+
+  server.applyCommitEffects(match);
+
+  assert.equal(attacker.catalogCard.health, 2, 'attacker should take retaliation damage from defender bonus even when defender did not attack');
+  const execution = match.commitExecutionByAttackId.get('p1:0:opponent:0');
+  assert.equal(execution.retaliationDamage, 3, 'retaliation damage should include temporary retaliation bonuses');
+}
+
+
 console.log('phase manager retaliation checks passed');

@@ -151,4 +151,24 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
 }
 
 
+{
+  const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
+    targetHealth: 6,
+    rollOutcome: 3,
+    ability: {
+      effectId: 'retaliation_bonus',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
+
+  const result = server.completeSpellResolution({ playerId, spellId });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(defenderCard.retaliationBonus, 3, 'retaliation bonus spells should add a temporary retaliation bonus to the target');
+  assert.equal(match.activeSpellResolution.effectId, 'retaliation_bonus', 'completed spells should expose retaliation bonus effect metadata');
+}
+
+
+
 console.log('phase manager spell effects checks passed');
