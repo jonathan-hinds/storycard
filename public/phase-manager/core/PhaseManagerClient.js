@@ -171,6 +171,28 @@ export class PhaseManagerClient {
       });
     });
 
+    (currentMatch.players[PLAYER_SIDE].discard || []).forEach((card) => {
+      initialCards.push({
+        id: card.id,
+        color: card.color,
+        owner: PLAYER_SIDE,
+        zone: CARD_ZONE_TYPES.DISCARD,
+        slotIndex: null,
+        catalogCard: card.catalogCard || null,
+      });
+    });
+
+    (currentMatch.players[OPPONENT_SIDE].discard || []).forEach((card) => {
+      initialCards.push({
+        id: card.id,
+        color: card.color,
+        owner: OPPONENT_SIDE,
+        zone: CARD_ZONE_TYPES.DISCARD,
+        slotIndex: null,
+        catalogCard: card.catalogCard || null,
+      });
+    });
+
     return {
       playerSide: PLAYER_SIDE,
       zoneFramework: DEFAULT_ZONE_FRAMEWORK,
