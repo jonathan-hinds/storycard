@@ -137,6 +137,20 @@ class PhaseManagerServer {
       }
     }
 
+    const activeSpellResolution = match.activeSpellResolution
+      ? {
+        ...match.activeSpellResolution,
+        casterSide: match.activeSpellResolution.casterId === playerId ? 'player' : 'opponent',
+      }
+      : null;
+
+    if (activeSpellResolution?.targetSide) {
+      const viewerIsCaster = activeSpellResolution.casterId === playerId;
+      if (!viewerIsCaster) {
+        activeSpellResolution.targetSide = activeSpellResolution.targetSide === 'player' ? 'opponent' : 'player';
+      }
+    }
+
     return {
       id: match.id,
       turnNumber: match.turnNumber,
@@ -158,12 +172,7 @@ class PhaseManagerServer {
       meta: {
         drawnCardIds: [...(match.lastDrawnCardsByPlayer.get(playerId) || [])],
         phaseStartedAt: match.phaseStartedAt,
-        activeSpellResolution: match.activeSpellResolution
-          ? {
-            ...match.activeSpellResolution,
-            casterSide: match.activeSpellResolution.casterId === playerId ? 'player' : 'opponent',
-          }
-          : null,
+        activeSpellResolution,
         commitAllRolledAt: match.commitAllRolledAt || null,
         commitAttacks,
         commitRolls: Array.from(match.commitRollsByAttackId?.values() || []).map((rollEntry) => ({
