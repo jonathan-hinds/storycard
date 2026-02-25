@@ -514,8 +514,8 @@ class PhaseManagerServer {
       return { error: 'hand and board must not contain duplicate cards' };
     }
 
-    if (uniqueIds.size !== knownCards.size) {
-      return { error: `expected exactly ${knownCards.size} cards between hand and board` };
+    if (uniqueIds.size > knownCards.size) {
+      return { error: `expected at most ${knownCards.size} known cards between hand, board, and discard` };
     }
     for (const cardId of uniqueIds) {
       if (!knownCards.has(cardId)) {
@@ -591,10 +591,16 @@ class PhaseManagerServer {
       seenAttackerSlots.add(attack.attackerSlotIndex);
     }
 
+    const normalizedDiscard = discard.map((card) => knownCards.get(card.id));
+    for (const [knownCardId, knownCard] of knownCards.entries()) {
+      if (uniqueIds.has(knownCardId)) continue;
+      normalizedDiscard.push(knownCard);
+    }
+
     return {
       hand: hand.map((card) => knownCards.get(card.id)),
       board: normalizedBoard,
-      discard: discard.map((card) => knownCards.get(card.id)),
+      discard: normalizedDiscard,
     };
   }
 
