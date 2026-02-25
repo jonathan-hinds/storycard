@@ -145,6 +145,10 @@ export class PhaseManagerClient {
 
     currentMatch.players[PLAYER_SIDE].board.forEach((card, index) => {
       const relativeSlotIndex = Number.isInteger(card.slotIndex) ? card.slotIndex : index;
+      const localTargetSlotIndex = Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null;
+      const targetSlotIndex = localTargetSlotIndex == null
+        ? null
+        : (card.targetSide === PLAYER_SIDE ? BOARD_SLOTS_PER_SIDE + localTargetSlotIndex : localTargetSlotIndex);
       initialCards.push({
         id: card.id,
         color: card.color,
@@ -153,7 +157,7 @@ export class PhaseManagerClient {
         slotIndex: BOARD_SLOTS_PER_SIDE + relativeSlotIndex,
         canAttack: card.canAttack === true,
         attackCommitted: card.attackCommitted === true,
-        targetSlotIndex: Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null,
+        targetSlotIndex,
         targetSide: card.targetSide || null,
         catalogCard: card.catalogCard || null,
       });

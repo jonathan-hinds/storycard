@@ -1554,18 +1554,25 @@ export class CardGameClient {
 
   getCombatDecisions() {
     const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
+    const normalizeToLocalSlotIndex = (slotIndex, side) => {
+      if (!Number.isInteger(slotIndex)) return null;
+      if (slotIndex < 0) return null;
+      if (slotIndex < boardSlotsPerSide) return slotIndex;
+      if (slotIndex < boardSlotsPerSide * 2 && side === this.template.playerSide) {
+        return slotIndex - boardSlotsPerSide;
+      }
+      return null;
+    };
+
     return this.cards
       .filter((card) => card.userData.owner === this.template.playerSide && card.userData.zone === CARD_ZONE_TYPES.BOARD)
       .filter((card) => card.userData.attackCommitted === true && Number.isInteger(card.userData.slotIndex))
       .map((card) => {
         const targetSide = card.userData.targetSide || null;
-        const rawTargetSlotIndex = Number.isInteger(card.userData.targetSlotIndex) ? card.userData.targetSlotIndex : null;
-        const targetSlotIndex = rawTargetSlotIndex == null
-          ? null
-          : (targetSide === this.template.playerSide ? rawTargetSlotIndex - boardSlotsPerSide : rawTargetSlotIndex);
+        const targetSlotIndex = normalizeToLocalSlotIndex(card.userData.targetSlotIndex, targetSide);
 
         return {
-          attackerSlotIndex: card.userData.slotIndex - boardSlotsPerSide,
+          attackerSlotIndex: normalizeToLocalSlotIndex(card.userData.slotIndex, this.template.playerSide),
           targetSlotIndex,
           targetSide,
           selectedAbilityIndex: Number.isInteger(card.userData.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0,
