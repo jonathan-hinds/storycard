@@ -5,6 +5,7 @@ import {
   getCurrentRollValue,
   resizeRendererToDisplaySize,
   syncCameraToDie,
+  destroySceneForCanvas,
 } from '../render/legacyRenderer.js';
 import { DieRollerHttpClient } from '../net/httpClient.js';
 
@@ -38,10 +39,17 @@ export class DieRollerClient {
 
   ensureVisual(sides = 6) {
     if (this.visual && this.visualSides === sides) return;
-    if (this.visual?.renderer) this.visual.renderer.dispose();
+    this.#disposeVisual();
     this.visual = createSceneForCanvas(this.canvas, sides);
     this.visualSides = sides;
     this.#applyRenderTuning();
+  }
+
+  #disposeVisual() {
+    if (!this.visual) return;
+    destroySceneForCanvas(this.visual);
+    this.visual = null;
+    this.visualSides = null;
   }
 
   setRenderTuning(partialTuning = {}) {
@@ -138,8 +146,9 @@ export class DieRollerClient {
   destroy() {
     if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
     this.animationFrame = null;
-    if (this.visual?.renderer) this.visual.renderer.dispose();
-    this.visual = null;
+    this.rollQueue = [];
+    this.currentRoll = null;
+    this.#disposeVisual();
     if (this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
   }
 

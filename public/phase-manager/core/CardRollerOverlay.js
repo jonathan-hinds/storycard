@@ -231,7 +231,13 @@ export class CardRollerOverlay {
       const firstRollDetails = this.getRollTypeForCard(card, firstRollType);
       roller.renderStaticPreview(firstRollDetails.sides);
 
-      const entry = { panel, roller, globalSlotIndex, hasRolled: false };
+      const entry = {
+        panel,
+        roller,
+        globalSlotIndex,
+        hasRolled: false,
+        removeListeners: null,
+      };
       this.activeRollers.push(entry);
       this.positionRollerEntry(entry);
 
@@ -263,13 +269,30 @@ export class CardRollerOverlay {
         };
 
         const triggerPromise = new Promise((resolve, reject) => {
+          const removeRollTriggerListeners = (target, handler) => {
+            if (!target || !handler) return;
+            target.removeEventListener('pointerdown', handler);
+            target.removeEventListener('click', handler);
+            target.removeEventListener('touchstart', handler);
+          };
+
           const wrappedTrigger = async (event) => {
             try {
               const outcomes = await triggerRoll(event);
-              if (Array.isArray(outcomes)) resolve(outcomes);
+              if (Array.isArray(outcomes)) {
+                entry.removeListeners?.();
+                resolve(outcomes);
+              }
             } catch (error) {
+              entry.removeListeners?.();
               reject(error);
             }
+          };
+
+          entry.removeListeners = () => {
+            removeRollTriggerListeners(panel, wrappedTrigger);
+            removeRollTriggerListeners(roller.canvas, wrappedTrigger);
+            entry.removeListeners = null;
           };
 
           const addRollTriggerListeners = (target) => {
@@ -325,7 +348,10 @@ export class CardRollerOverlay {
       cancelAnimationFrame(this.positionTick);
       this.positionTick = 0;
     }
-    this.activeRollers.forEach((entry) => entry.roller.destroy());
+    this.activeRollers.forEach((entry) => {
+      entry.removeListeners?.();
+      entry.roller.destroy();
+    });
     this.activeRollers = [];
     this.layer.replaceChildren();
   }
