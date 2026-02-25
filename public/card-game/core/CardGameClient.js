@@ -580,6 +580,26 @@ export class CardGameClient {
     return panel;
   }
 
+  buildCardMeshConfigFromSnapshot(cardSnapshot, fallbackId) {
+    const catalogCard = cardSnapshot?.catalogCard || null;
+    const cardKind = catalogCard?.cardKind;
+    const faceTexture = catalogCard
+      ? createCardLabelTexture(catalogCard, {
+        backgroundImagePath: getDefaultCardBackgroundImagePath(cardKind),
+      })
+      : null;
+
+    return {
+      id: cardSnapshot?.id || fallbackId,
+      width: 1.8,
+      height: 2.5,
+      thickness: 0.08,
+      cornerRadius: 0.15,
+      color: cardSnapshot?.color ?? 0x8249d0,
+      faceTexture,
+    };
+  }
+
   async waitForSpellRoll({ card, rollType, dieSides }) {
     const panel = this.createSpellRollerPanel(card);
     if (!panel) return null;
@@ -613,9 +633,14 @@ export class CardGameClient {
           const payload = await roller.roll({ dice: [{ id: dieId, sides: dieSides }] });
           const settledValue = await settled;
           const outcome = Number(payload?.results?.[0]?.roll?.outcome);
+          const roll = payload?.results?.[0]?.roll || null;
           const normalizedOutcome = Number.isFinite(settledValue) ? settledValue : outcome;
           panel.dataset.state = 'settled';
-          resolve(Number.isFinite(normalizedOutcome) ? normalizedOutcome : null);
+          resolve({
+            outcome: Number.isFinite(normalizedOutcome) ? normalizedOutcome : null,
+            roll,
+            sides: dieSides,
+          });
         } catch (error) {
           reject(error);
         }
@@ -625,6 +650,51 @@ export class CardGameClient {
       panel.addEventListener('click', triggerRoll);
       panel.addEventListener('touchstart', triggerRoll, { passive: false });
     });
+  }
+
+  async waitForRemoteSpellRoll({ spellResolution, card, dieSides }) {
+    const panel = this.createSpellRollerPanel(card);
+    if (!panel) return null;
+
+    panel.title = 'Waiting for caster roll';
+    panel.dataset.state = 'waiting';
+    const roller = new DieRollerClient({ container: panel, assets: {} });
+    this.state.activeSpellRoller = { panel, roller, card };
+    roller.renderStaticPreview(dieSides);
+    this.positionSpellRollerPanel();
+
+    let liveSpellResolution = spellResolution;
+    let outcome = Number(liveSpellResolution?.rollOutcome);
+    const settled = new Promise((resolve, reject) => {
+      roller.handlers.onSettled = ({ value }) => resolve(value ?? null);
+      roller.handlers.onError = (error) => reject(error);
+    });
+
+    while (!Number.isFinite(outcome)) {
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+      const latest = typeof this.getSpellResolutionSnapshot === 'function'
+        ? this.getSpellResolutionSnapshot()
+        : null;
+      if (latest && latest.id === spellResolution.id) {
+        liveSpellResolution = latest;
+        outcome = Number(latest.rollOutcome);
+      }
+    }
+
+    panel.dataset.state = 'rolling';
+    const remoteRoll = liveSpellResolution?.rollData;
+    const remoteRollSides = Number.isInteger(remoteRoll?.sides) ? remoteRoll.sides : dieSides;
+    if (remoteRoll?.roll && Array.isArray(remoteRoll.roll.frames) && remoteRoll.roll.frames.length) {
+      roller.playRoll({ roll: remoteRoll.roll, sides: remoteRollSides });
+      await settled;
+    }
+    panel.dataset.state = 'settled';
+
+    return {
+      outcome,
+      rollType: liveSpellResolution?.rollType || 'damage',
+      resolution: liveSpellResolution,
+    };
   }
 
 
@@ -737,14 +807,15 @@ export class CardGameClient {
     });
 
     await new Promise((resolve) => window.setTimeout(resolve, 860));
-    let outcome = null;
+    let spellRoll = null;
     try {
-      outcome = await this.waitForSpellRoll({ card, rollType, dieSides });
+      spellRoll = await this.waitForSpellRoll({ card, rollType, dieSides });
     } catch (error) {
       this.setStatus(`Spell roll failed: ${error.message}`);
     } finally {
       this.clearSpellRollerPanel();
     }
+    let outcome = Number(spellRoll?.outcome);
     if (!Number.isFinite(outcome)) {
       outcome = 1 + Math.floor(Math.random() * dieSides);
     }
@@ -756,6 +827,10 @@ export class CardGameClient {
           spellId: spellResolutionId,
           rollOutcome: outcome,
           rollType,
+          rollData: spellRoll?.roll ? {
+            roll: spellRoll.roll,
+            sides: spellRoll.sides,
+          } : null,
         });
       } catch (error) {
         this.setStatus(`Spell roll sync failed: ${error.message}`);
@@ -802,18 +877,16 @@ export class CardGameClient {
     let card = this.getCardById(spellResolution.cardId);
     let createdProxyCard = false;
     if (!card) {
-      card = CardMeshFactory.createCard({
-        id: spellResolution.cardId || `remote-spell-${spellResolution.id}`,
-        width: 1.8,
-        height: 2.5,
-        thickness: 0.08,
-        cornerRadius: 0.15,
-        color: 0x8249d0,
-      });
+      card = CardMeshFactory.createCard(this.buildCardMeshConfigFromSnapshot(
+        spellResolution.cardSnapshot,
+        spellResolution.cardId || `remote-spell-${spellResolution.id}`,
+      ));
       card.userData.zone = CARD_ZONE_TYPES.HAND;
       card.userData.slotIndex = null;
       card.userData.owner = spellResolution.casterSide === 'player' ? this.template.playerSide : 'opponent';
       card.userData.cardId = spellResolution.cardId;
+      card.userData.catalogCard = spellResolution.cardSnapshot?.catalogCard || null;
+      card.userData.statDisplayOverrides = null;
       card.userData.locked = true;
       card.scale.setScalar(1);
       const { y, z } = this.getBoardRotationForCard(card);
@@ -866,18 +939,14 @@ export class CardGameClient {
       });
       await new Promise((resolve) => window.setTimeout(resolve, 860));
 
-      let liveSpellResolution = spellResolution;
-      let outcome = Number(liveSpellResolution.rollOutcome);
-      if (!Number.isFinite(outcome) && typeof this.getSpellResolutionSnapshot === 'function') {
-        for (let attempt = 0; attempt < 60; attempt += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, 250));
-          const latest = this.getSpellResolutionSnapshot();
-          if (!latest || latest.id !== spellResolution.id) continue;
-          liveSpellResolution = latest;
-          outcome = Number(latest.rollOutcome);
-          if (Number.isFinite(outcome)) break;
-        }
+      let remoteRoll = null;
+      try {
+        remoteRoll = await this.waitForRemoteSpellRoll({ spellResolution, card, dieSides: spellResolution.dieSides || 6 });
+      } finally {
+        this.clearSpellRollerPanel();
       }
+      const liveSpellResolution = remoteRoll?.resolution || spellResolution;
+      const outcome = Number(remoteRoll?.outcome);
       if (Number.isFinite(outcome)) {
         this.setCardStatDisplayOverride(card.userData.cardId, liveSpellResolution.rollType || 'damage', outcome);
       }
