@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node --check server.js && node --check shared/dieEngine.js && node --check shared/card-game/net/CardGameServer.js && node scripts/verify-refactor.js && node scripts/test-card-zones.js && node scripts/test-phase-manager-healing.js && node scripts/test-phase-manager-spell-sync.js"
+    "test": "node --check server.js && node --check shared/dieEngine.js && node --check shared/card-game/net/CardGameServer.js && node scripts/verify-refactor.js && node scripts/test-card-zones.js && node scripts/test-phase-manager-healing.js && node scripts/test-phase-manager-spell-sync.js && node scripts/test-phase-manager-spell-effects.js"
   },
   "keywords": [
     "dice",
