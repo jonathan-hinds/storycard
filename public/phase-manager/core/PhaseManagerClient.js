@@ -184,14 +184,20 @@ export class PhaseManagerClient {
   syncPlayerStateFromClient() {
     if (!this.client || !this.match) return { hand: [], board: [], discard: [], attacks: [] };
 
-    const allPlayerCards = this.client.cards
-      .filter((card) => card.userData.owner === PLAYER_SIDE)
-      .map((card) => ({
-        id: card.userData.cardId,
-        color: card.userData.mesh.material.color.getHex(),
-        zone: card.userData.zone,
-        slotIndex: card.userData.slotIndex,
-      }));
+    const rawCards = typeof this.client.getCardsForSync === 'function'
+      ? this.client.getCardsForSync()
+      : this.client.cards
+        .map((card) => ({
+          id: card.userData.cardId,
+          color: card.userData.mesh.material.color.getHex(),
+          zone: card.userData.zone,
+          slotIndex: card.userData.slotIndex,
+          owner: card.userData.owner,
+        }));
+
+    const allPlayerCards = rawCards
+      .filter((card) => card.owner === PLAYER_SIDE)
+      .map(({ id, color, zone, slotIndex }) => ({ id, color, zone, slotIndex }));
 
     const hand = allPlayerCards
       .filter((card) => card.zone === CARD_ZONE_TYPES.HAND)

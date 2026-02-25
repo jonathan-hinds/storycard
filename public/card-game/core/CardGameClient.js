@@ -80,6 +80,7 @@ export class CardGameClient {
     this.camera.lookAt(0, 0, 0.4);
 
     this.cards = [];
+    this.discardedCardSnapshotsById = new Map();
     this.boardSlots = [];
     this.deckSlots = [];
     this.cardAnimations = [];
@@ -1305,6 +1306,7 @@ export class CardGameClient {
 
     for (const card of this.cards) this.scene.remove(card);
     this.cards.length = 0;
+    this.discardedCardSnapshotsById.clear();
 
     for (const cfg of this.template.initialCards) {
       const cardKind = cfg.catalogCard?.cardKind;
@@ -1812,7 +1814,36 @@ export class CardGameClient {
     this.scene.remove(card);
     const cardIndex = this.cards.indexOf(card);
     if (cardIndex >= 0) this.cards.splice(cardIndex, 1);
+
+    if (card?.userData?.zone === CARD_ZONE_TYPES.DISCARD && card?.userData?.cardId) {
+      this.discardedCardSnapshotsById.set(card.userData.cardId, {
+        id: card.userData.cardId,
+        color: card.userData.mesh?.material?.color?.getHex?.() ?? null,
+        zone: CARD_ZONE_TYPES.DISCARD,
+        slotIndex: null,
+        owner: card.userData.owner,
+      });
+    }
+
     this.picker.setCards(this.cards);
+  }
+
+  getCardsForSync() {
+    const inSceneCards = this.cards.map((card) => ({
+      id: card.userData.cardId,
+      color: card.userData.mesh.material.color.getHex(),
+      zone: card.userData.zone,
+      slotIndex: card.userData.slotIndex,
+      owner: card.userData.owner,
+    }));
+
+    const missingDiscardCards = [];
+    for (const snapshot of this.discardedCardSnapshotsById.values()) {
+      const existsInScene = inSceneCards.some((card) => card.id === snapshot.id);
+      if (!existsInScene) missingDiscardCards.push(snapshot);
+    }
+
+    return [...inSceneCards, ...missingDiscardCards];
   }
 
   async handlePointerUp(event) {
