@@ -11,6 +11,11 @@ const DEFAULT_UPKEEP_POSITION = { x: 1, y: 0, z: -5.49 };
 const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0.27, y: 0 };
 const DEFAULT_UPKEEP_TEXT_SCALE = 0.5;
 const DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH = '/public/assets/upkeepcontainer3.png';
+const DEFAULT_READY_BUTTON_PANEL_SIZE = { width: 1.58, height: 0.48 };
+const DEFAULT_READY_BUTTON_POSITION = { x: 0.721, y: 0.102, z: -6 };
+const DEFAULT_READY_BUTTON_TEXT_POSITION = { x: -0.02, y: -0.03 };
+const DEFAULT_READY_BUTTON_TEXT_SCALE = 0.5;
+const DEFAULT_READY_BUTTON_BACKGROUND_ASSET_PATH = '/public/assets/button1.png';
 const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
 const READY_BUTTON_LABEL = 'READY UP';
 
@@ -53,11 +58,11 @@ export class PhaseManagerClient {
     this.cardRollerOverlay = null;
     this.upkeepDisplay = null;
     this.readyButtonDisplay = null;
-    this.upkeepPosition = { ...DEFAULT_UPKEEP_POSITION };
-    this.upkeepPanelSize = { ...DEFAULT_UPKEEP_PANEL_SIZE };
-    this.upkeepTextPosition = { ...DEFAULT_UPKEEP_TEXT_POSITION };
-    this.upkeepTextScale = DEFAULT_UPKEEP_TEXT_SCALE;
-    this.upkeepBackgroundAssetPath = DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH;
+    this.upkeepPosition = { ...DEFAULT_READY_BUTTON_POSITION };
+    this.upkeepPanelSize = { ...DEFAULT_READY_BUTTON_PANEL_SIZE };
+    this.upkeepTextPosition = { ...DEFAULT_READY_BUTTON_TEXT_POSITION };
+    this.upkeepTextScale = DEFAULT_READY_BUTTON_TEXT_SCALE;
+    this.upkeepBackgroundAssetPath = DEFAULT_READY_BUTTON_BACKGROUND_ASSET_PATH;
     this.upkeepBackgroundImage = null;
     this.upkeepBackgroundCache = new Map();
     this.availableUpkeepAssets = [];
@@ -523,7 +528,7 @@ export class PhaseManagerClient {
       depthTest: false,
       side: THREE.DoubleSide,
     });
-    const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_UPKEEP_PANEL_SIZE.width, DEFAULT_UPKEEP_PANEL_SIZE.height), panelMaterial);
+    const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_READY_BUTTON_PANEL_SIZE.width, DEFAULT_READY_BUTTON_PANEL_SIZE.height), panelMaterial);
     panelMesh.renderOrder = 1002;
     this.client.camera.add(panelMesh);
 
@@ -534,7 +539,7 @@ export class PhaseManagerClient {
       depthTest: false,
       side: THREE.DoubleSide,
     });
-    const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_UPKEEP_PANEL_SIZE.width, DEFAULT_UPKEEP_PANEL_SIZE.height), textMaterial);
+    const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_READY_BUTTON_PANEL_SIZE.width, DEFAULT_READY_BUTTON_PANEL_SIZE.height), textMaterial);
     textMesh.renderOrder = 1003;
     this.client.camera.add(textMesh);
 
@@ -571,10 +576,10 @@ export class PhaseManagerClient {
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
     const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
-    const widthScale = this.upkeepPanelSize.width / DEFAULT_UPKEEP_PANEL_SIZE.width;
-    const heightScale = this.upkeepPanelSize.height / DEFAULT_UPKEEP_PANEL_SIZE.height;
-    const panelWorldWidth = DEFAULT_UPKEEP_PANEL_SIZE.width * scaleFactor * widthScale;
-    const panelWorldHeight = DEFAULT_UPKEEP_PANEL_SIZE.height * scaleFactor * heightScale;
+    const widthScale = this.upkeepPanelSize.width / DEFAULT_READY_BUTTON_PANEL_SIZE.width;
+    const heightScale = this.upkeepPanelSize.height / DEFAULT_READY_BUTTON_PANEL_SIZE.height;
+    const panelWorldWidth = DEFAULT_READY_BUTTON_PANEL_SIZE.width * scaleFactor * widthScale;
+    const panelWorldHeight = DEFAULT_READY_BUTTON_PANEL_SIZE.height * scaleFactor * heightScale;
     const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
     const panelHalfNormalizedY = panelWorldHeight / Math.max(currentFrustum.halfHeight * 2, 0.001);
     const targetNormalizedX = THREE.MathUtils.clamp((this.upkeepPosition.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
