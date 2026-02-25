@@ -1592,9 +1592,11 @@ export class CardGameClient {
         attackerSlotIndex: step?.attackerSlotIndex,
         targetSlotIndex: step?.targetSlotIndex,
         attackerSide: step?.attackerSide === 'opponent' ? 'opponent' : 'player',
+        targetSide: step?.targetSide === 'player' || step?.targetSide === 'opponent' ? step.targetSide : 'opponent',
         startAtMs: now + index * interAttackDelayMs,
         durationMs: 760,
         resolvedDamage: Number.isFinite(step?.resolvedDamage) ? step.resolvedDamage : null,
+        resolvedHealing: Number.isFinite(step?.resolvedHealing) ? step.resolvedHealing : null,
         didHit: false,
         initialized: false,
       });
@@ -1671,10 +1673,11 @@ export class CardGameClient {
         if (!animation.didHit && t >= 0.58 && animation.defenderCard) {
           animation.didHit = true;
           const collisionAxis = attackAxis.lengthSq() > 0 ? attackAxis : new THREE.Vector3(0, 0, 1);
+          const currentHealth = Number(animation.defenderCard.userData?.catalogCard?.health);
+          const canUpdateHealth = Number.isFinite(currentHealth);
           let defenderDied = false;
           if (Number.isFinite(animation.resolvedDamage) && animation.resolvedDamage > 0) {
-            const currentHealth = Number(animation.defenderCard.userData?.catalogCard?.health);
-            const nextHealth = Number.isFinite(currentHealth)
+            const nextHealth = canUpdateHealth
               ? currentHealth - animation.resolvedDamage
               : null;
             this.spawnDamagePopup({
@@ -1690,6 +1693,9 @@ export class CardGameClient {
                 this.beginCardDeathAnimation(animation.defenderCard, collisionAxis.clone(), time);
               }
             }
+          } else if (Number.isFinite(animation.resolvedHealing) && animation.resolvedHealing > 0 && canUpdateHealth) {
+            animation.defenderCard.userData.catalogCard.health = currentHealth + animation.resolvedHealing;
+            this.refreshCardFace(animation.defenderCard);
           }
           if (!defenderDied) this.combatShakeEffects.push({
             card: animation.defenderCard,
@@ -1780,12 +1786,14 @@ export class CardGameClient {
     if (!Number.isInteger(animation?.attackerSlotIndex) || !Number.isInteger(animation?.targetSlotIndex)) return null;
     const boardSlotsPerSide = Math.floor(this.boardSlots.length / 2);
     const isOpponentAttack = animation.attackerSide === 'opponent';
+    const targetIsAttackerSide = animation.targetSide === 'player';
+    const isOpponentTarget = targetIsAttackerSide ? isOpponentAttack : !isOpponentAttack;
     const attackerGlobalSlotIndex = isOpponentAttack
       ? animation.attackerSlotIndex
       : boardSlotsPerSide + animation.attackerSlotIndex;
-    const defenderGlobalSlotIndex = isOpponentAttack
-      ? boardSlotsPerSide + animation.targetSlotIndex
-      : animation.targetSlotIndex;
+    const defenderGlobalSlotIndex = isOpponentTarget
+      ? animation.targetSlotIndex
+      : boardSlotsPerSide + animation.targetSlotIndex;
     const attackerSlot = this.boardSlots[attackerGlobalSlotIndex];
     const defenderSlot = this.boardSlots[defenderGlobalSlotIndex];
     if (!attackerSlot || !defenderSlot) return null;
