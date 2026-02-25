@@ -395,6 +395,16 @@ button {
   will-change: transform, opacity, left, top;
 }
 
+.damage-number-popup--beneficial {
+  color: #ffffff;
+  text-shadow:
+    0 2px 0 #000000,
+    0 -2px 0 #000000,
+    2px 0 0 #000000,
+    -2px 0 0 #000000,
+    0 0 8px rgba(0, 0, 0, 0.66);
+}
+
 .cards-project-layout {
   min-height: calc(100vh - 60px);
   display: grid;
