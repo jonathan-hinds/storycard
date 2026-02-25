@@ -697,6 +697,7 @@ export class CardGameClient {
   }
 
   async waitForSpellRoll({ card, rollType, dieSides }) {
+    this.clearSpellRollerPanel();
     const panel = this.createSpellRollerPanel(card);
     if (!panel) return null;
 
@@ -749,6 +750,7 @@ export class CardGameClient {
   }
 
   async waitForRemoteSpellRoll({ spellResolution, card, dieSides }) {
+    this.clearSpellRollerPanel();
     const panel = this.createSpellRollerPanel(card);
     if (!panel) return null;
 
@@ -815,6 +817,7 @@ export class CardGameClient {
   clearSpellRollerPanel() {
     const active = this.state.activeSpellRoller;
     if (!active) return;
+    active.roller?.destroy?.();
     active.panel?.remove();
     if (this.state.spellRollerLayer) this.state.spellRollerLayer.dataset.active = 'false';
     this.state.activeSpellRoller = null;
