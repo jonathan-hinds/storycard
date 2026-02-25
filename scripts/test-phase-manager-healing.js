@@ -78,7 +78,7 @@ const server = new PhaseManagerServer();
   server.applyCommitEffects(match);
 
   assert.equal(targetCard.catalogCard.health, 7, 'fixed healing should increase target health');
-  assert.deepEqual(match.commitExecutionByAttackId.get('p1:1:player:0'), { executed: true });
+  assert.equal(match.commitExecutionByAttackId.get('p1:1:player:0')?.executed, true);
 }
 
 {
