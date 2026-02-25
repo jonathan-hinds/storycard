@@ -89,7 +89,7 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
 }
 
 {
-  const { server, playerId, spellId, defenderCard } = createSpellMatch({
+  const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
     targetHealth: 6,
     rollOutcome: 3,
     ability: {
@@ -103,10 +103,12 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
 
   assert.equal(result.statusCode, 200);
   assert.equal(defenderCard.catalogCard.health, 3, 'spell damage should persist on target');
+  assert.equal(match.activeSpellResolution.resolvedDamage, 3, 'completed spells should expose resolvedDamage');
+  assert.equal(match.activeSpellResolution.effectId, 'damage_enemy', 'completed spells should expose effect id');
 }
 
 {
-  const { server, playerId, spellId, opponentState } = createSpellMatch({
+  const { server, match, playerId, spellId, opponentState } = createSpellMatch({
     targetHealth: 2,
     rollOutcome: 4,
     ability: {
@@ -120,6 +122,8 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
 
   assert.equal(result.statusCode, 200);
   assert.equal(opponentState.board.length, 0, 'spell damage should remove defeated targets');
+  assert.equal(match.activeSpellResolution.resolvedDamage, 4, 'spell metadata should reflect lethal damage');
 }
+
 
 console.log('phase manager spell effects checks passed');

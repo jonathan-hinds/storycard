@@ -822,6 +822,10 @@ class PhaseManagerServer {
       dieSides: Number.isFinite(parsedDieSides) ? Math.max(2, parsedDieSides) : 6,
       rollOutcome: null,
       rollData: null,
+      effectId: 'none',
+      resolvedValue: 0,
+      resolvedDamage: 0,
+      resolvedHealing: 0,
       startedAt: Date.now(),
       completedAt: null,
     };
@@ -892,14 +896,20 @@ class PhaseManagerServer {
       ability: spellAbility,
       rollValue: active.rollOutcome,
     });
-    this.applyResolvedAbilityEffect({
+    const effectId = spellAbility?.effectId || 'none';
+    const executionResult = this.applyResolvedAbilityEffect({
       match,
       casterId: playerId,
       targetSide: active.targetSide,
       targetSlotIndex: active.targetSlotIndex,
-      effectId: spellAbility?.effectId || 'none',
+      effectId,
       resolvedValue,
     });
+
+    active.effectId = effectId;
+    active.resolvedValue = resolvedValue;
+    active.resolvedDamage = effectId === 'damage_enemy' && executionResult.executed !== false ? resolvedValue : 0;
+    active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false ? resolvedValue : 0;
 
     active.completedAt = Date.now();
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
