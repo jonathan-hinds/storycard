@@ -157,6 +157,10 @@ export class PhaseManagerClient {
         slotIndex: BOARD_SLOTS_PER_SIDE + relativeSlotIndex,
         canAttack: card.canAttack === true,
         attackCommitted: card.attackCommitted === true,
+        selectedAbilityIndex: Number.isInteger(card.selectedAbilityIndex) ? card.selectedAbilityIndex : null,
+        committedAbilityIndex: card.attackCommitted === true && Number.isInteger(card.selectedAbilityIndex)
+          ? card.selectedAbilityIndex
+          : null,
         targetSlotIndex,
         targetSide: card.targetSide || null,
         catalogCard: card.catalogCard || null,

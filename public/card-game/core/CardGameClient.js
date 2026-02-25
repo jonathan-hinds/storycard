@@ -1348,8 +1348,13 @@ export class CardGameClient {
       card.userData.isAnimating = false;
       card.userData.canAttack = cfg.canAttack === true;
       card.userData.attackCommitted = cfg.attackCommitted === true;
+      card.userData.selectedAbilityIndex = Number.isInteger(cfg.selectedAbilityIndex)
+        ? cfg.selectedAbilityIndex
+        : null;
       card.userData.committedAbilityIndex = card.userData.attackCommitted === true
-        ? (Number.isInteger(cfg.committedAbilityIndex) ? cfg.committedAbilityIndex : null)
+        ? (Number.isInteger(cfg.committedAbilityIndex)
+          ? cfg.committedAbilityIndex
+          : (Number.isInteger(cfg.selectedAbilityIndex) ? cfg.selectedAbilityIndex : null))
         : null;
       card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
       card.userData.targetSide = cfg.targetSide || null;
