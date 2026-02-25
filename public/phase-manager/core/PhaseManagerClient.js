@@ -157,8 +157,14 @@ export class PhaseManagerClient {
   }
 
   ensureUpkeepDisplay() {
-    if (!this.client?.camera) return;
+    if (!this.client?.camera || !this.client?.scene) return;
     if (this.upkeepDisplay) return;
+
+    // The upkeep panel is attached to the camera so it behaves like a HUD card.
+    // Ensure the camera is in the scene graph, otherwise camera children are not rendered.
+    if (this.client.camera.parent !== this.client.scene) {
+      this.client.scene.add(this.client.camera);
+    }
 
     const { canvas, texture } = this.createUpkeepTexture();
     const material = new THREE.MeshBasicMaterial({
