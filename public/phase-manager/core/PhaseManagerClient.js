@@ -6,10 +6,10 @@ const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
 const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
-const DEFAULT_UPKEEP_PANEL_SIZE = { width: 2.27, height: 0.87 };
-const DEFAULT_UPKEEP_POSITION = { x: 2, y: 1.5, z: -5.15 };
-const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0.26, y: 0.03 };
-const DEFAULT_UPKEEP_TEXT_SCALE = 1;
+const DEFAULT_UPKEEP_PANEL_SIZE = { width: 1.78, height: 0.91 };
+const DEFAULT_UPKEEP_POSITION = { x: 2, y: 1.5, z: -5.49 };
+const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0.27, y: 0 };
+const DEFAULT_UPKEEP_TEXT_SCALE = 0.5;
 const DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH = '/public/assets/upkeepcontainer3.png';
 const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
 
