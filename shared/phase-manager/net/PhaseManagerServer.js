@@ -250,6 +250,7 @@ class PhaseManagerServer {
       if (!playerState) return;
       playerState.board = playerState.board.map((card) => ({
         ...card,
+        retaliationBonus: 0,
         attackCommitted: false,
         targetSlotIndex: null,
         targetSide: null,
@@ -296,13 +297,14 @@ class PhaseManagerServer {
 
   applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (effectId !== 'damage_enemy' && effectId !== 'heal_target') {
+    if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus') {
       return { executed: true, reason: 'no_effect' };
     }
 
     const hasDamage = effectId === 'damage_enemy' && resolvedValue > 0;
     const hasHealing = effectId === 'heal_target' && resolvedValue > 0;
-    if (!hasDamage && !hasHealing) {
+    const hasRetaliationBonus = effectId === 'retaliation_bonus' && resolvedValue > 0;
+    if (!hasDamage && !hasHealing && !hasRetaliationBonus) {
       return { executed: true, reason: 'no_value' };
     }
     if (!Number.isInteger(targetSlotIndex)) {
@@ -327,9 +329,16 @@ class PhaseManagerServer {
       return { executed: false, reason: 'target_invalid' };
     }
 
-    const nextHealth = hasDamage
-      ? currentHealth - resolvedValue
-      : currentHealth + resolvedValue;
+    if (hasRetaliationBonus) {
+      const existingBonus = Number(defenderCard.retaliationBonus);
+      const normalizedExistingBonus = Number.isFinite(existingBonus)
+        ? Math.max(0, Math.floor(existingBonus))
+        : 0;
+      defenderCard.retaliationBonus = normalizedExistingBonus + resolvedValue;
+      return { executed: true };
+    }
+
+    const nextHealth = hasDamage ? currentHealth - resolvedValue : currentHealth + resolvedValue;
     defenderCard.catalogCard.health = nextHealth;
 
     if (nextHealth < 0) {
@@ -466,12 +475,17 @@ class PhaseManagerServer {
 
         if (isEnemyDamageAttack) {
           const defenderId = match.players.find((id) => id !== attackerId);
+          const defenderState = defenderId ? match.cardsByPlayer.get(defenderId) : null;
+          const defenderCard = defenderState?.board?.find((card) => card.slotIndex === attack.targetSlotIndex) || null;
           const defenderResolvedAttack = defenderId
             ? resolvedAttacksBySlotKey.get(`${defenderId}:${attack.targetSlotIndex}`)
             : null;
-          const retaliationDamage = defenderResolvedAttack?.effectId === 'damage_enemy'
+          const baseRetaliationDamage = defenderResolvedAttack?.effectId === 'damage_enemy'
             ? defenderResolvedAttack.resolvedValue
             : 0;
+          const bonusRetaliationDamage = Number(defenderCard?.retaliationBonus);
+          const retaliationDamage = baseRetaliationDamage
+            + (Number.isFinite(bonusRetaliationDamage) ? Math.max(0, Math.floor(bonusRetaliationDamage)) : 0);
           const defenseRoll = match.commitRollsByAttackId.get(`${attack.id}:defense`);
           const attackDefense = Number(defenseRoll?.roll?.outcome);
           Object.assign(retaliationResult, this.applyRetaliationDamage({
