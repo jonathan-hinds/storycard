@@ -7,7 +7,7 @@ const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
 const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
 const DEFAULT_UPKEEP_PANEL_SIZE = { width: 1.78, height: 0.91 };
-const DEFAULT_UPKEEP_POSITION = { x: 2, y: 1.5, z: -5.49 };
+const DEFAULT_UPKEEP_POSITION = { x: 1, y: 0, z: -5.49 };
 const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0.27, y: 0 };
 const DEFAULT_UPKEEP_TEXT_SCALE = 0.5;
 const DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH = '/public/assets/upkeepcontainer3.png';
@@ -75,8 +75,10 @@ export class PhaseManagerClient {
 
   handleWindowResize() {
     this.positionUpkeepDisplay();
+    this.syncUpkeepPositionInputs();
     window.requestAnimationFrame(() => {
       this.positionUpkeepDisplay();
+      this.syncUpkeepPositionInputs();
     });
   }
 
@@ -108,6 +110,19 @@ export class PhaseManagerClient {
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+  getUpkeepViewportSize() {
+    const rendererSize = this.client?.renderer?.getSize?.(new THREE.Vector2());
+    if (rendererSize?.x && rendererSize?.y) {
+      return { width: rendererSize.x, height: rendererSize.y };
+    }
+    const canvasWidth = Number(this.elements.canvas?.clientWidth || this.elements.canvas?.width || 0);
+    const canvasHeight = Number(this.elements.canvas?.clientHeight || this.elements.canvas?.height || 0);
+    return {
+      width: canvasWidth > 0 ? canvasWidth : 1,
+      height: canvasHeight > 0 ? canvasHeight : 1,
+    };
+  }
+
   syncUpkeepPositionInputs() {
     const {
       upkeepXInput,
@@ -127,8 +142,9 @@ export class PhaseManagerClient {
       upkeepTextYValueEl,
       upkeepTextSizeValueEl,
     } = this.elements;
-    const xValue = this.upkeepPosition.x.toFixed(2);
-    const yValue = this.upkeepPosition.y.toFixed(2);
+    const viewport = this.getUpkeepViewportSize();
+    const xValue = this.upkeepPosition.x.toFixed(3);
+    const yValue = this.upkeepPosition.y.toFixed(3);
     const zValue = this.upkeepPosition.z.toFixed(2);
     const widthValue = this.upkeepPanelSize.width.toFixed(2);
     const heightValue = this.upkeepPanelSize.height.toFixed(2);
@@ -143,8 +159,8 @@ export class PhaseManagerClient {
     if (upkeepTextXInput) upkeepTextXInput.value = textXValue;
     if (upkeepTextYInput) upkeepTextYInput.value = textYValue;
     if (upkeepTextSizeInput) upkeepTextSizeInput.value = textSizeValue;
-    if (upkeepXValueEl) upkeepXValueEl.textContent = xValue;
-    if (upkeepYValueEl) upkeepYValueEl.textContent = yValue;
+    if (upkeepXValueEl) upkeepXValueEl.textContent = `${xValue} (${Math.round(this.upkeepPosition.x * viewport.width)}px)`;
+    if (upkeepYValueEl) upkeepYValueEl.textContent = `${yValue} (${Math.round(this.upkeepPosition.y * viewport.height)}px)`;
     if (upkeepZValueEl) upkeepZValueEl.textContent = zValue;
     if (upkeepWidthValueEl) upkeepWidthValueEl.textContent = widthValue;
     if (upkeepHeightValueEl) upkeepHeightValueEl.textContent = heightValue;
@@ -156,8 +172,8 @@ export class PhaseManagerClient {
   handleUpkeepPositionInput() {
     const { upkeepXInput, upkeepYInput, upkeepZInput } = this.elements;
     this.upkeepPosition = {
-      x: this.parseUpkeepPositionValue(upkeepXInput?.value, this.upkeepPosition.x),
-      y: this.parseUpkeepPositionValue(upkeepYInput?.value, this.upkeepPosition.y),
+      x: THREE.MathUtils.clamp(this.parseUpkeepPositionValue(upkeepXInput?.value, this.upkeepPosition.x), 0, 1),
+      y: THREE.MathUtils.clamp(this.parseUpkeepPositionValue(upkeepYInput?.value, this.upkeepPosition.y), 0, 1),
       z: this.parseUpkeepPositionValue(upkeepZInput?.value, this.upkeepPosition.z),
     };
     this.syncUpkeepPositionInputs();
@@ -408,19 +424,23 @@ export class PhaseManagerClient {
     const depth = Math.max(Math.abs(this.upkeepPosition.z), 0.001);
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
-    const normalizedX = this.upkeepPosition.x / referenceFrustum.halfWidth;
-    const normalizedY = this.upkeepPosition.y / referenceFrustum.halfHeight;
-    const x = normalizedX * currentFrustum.halfWidth;
-    const y = normalizedY * currentFrustum.halfHeight;
     const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
     const widthScale = this.upkeepPanelSize.width / DEFAULT_UPKEEP_PANEL_SIZE.width;
     const heightScale = this.upkeepPanelSize.height / DEFAULT_UPKEEP_PANEL_SIZE.height;
+    const panelWorldWidth = DEFAULT_UPKEEP_PANEL_SIZE.width * scaleFactor * widthScale;
+    const panelWorldHeight = DEFAULT_UPKEEP_PANEL_SIZE.height * scaleFactor * heightScale;
+    const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
+    const panelHalfNormalizedY = panelWorldHeight / Math.max(currentFrustum.halfHeight * 2, 0.001);
+    const targetNormalizedX = THREE.MathUtils.clamp((this.upkeepPosition.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
+    const targetNormalizedY = THREE.MathUtils.clamp(1 - (this.upkeepPosition.y * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
+    const x = targetNormalizedX * currentFrustum.halfWidth;
+    const y = targetNormalizedY * currentFrustum.halfHeight;
     panelMesh.position.set(x, y, this.upkeepPosition.z);
     panelMesh.scale.set(scaleFactor * widthScale, scaleFactor * heightScale, 1);
     panelMesh.rotation.set(0, 0, 0);
 
-    const textOffsetX = this.upkeepPanelSize.width * this.upkeepTextPosition.x * scaleFactor;
-    const textOffsetY = this.upkeepPanelSize.height * this.upkeepTextPosition.y * scaleFactor;
+    const textOffsetX = panelWorldWidth * this.upkeepTextPosition.x;
+    const textOffsetY = panelWorldHeight * this.upkeepTextPosition.y;
     textMesh.position.set(x + textOffsetX, y + textOffsetY, this.upkeepPosition.z + 0.001);
     textMesh.scale.set(scaleFactor, scaleFactor, 1);
     textMesh.rotation.set(0, 0, 0);
