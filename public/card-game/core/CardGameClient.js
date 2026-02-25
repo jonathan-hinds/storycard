@@ -809,6 +809,10 @@ export class CardGameClient {
 
   queueSpellAttackAnimation(card, targetCard) {
     if (!card || !targetCard) return;
+    const resolvedDamage = Number.isFinite(targetCard?.userData?.pendingSpellDamage)
+      ? targetCard.userData.pendingSpellDamage
+      : null;
+    if (targetCard?.userData) targetCard.userData.pendingSpellDamage = null;
     const startAtMs = performance.now();
     this.combatAnimations.push({
       attackerCard: card,
@@ -817,10 +821,21 @@ export class CardGameClient {
       defenderPosition: targetCard.position.clone(),
       startAtMs,
       durationMs: 760,
-      resolvedDamage: null,
+      resolvedDamage,
       didHit: false,
       initialized: true,
     });
+  }
+
+  resolveSpellAbilityValue(ability, rollOutcome) {
+    if (!ability || ability.valueSourceType === 'none') return 0;
+    if (ability.valueSourceType === 'fixed') {
+      const fixedValue = Number(ability.valueSourceFixed);
+      return Number.isFinite(fixedValue) ? Math.max(0, Math.floor(fixedValue)) : 0;
+    }
+
+    const parsedOutcome = Number(rollOutcome);
+    return Number.isFinite(parsedOutcome) ? Math.max(0, Math.floor(parsedOutcome)) : 0;
   }
 
   async runSpellResolution({ card, targetCard, selectedAbility }) {
@@ -921,6 +936,8 @@ export class CardGameClient {
     }
 
     if (targetCard) {
+      const resolvedValue = this.resolveSpellAbilityValue(selectedAbility, outcome);
+      targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' ? resolvedValue : null;
       this.queueSpellAttackAnimation(card, targetCard);
       await new Promise((resolve) => window.setTimeout(resolve, 760));
     }
@@ -1027,6 +1044,10 @@ export class CardGameClient {
       }
 
       if (targetCard) {
+        const resolvedDamage = Number.isFinite(liveSpellResolution?.resolvedDamage)
+          ? Math.max(0, Math.floor(Number(liveSpellResolution.resolvedDamage)))
+          : null;
+        targetCard.userData.pendingSpellDamage = resolvedDamage;
         this.queueSpellAttackAnimation(card, targetCard);
         await new Promise((resolve) => window.setTimeout(resolve, 760));
       }
