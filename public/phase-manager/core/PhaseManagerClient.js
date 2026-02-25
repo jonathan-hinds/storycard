@@ -6,8 +6,9 @@ const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
 const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
-const UPKEEP_PLANE_SIZE = { width: 1.65, height: 0.38 };
+const DEFAULT_UPKEEP_PANEL_SIZE = { width: 1.65, height: 0.38 };
 const DEFAULT_UPKEEP_POSITION = { x: -0.95, y: 0.82, z: -2.2 };
+const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0, y: 0 };
 const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
 
 function getFrustumHalfExtents(fovDegrees, aspect, depth) {
@@ -49,6 +50,12 @@ export class PhaseManagerClient {
     this.cardRollerOverlay = null;
     this.upkeepDisplay = null;
     this.upkeepPosition = { ...DEFAULT_UPKEEP_POSITION };
+    this.upkeepPanelSize = { ...DEFAULT_UPKEEP_PANEL_SIZE };
+    this.upkeepTextPosition = { ...DEFAULT_UPKEEP_TEXT_POSITION };
+    this.upkeepBackgroundAssetPath = '';
+    this.upkeepBackgroundImage = null;
+    this.upkeepBackgroundCache = new Map();
+    this.availableUpkeepAssets = [];
     this.playedRemoteSpellResolutionIds = new Set();
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
@@ -57,6 +64,8 @@ export class PhaseManagerClient {
     this.readyUp = this.readyUp.bind(this);
     this.resetMatch = this.resetMatch.bind(this);
     this.handleUpkeepPositionInput = this.handleUpkeepPositionInput.bind(this);
+    this.handleUpkeepPanelStyleInput = this.handleUpkeepPanelStyleInput.bind(this);
+    this.handleUpkeepBackgroundChange = this.handleUpkeepBackgroundChange.bind(this);
     this.exportUpkeepPosition = this.exportUpkeepPosition.bind(this);
     this.handleWindowResize = this.handleWindowResize.bind(this);
   }
@@ -94,16 +103,43 @@ export class PhaseManagerClient {
   }
 
   syncUpkeepPositionInputs() {
-    const { upkeepXInput, upkeepYInput, upkeepZInput, upkeepXValueEl, upkeepYValueEl, upkeepZValueEl } = this.elements;
+    const {
+      upkeepXInput,
+      upkeepYInput,
+      upkeepZInput,
+      upkeepWidthInput,
+      upkeepHeightInput,
+      upkeepTextXInput,
+      upkeepTextYInput,
+      upkeepXValueEl,
+      upkeepYValueEl,
+      upkeepZValueEl,
+      upkeepWidthValueEl,
+      upkeepHeightValueEl,
+      upkeepTextXValueEl,
+      upkeepTextYValueEl,
+    } = this.elements;
     const xValue = this.upkeepPosition.x.toFixed(2);
     const yValue = this.upkeepPosition.y.toFixed(2);
     const zValue = this.upkeepPosition.z.toFixed(2);
+    const widthValue = this.upkeepPanelSize.width.toFixed(2);
+    const heightValue = this.upkeepPanelSize.height.toFixed(2);
+    const textXValue = this.upkeepTextPosition.x.toFixed(2);
+    const textYValue = this.upkeepTextPosition.y.toFixed(2);
     if (upkeepXInput) upkeepXInput.value = xValue;
     if (upkeepYInput) upkeepYInput.value = yValue;
     if (upkeepZInput) upkeepZInput.value = zValue;
+    if (upkeepWidthInput) upkeepWidthInput.value = widthValue;
+    if (upkeepHeightInput) upkeepHeightInput.value = heightValue;
+    if (upkeepTextXInput) upkeepTextXInput.value = textXValue;
+    if (upkeepTextYInput) upkeepTextYInput.value = textYValue;
     if (upkeepXValueEl) upkeepXValueEl.textContent = xValue;
     if (upkeepYValueEl) upkeepYValueEl.textContent = yValue;
     if (upkeepZValueEl) upkeepZValueEl.textContent = zValue;
+    if (upkeepWidthValueEl) upkeepWidthValueEl.textContent = widthValue;
+    if (upkeepHeightValueEl) upkeepHeightValueEl.textContent = heightValue;
+    if (upkeepTextXValueEl) upkeepTextXValueEl.textContent = textXValue;
+    if (upkeepTextYValueEl) upkeepTextYValueEl.textContent = textYValue;
   }
 
   handleUpkeepPositionInput() {
@@ -113,12 +149,88 @@ export class PhaseManagerClient {
       y: this.parseUpkeepPositionValue(upkeepYInput?.value, this.upkeepPosition.y),
       z: this.parseUpkeepPositionValue(upkeepZInput?.value, this.upkeepPosition.z),
     };
+    this.syncUpkeepPositionInputs();
     this.positionUpkeepDisplay();
+  }
+
+  handleUpkeepPanelStyleInput() {
+    const { upkeepWidthInput, upkeepHeightInput, upkeepTextXInput, upkeepTextYInput } = this.elements;
+    this.upkeepPanelSize = {
+      width: this.parseUpkeepPositionValue(upkeepWidthInput?.value, this.upkeepPanelSize.width),
+      height: this.parseUpkeepPositionValue(upkeepHeightInput?.value, this.upkeepPanelSize.height),
+    };
+    this.upkeepTextPosition = {
+      x: this.parseUpkeepPositionValue(upkeepTextXInput?.value, this.upkeepTextPosition.x),
+      y: this.parseUpkeepPositionValue(upkeepTextYInput?.value, this.upkeepTextPosition.y),
+    };
+    this.syncUpkeepPositionInputs();
+    this.positionUpkeepDisplay();
+    if (this.upkeepDisplay?.value != null) {
+      this.drawUpkeepDisplay(this.upkeepDisplay.value);
+    }
+  }
+
+  async fetchUpkeepAssets() {
+    try {
+      const payload = await this.getJson('/api/assets');
+      this.availableUpkeepAssets = Array.isArray(payload?.assets) ? payload.assets : [];
+    } catch (error) {
+      this.availableUpkeepAssets = [];
+    }
+    this.syncUpkeepBackgroundOptions();
+  }
+
+  syncUpkeepBackgroundOptions() {
+    const { upkeepBackgroundSelect } = this.elements;
+    if (!upkeepBackgroundSelect) return;
+
+    const optionMarkup = ['<option value="">Default generated panel</option>']
+      .concat(this.availableUpkeepAssets.map((asset) => `<option value="${asset.path}">${asset.name}</option>`))
+      .join('');
+    upkeepBackgroundSelect.innerHTML = optionMarkup;
+    upkeepBackgroundSelect.value = this.upkeepBackgroundAssetPath;
+  }
+
+  async loadUpkeepBackground(path) {
+    if (!path) {
+      this.upkeepBackgroundImage = null;
+      return;
+    }
+    if (this.upkeepBackgroundCache.has(path)) {
+      this.upkeepBackgroundImage = this.upkeepBackgroundCache.get(path);
+      return;
+    }
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load upkeep background asset'));
+      img.src = path;
+    });
+    this.upkeepBackgroundCache.set(path, image);
+    this.upkeepBackgroundImage = image;
+  }
+
+  async handleUpkeepBackgroundChange() {
+    const selectedPath = this.elements.upkeepBackgroundSelect?.value || '';
+    this.upkeepBackgroundAssetPath = selectedPath;
+    try {
+      await this.loadUpkeepBackground(selectedPath);
+    } catch (error) {
+      this.upkeepBackgroundImage = null;
+    }
+    if (this.upkeepDisplay?.value != null) {
+      this.drawUpkeepDisplay(this.upkeepDisplay.value);
+    }
   }
 
   exportUpkeepPosition() {
     const { upkeepExportOutputEl } = this.elements;
-    const serialized = JSON.stringify(this.upkeepPosition);
+    const serialized = JSON.stringify({
+      position: this.upkeepPosition,
+      panelSize: this.upkeepPanelSize,
+      textPosition: this.upkeepTextPosition,
+      backgroundAssetPath: this.upkeepBackgroundAssetPath,
+    });
     if (upkeepExportOutputEl) upkeepExportOutputEl.textContent = serialized;
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(serialized).catch(() => {});
@@ -126,23 +238,56 @@ export class PhaseManagerClient {
   }
 
   start() {
-    const { matchmakingBtn, readyBtn, resetBtn, upkeepXInput, upkeepYInput, upkeepZInput, upkeepExportBtn } = this.elements;
+    const {
+      matchmakingBtn,
+      readyBtn,
+      resetBtn,
+      upkeepXInput,
+      upkeepYInput,
+      upkeepZInput,
+      upkeepWidthInput,
+      upkeepHeightInput,
+      upkeepTextXInput,
+      upkeepTextYInput,
+      upkeepBackgroundSelect,
+      upkeepExportBtn,
+    } = this.elements;
     matchmakingBtn.addEventListener('click', this.beginMatchmaking);
     readyBtn.addEventListener('click', this.readyUp);
     resetBtn.addEventListener('click', this.resetMatch);
     upkeepXInput?.addEventListener('input', this.handleUpkeepPositionInput);
     upkeepYInput?.addEventListener('input', this.handleUpkeepPositionInput);
     upkeepZInput?.addEventListener('input', this.handleUpkeepPositionInput);
+    upkeepWidthInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepHeightInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepTextXInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepTextYInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepBackgroundSelect?.addEventListener('change', this.handleUpkeepBackgroundChange);
     upkeepExportBtn?.addEventListener('click', this.exportUpkeepPosition);
     window.addEventListener('resize', this.handleWindowResize);
     this.syncUpkeepPositionInputs();
+    this.syncUpkeepBackgroundOptions();
+    this.fetchUpkeepAssets();
     this.renderMatch();
     this.matchmakingPollTimer = window.setInterval(() => this.pollMatchmakingStatus(), this.options.pollIntervalMs);
     this.pollMatchmakingStatus();
   }
 
   destroy() {
-    const { matchmakingBtn, readyBtn, resetBtn, upkeepXInput, upkeepYInput, upkeepZInput, upkeepExportBtn } = this.elements;
+    const {
+      matchmakingBtn,
+      readyBtn,
+      resetBtn,
+      upkeepXInput,
+      upkeepYInput,
+      upkeepZInput,
+      upkeepWidthInput,
+      upkeepHeightInput,
+      upkeepTextXInput,
+      upkeepTextYInput,
+      upkeepBackgroundSelect,
+      upkeepExportBtn,
+    } = this.elements;
     this.stopMatchmakingPolling();
     matchmakingBtn.removeEventListener('click', this.beginMatchmaking);
     readyBtn.removeEventListener('click', this.readyUp);
@@ -150,6 +295,11 @@ export class PhaseManagerClient {
     upkeepXInput?.removeEventListener('input', this.handleUpkeepPositionInput);
     upkeepYInput?.removeEventListener('input', this.handleUpkeepPositionInput);
     upkeepZInput?.removeEventListener('input', this.handleUpkeepPositionInput);
+    upkeepWidthInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepHeightInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepTextXInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepTextYInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
+    upkeepBackgroundSelect?.removeEventListener('change', this.handleUpkeepBackgroundChange);
     upkeepExportBtn?.removeEventListener('click', this.exportUpkeepPosition);
     window.removeEventListener('resize', this.handleWindowResize);
     if (this.client) {
@@ -190,7 +340,7 @@ export class PhaseManagerClient {
       depthTest: false,
       side: THREE.DoubleSide,
     });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(UPKEEP_PLANE_SIZE.width, UPKEEP_PLANE_SIZE.height), material);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_UPKEEP_PANEL_SIZE.width, DEFAULT_UPKEEP_PANEL_SIZE.height), material);
     mesh.renderOrder = 1000;
     this.client.camera.add(mesh);
 
@@ -225,7 +375,9 @@ export class PhaseManagerClient {
     const y = normalizedY * currentFrustum.halfHeight;
     mesh.position.set(x, y, this.upkeepPosition.z);
     const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
-    mesh.scale.set(scaleFactor, scaleFactor, 1);
+    const widthScale = this.upkeepPanelSize.width / DEFAULT_UPKEEP_PANEL_SIZE.width;
+    const heightScale = this.upkeepPanelSize.height / DEFAULT_UPKEEP_PANEL_SIZE.height;
+    mesh.scale.set(scaleFactor * widthScale, scaleFactor * heightScale, 1);
     mesh.rotation.set(0, 0, 0);
   }
 
@@ -237,20 +389,24 @@ export class PhaseManagerClient {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const panelPadding = 14;
-    const panelRadius = 24;
-    const panelX = panelPadding;
-    const panelY = panelPadding;
-    const panelWidth = canvas.width - (panelPadding * 2);
-    const panelHeight = canvas.height - (panelPadding * 2);
+    if (this.upkeepBackgroundImage) {
+      ctx.drawImage(this.upkeepBackgroundImage, 0, 0, canvas.width, canvas.height);
+    } else {
+      const panelPadding = 14;
+      const panelRadius = 24;
+      const panelX = panelPadding;
+      const panelY = panelPadding;
+      const panelWidth = canvas.width - (panelPadding * 2);
+      const panelHeight = canvas.height - (panelPadding * 2);
 
-    ctx.beginPath();
-    ctx.roundRect(panelX, panelY, panelWidth, panelHeight, panelRadius);
-    ctx.fillStyle = 'rgba(8, 11, 18, 0.72)';
-    ctx.fill();
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = 'rgba(190, 210, 255, 0.55)';
-    ctx.stroke();
+      ctx.beginPath();
+      ctx.roundRect(panelX, panelY, panelWidth, panelHeight, panelRadius);
+      ctx.fillStyle = 'rgba(8, 11, 18, 0.72)';
+      ctx.fill();
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(190, 210, 255, 0.55)';
+      ctx.stroke();
+    }
 
     ctx.font = '900 126px Arial, sans-serif';
     ctx.textAlign = 'center';
@@ -260,9 +416,9 @@ export class PhaseManagerClient {
     ctx.strokeStyle = '#000000';
     ctx.fillStyle = '#ffffff';
 
-    const text = `Upkeep ${upkeepValue}`;
-    const x = canvas.width / 2;
-    const y = canvas.height / 2;
+    const text = `${upkeepValue}`;
+    const x = canvas.width * (0.5 + this.upkeepTextPosition.x);
+    const y = canvas.height * (0.5 + this.upkeepTextPosition.y);
     ctx.strokeText(text, x, y);
     ctx.fillText(text, x, y);
 

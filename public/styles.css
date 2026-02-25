@@ -348,6 +348,19 @@ button {
   word-break: break-word;
 }
 
+.phase-manager-upkeep-field-row {
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+
+.phase-manager-upkeep-field-row select {
+  width: 100%;
+  min-width: 0;
+}
+
 .phase-manager-stage-wrap {
   position: relative;
 }

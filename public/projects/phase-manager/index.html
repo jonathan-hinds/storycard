@@ -64,8 +64,8 @@
         </div>
 
         <div class="card phase-manager-upkeep-controls">
-          <h2>Upkeep Display Position</h2>
-          <p class="phase-manager-upkeep-note">Use sliders to move the in-canvas upkeep banner. Defaults keep it visible in the top-left of the camera view.</p>
+          <h2>Upkeep Display Controls</h2>
+          <p class="phase-manager-upkeep-note">Adjust banner position, size, text placement, and background image. Export after tweaking to share the exact config.</p>
 
           <div class="phase-manager-upkeep-slider-row">
             <label for="phase-manager-upkeep-x">X</label>
@@ -85,8 +85,39 @@
             <output id="phase-manager-upkeep-z-value" for="phase-manager-upkeep-z">-2.20</output>
           </div>
 
-          <button id="phase-manager-upkeep-export" type="button" class="secondary-action">Export Upkeep Position</button>
-          <output id="phase-manager-upkeep-export-output" class="debug-pill" aria-live="polite">Upkeep position export will appear here.</output>
+          <div class="phase-manager-upkeep-slider-row">
+            <label for="phase-manager-upkeep-width">W</label>
+            <input id="phase-manager-upkeep-width" type="range" min="0.60" max="3.00" step="0.01" value="1.65" />
+            <output id="phase-manager-upkeep-width-value" for="phase-manager-upkeep-width">1.65</output>
+          </div>
+
+          <div class="phase-manager-upkeep-slider-row">
+            <label for="phase-manager-upkeep-height">H</label>
+            <input id="phase-manager-upkeep-height" type="range" min="0.20" max="1.20" step="0.01" value="0.38" />
+            <output id="phase-manager-upkeep-height-value" for="phase-manager-upkeep-height">0.38</output>
+          </div>
+
+          <div class="phase-manager-upkeep-slider-row">
+            <label for="phase-manager-upkeep-text-x">TX</label>
+            <input id="phase-manager-upkeep-text-x" type="range" min="-0.50" max="0.50" step="0.01" value="0.00" />
+            <output id="phase-manager-upkeep-text-x-value" for="phase-manager-upkeep-text-x">0.00</output>
+          </div>
+
+          <div class="phase-manager-upkeep-slider-row">
+            <label for="phase-manager-upkeep-text-y">TY</label>
+            <input id="phase-manager-upkeep-text-y" type="range" min="-0.50" max="0.50" step="0.01" value="0.00" />
+            <output id="phase-manager-upkeep-text-y-value" for="phase-manager-upkeep-text-y">0.00</output>
+          </div>
+
+          <div class="phase-manager-upkeep-field-row">
+            <label for="phase-manager-upkeep-background">Background</label>
+            <select id="phase-manager-upkeep-background">
+              <option value="">Default generated panel</option>
+            </select>
+          </div>
+
+          <button id="phase-manager-upkeep-export" type="button" class="secondary-action">Export Upkeep Config</button>
+          <output id="phase-manager-upkeep-export-output" class="debug-pill" aria-live="polite">Upkeep config export will appear here.</output>
         </div>
 
       </section>
