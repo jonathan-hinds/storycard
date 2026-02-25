@@ -33,6 +33,7 @@ export class PhaseManagerClient {
     this.commitSequencePromise = null;
     this.activeCommitSequenceKey = null;
     this.cardRollerOverlay = null;
+    this.playedRemoteSpellResolutionIds = new Set();
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
 
@@ -315,12 +316,15 @@ export class PhaseManagerClient {
 
   triggerRemoteSpellPlayback() {
     const activeSpell = this.getActiveSpellResolution();
-    const isOpponentCasting = activeSpell
-      && activeSpell.completedAt == null
+    const isUnplayedOpponentSpell = activeSpell
       && activeSpell.casterSide === OPPONENT_SIDE
+      && !this.playedRemoteSpellResolutionIds.has(activeSpell.id);
+    const isOpponentCasting = isUnplayedOpponentSpell
       && this.client?.state?.activeSpellResolutionId !== activeSpell.id;
     if (isOpponentCasting && typeof this.client?.playRemoteSpellResolution === 'function') {
-      this.client.playRemoteSpellResolution(activeSpell).catch((error) => {
+      this.client.playRemoteSpellResolution(activeSpell).then(() => {
+        this.playedRemoteSpellResolutionIds.add(activeSpell.id);
+      }).catch((error) => {
         this.elements.statusEl.textContent = `Spell sync error: ${error.message}`;
       });
     }
@@ -625,6 +629,7 @@ export class PhaseManagerClient {
     this.lastAnimatedTurnKey = null;
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
+    this.playedRemoteSpellResolutionIds.clear();
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -662,13 +667,18 @@ export class PhaseManagerClient {
 
     const currentActiveSpell = this.match?.meta?.activeSpellResolution;
     const nextActiveSpell = nextMatch?.meta?.activeSpellResolution;
+    const awaitingRemoteSpellPlayback = Boolean(
+      nextActiveSpell
+      && nextActiveSpell.casterSide === OPPONENT_SIDE
+      && !this.playedRemoteSpellResolutionIds.has(nextActiveSpell.id),
+    );
     const spellResolutionInProgress = (currentActiveSpell && currentActiveSpell.completedAt == null)
       || (nextActiveSpell && nextActiveSpell.completedAt == null);
     const isSameDecisionTurn = this.match.id === nextMatch.id
       && this.match.turnNumber === nextMatch.turnNumber
       && this.match.phase === 1
       && nextMatch.phase === 1;
-    if (isSameDecisionTurn && spellResolutionInProgress) {
+    if (isSameDecisionTurn && (spellResolutionInProgress || awaitingRemoteSpellPlayback)) {
       return false;
     }
 
