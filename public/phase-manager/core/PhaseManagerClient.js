@@ -210,11 +210,52 @@ export class PhaseManagerClient {
     return { hand, board, discard, attacks };
   }
 
+  getActiveSpellResolution() {
+    return this.match?.meta?.activeSpellResolution || null;
+  }
+
+  async requestSpellResolutionStart({ card, targetCard, selectedAbility, rollType, dieSides }) {
+    const targetSlotIndex = Number.isInteger(targetCard?.userData?.slotIndex)
+      ? (targetCard.userData.owner === PLAYER_SIDE ? targetCard.userData.slotIndex - BOARD_SLOTS_PER_SIDE : targetCard.userData.slotIndex)
+      : null;
+    const targetSide = targetCard?.userData?.owner || null;
+    const status = await this.postJson('/api/phase-manager/match/spell/start', {
+      playerId: this.playerId,
+      cardId: card?.userData?.cardId,
+      selectedAbilityIndex: Number.isInteger(card?.userData?.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0,
+      targetSlotIndex,
+      targetSide,
+      rollType,
+      dieSides,
+    });
+    this.match = status.matchState || this.match;
+    return this.match?.meta?.activeSpellResolution || null;
+  }
+
+  async submitSpellRoll({ spellId, rollOutcome }) {
+    const status = await this.postJson('/api/phase-manager/match/spell/roll', {
+      playerId: this.playerId,
+      spellId,
+      rollOutcome,
+    });
+    this.match = status.matchState || this.match;
+  }
+
+  async completeSpellResolution({ spellId }) {
+    const status = await this.postJson('/api/phase-manager/match/spell/complete', {
+      playerId: this.playerId,
+      spellId,
+    });
+    this.match = status.matchState || this.match;
+  }
+
   setReadyLockState() {
     const { readyBtn } = this.elements;
     const isDecisionPhase = Boolean(this.match) && this.match.phase === 1;
     const playerIsReady = Boolean(this.match?.youAreReady);
-    const canInteract = isDecisionPhase && !playerIsReady;
+    const activeSpell = this.getActiveSpellResolution();
+    const spellLocked = Boolean(activeSpell && activeSpell.completedAt == null);
+    const canInteract = isDecisionPhase && !playerIsReady && !spellLocked;
 
     readyBtn.disabled = !canInteract;
     if (!this.client) return;
@@ -272,6 +313,19 @@ export class PhaseManagerClient {
     queueSummaryEl.textContent = `Queue: ${status.queueCount ?? 0} waiting`;
   }
 
+  triggerRemoteSpellPlayback() {
+    const activeSpell = this.getActiveSpellResolution();
+    const isOpponentCasting = activeSpell
+      && activeSpell.completedAt == null
+      && activeSpell.casterSide === OPPONENT_SIDE
+      && this.client?.state?.activeSpellResolutionId !== activeSpell.id;
+    if (isOpponentCasting && typeof this.client?.playRemoteSpellResolution === 'function') {
+      this.client.playRemoteSpellResolution(activeSpell).catch((error) => {
+        this.elements.statusEl.textContent = `Spell sync error: ${error.message}`;
+      });
+    }
+  }
+
   renderMatch() {
     const { canvas, statusEl } = this.elements;
     if (!this.match) {
@@ -296,6 +350,10 @@ export class PhaseManagerClient {
         template,
         options: {
           onCardStateCommitted: () => this.syncMatchStateAfterCardCommit(),
+          onSpellResolutionRequested: (payload) => this.requestSpellResolutionStart(payload),
+          onSpellRollResolved: ({ spellId, rollOutcome }) => this.submitSpellRoll({ spellId, rollOutcome }),
+          onSpellResolutionFinished: ({ spellId }) => this.completeSpellResolution({ spellId }),
+          getSpellResolutionSnapshot: () => this.getActiveSpellResolution(),
           previewTuning: this.previewTuning,
           cardAnimationHooks: [
             createDeckToHandDealHook({
@@ -349,6 +407,8 @@ export class PhaseManagerClient {
           }
         });
     }
+
+    this.triggerRemoteSpellPlayback();
 
     statusEl.textContent = this.match.phase === 1
       ? (this.match.youAreReady
@@ -550,10 +610,12 @@ export class PhaseManagerClient {
         } else {
           this.setReadyLockState();
           this.updateSummaryPanels();
+          this.triggerRemoteSpellPlayback();
         }
       } else {
         this.setReadyLockState();
         this.updateSummaryPanels();
+        this.triggerRemoteSpellPlayback();
       }
       return;
     }
@@ -595,6 +657,18 @@ export class PhaseManagerClient {
       && nextMatch.phase === 2;
 
     if (isSameCommitTurn) {
+      return false;
+    }
+
+    const currentActiveSpell = this.match?.meta?.activeSpellResolution;
+    const nextActiveSpell = nextMatch?.meta?.activeSpellResolution;
+    const spellResolutionInProgress = (currentActiveSpell && currentActiveSpell.completedAt == null)
+      || (nextActiveSpell && nextActiveSpell.completedAt == null);
+    const isSameDecisionTurn = this.match.id === nextMatch.id
+      && this.match.turnNumber === nextMatch.turnNumber
+      && this.match.phase === 1
+      && nextMatch.phase === 1;
+    if (isSameDecisionTurn && spellResolutionInProgress) {
       return false;
     }
 
