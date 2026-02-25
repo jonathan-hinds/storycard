@@ -369,6 +369,32 @@ button {
   background: transparent;
 }
 
+.damage-number-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.damage-number-popup {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  font-size: clamp(1.35rem, 3.2vw, 2.35rem);
+  line-height: 1;
+  font-weight: 900;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  color: #ffffff;
+  text-shadow:
+    0 2px 0 #000000,
+    0 -2px 0 #000000,
+    2px 0 0 #000000,
+    -2px 0 0 #000000,
+    0 0 8px rgba(0, 0, 0, 0.66);
+  will-change: transform, opacity, left, top;
+}
+
 .cards-project-layout {
   min-height: calc(100vh - 60px);
   display: grid;
@@ -633,4 +659,3 @@ button {
     border-top: 1px solid #252b3a;
   }
 }
-

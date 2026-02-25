@@ -41,6 +41,8 @@ const CARD_OUTLINE_HIGHLIGHT_COLOR = 0xffffff;
 const SPELL_CENTER_POSITION = Object.freeze(new THREE.Vector3(1.05, 0.32, 0.2));
 const SPELL_ATTACK_DELAY_AFTER_IMPACT_MS = 2000;
 const SPELL_DEATH_SETTLE_WAIT_MS = 700;
+const DAMAGE_POPUP_DURATION_MS = 620;
+const DAMAGE_POPUP_DRIFT_DISTANCE = 86;
 const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 
@@ -84,6 +86,7 @@ export class CardGameClient {
     this.combatAnimations = [];
     this.combatShakeEffects = [];
     this.deathAnimations = [];
+    this.damagePopups = [];
     this.pointerNdc = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -129,6 +132,7 @@ export class CardGameClient {
     };
 
     this.#buildBaseScene();
+    this.#setupDamagePopupLayer();
     this.setPreviewTuning(this.previewTuning);
     this.picker = new CardPicker({ camera: this.camera, domElement: canvas, cards: this.cards });
 
@@ -294,6 +298,79 @@ export class CardGameClient {
       card.scale.setScalar(1);
       card.userData.isAttackHover = false;
     }
+  }
+
+  #setupDamagePopupLayer() {
+    if (!this.canvasContainer) return;
+    const computedStyle = window.getComputedStyle(this.canvasContainer);
+    if (!computedStyle || computedStyle.position === 'static') {
+      this.canvasContainer.style.position = 'relative';
+    }
+
+    const layer = document.createElement('div');
+    layer.className = 'damage-number-overlay-layer';
+    this.canvasContainer.append(layer);
+    this.damagePopupLayer = layer;
+  }
+
+  getScreenPositionForWorldPoint(worldPoint) {
+    if (!worldPoint) return null;
+    const projected = worldPoint.clone().project(this.camera);
+    if (projected.z < -1 || projected.z > 1) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = ((projected.x + 1) / 2) * rect.width;
+    const y = ((-projected.y + 1) / 2) * rect.height;
+    return { x, y };
+  }
+
+  spawnDamagePopup({ amount, worldPoint, time = performance.now() }) {
+    if (!this.damagePopupLayer || !Number.isFinite(amount) || amount <= 0 || !worldPoint) return;
+    const start = this.getScreenPositionForWorldPoint(worldPoint);
+    if (!start) return;
+
+    const driftAngle = Math.random() * Math.PI * 2;
+    const driftDistance = DAMAGE_POPUP_DRIFT_DISTANCE * (0.65 + Math.random() * 0.45);
+    const driftX = Math.cos(driftAngle) * driftDistance;
+    const driftY = Math.sin(driftAngle) * driftDistance - 36;
+
+    const node = document.createElement('div');
+    node.className = 'damage-number-popup';
+    node.textContent = `-${Math.round(amount)}`;
+    node.style.left = `${start.x}px`;
+    node.style.top = `${start.y}px`;
+    this.damagePopupLayer.append(node);
+
+    this.damagePopups.push({
+      node,
+      startAtMs: time,
+      durationMs: DAMAGE_POPUP_DURATION_MS,
+      startX: start.x,
+      startY: start.y,
+      driftX,
+      driftY,
+    });
+  }
+
+  applyDamagePopups(time) {
+    if (!this.damagePopups.length) return;
+    const remaining = [];
+    for (const popup of this.damagePopups) {
+      const elapsed = time - popup.startAtMs;
+      const progress = THREE.MathUtils.clamp(elapsed / popup.durationMs, 0, 1);
+      const eased = THREE.MathUtils.smootherstep(progress, 0, 1);
+      const x = popup.startX + popup.driftX * eased;
+      const y = popup.startY + popup.driftY * eased;
+      popup.node.style.left = `${x}px`;
+      popup.node.style.top = `${y}px`;
+      popup.node.style.opacity = `${1 - eased}`;
+      popup.node.style.transform = `translate(-50%, -50%) scale(${1 + (1 - eased) * 0.22})`;
+      if (progress >= 1) {
+        popup.node.remove();
+      } else {
+        remaining.push(popup);
+      }
+    }
+    this.damagePopups = remaining;
   }
 
   cardWorldPositionForHand(indexInHand, totalInHand) {
@@ -1562,6 +1639,11 @@ export class CardGameClient {
             const nextHealth = Number.isFinite(currentHealth)
               ? currentHealth - animation.resolvedDamage
               : null;
+            this.spawnDamagePopup({
+              amount: animation.resolvedDamage,
+              worldPoint: animation.defenderCard.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              time,
+            });
             if (Number.isFinite(nextHealth)) {
               animation.defenderCard.userData.catalogCard.health = nextHealth;
               this.refreshCardFace(animation.defenderCard);
@@ -1878,6 +1960,7 @@ export class CardGameClient {
   animate(time) {
     this.applyCardAnimations(time);
     this.applyCombatAnimations(time);
+    this.applyDamagePopups(time);
     this.applyHandledCardSway(time);
     this.applyPlacedCardAmbientSway(time);
     this.positionSpellRollerPanel();
@@ -1896,6 +1979,10 @@ export class CardGameClient {
     this.clearSpellRollerPanel();
     this.state.spellRollerLayer?.remove();
     this.state.spellRollerLayer = null;
+    this.damagePopups.forEach((popup) => popup.node?.remove());
+    this.damagePopups = [];
+    this.damagePopupLayer?.remove();
+    this.damagePopupLayer = null;
     this.cardBackTexture?.dispose?.();
     this.renderer.dispose();
   }
