@@ -144,6 +144,24 @@ class PhaseManagerServer {
           continue;
         }
 
+        if (executionState) {
+          resolvedAttack.retaliationDamage = Number.isFinite(executionState.retaliationDamage)
+            ? executionState.retaliationDamage
+            : 0;
+          resolvedAttack.retaliationBlockedByDefense = Number.isFinite(executionState.retaliationBlockedByDefense)
+            ? executionState.retaliationBlockedByDefense
+            : 0;
+          resolvedAttack.retaliationAppliedDamage = Number.isFinite(executionState.retaliationAppliedDamage)
+            ? executionState.retaliationAppliedDamage
+            : 0;
+          resolvedAttack.attackDefense = Number.isFinite(executionState.attackDefense)
+            ? executionState.attackDefense
+            : 0;
+          resolvedAttack.defenseRemaining = Number.isFinite(executionState.defenseRemaining)
+            ? executionState.defenseRemaining
+            : 0;
+        }
+
         commitAttacks.push(resolvedAttack);
       }
     }
@@ -321,6 +339,66 @@ class PhaseManagerServer {
     return { executed: true };
   }
 
+  applyRetaliationDamage({ match, attackerId, attackerSlotIndex, retaliationDamage = 0, attackDefense = 0 }) {
+    if (!match || !attackerId || !Number.isInteger(attackerSlotIndex)) {
+      return {
+        retaliationDamage: 0,
+        retaliationBlockedByDefense: 0,
+        retaliationAppliedDamage: 0,
+        attackDefense: 0,
+        defenseRemaining: 0,
+      };
+    }
+
+    const normalizedRetaliationDamage = Number.isFinite(retaliationDamage)
+      ? Math.max(0, Math.floor(retaliationDamage))
+      : 0;
+    const normalizedAttackDefense = Number.isFinite(attackDefense)
+      ? Math.max(0, Math.floor(attackDefense))
+      : 0;
+    const retaliationBlockedByDefense = Math.min(normalizedRetaliationDamage, normalizedAttackDefense);
+    const retaliationAppliedDamage = Math.max(0, normalizedRetaliationDamage - normalizedAttackDefense);
+    const defenseRemaining = Math.max(0, normalizedAttackDefense - retaliationBlockedByDefense);
+
+    if (retaliationAppliedDamage <= 0) {
+      return {
+        retaliationDamage: normalizedRetaliationDamage,
+        retaliationBlockedByDefense,
+        retaliationAppliedDamage,
+        attackDefense: normalizedAttackDefense,
+        defenseRemaining,
+      };
+    }
+
+    const attackerState = match.cardsByPlayer.get(attackerId);
+    const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attackerSlotIndex);
+    const currentHealth = Number(attackerCard?.catalogCard?.health);
+    if (!attackerCard?.catalogCard || !Number.isFinite(currentHealth)) {
+      return {
+        retaliationDamage: normalizedRetaliationDamage,
+        retaliationBlockedByDefense,
+        retaliationAppliedDamage: 0,
+        attackDefense: normalizedAttackDefense,
+        defenseRemaining,
+      };
+    }
+
+    const nextHealth = currentHealth - retaliationAppliedDamage;
+    attackerCard.catalogCard.health = nextHealth;
+
+    if (nextHealth < 0) {
+      attackerState.board = attackerState.board.filter((card) => card !== attackerCard);
+    }
+
+    return {
+      retaliationDamage: normalizedRetaliationDamage,
+      retaliationBlockedByDefense,
+      retaliationAppliedDamage,
+      attackDefense: normalizedAttackDefense,
+      defenseRemaining,
+    };
+  }
+
   resolveCommitAttackStep(match, attackerId, attack) {
     const attackerState = match.cardsByPlayer.get(attackerId);
     const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
@@ -342,6 +420,15 @@ class PhaseManagerServer {
 
   applyCommitEffects(match) {
     const commitExecutionByAttackId = new Map();
+    const resolvedAttacksBySlotKey = new Map();
+
+    for (const attackerId of match.players) {
+      const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
+      for (const attack of attacks) {
+        const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, attack);
+        resolvedAttacksBySlotKey.set(`${attackerId}:${attack.attackerSlotIndex}`, resolvedAttack);
+      }
+    }
 
     for (const attackerId of match.players) {
       const attacks = match.pendingCommitAttacksByPlayer.get(attackerId) || [];
@@ -353,7 +440,8 @@ class PhaseManagerServer {
           continue;
         }
 
-        const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, attack);
+        const resolvedAttack = resolvedAttacksBySlotKey.get(`${attackerId}:${attack.attackerSlotIndex}`)
+          || this.resolveCommitAttackStep(match, attackerId, attack);
         const executionResult = this.applyResolvedAbilityEffect({
           match,
           casterId: attackerId,
@@ -362,7 +450,43 @@ class PhaseManagerServer {
           effectId: resolvedAttack.effectId,
           resolvedValue: resolvedAttack.resolvedValue,
         });
-        commitExecutionByAttackId.set(attack.id, executionResult);
+
+        const retaliationResult = {
+          retaliationDamage: 0,
+          retaliationBlockedByDefense: 0,
+          retaliationAppliedDamage: 0,
+          attackDefense: 0,
+          defenseRemaining: 0,
+        };
+
+        const isEnemyDamageAttack = executionResult.executed !== false
+          && resolvedAttack.effectId === 'damage_enemy'
+          && attack.targetSide === 'opponent'
+          && Number.isInteger(attack.targetSlotIndex);
+
+        if (isEnemyDamageAttack) {
+          const defenderId = match.players.find((id) => id !== attackerId);
+          const defenderResolvedAttack = defenderId
+            ? resolvedAttacksBySlotKey.get(`${defenderId}:${attack.targetSlotIndex}`)
+            : null;
+          const retaliationDamage = defenderResolvedAttack?.effectId === 'damage_enemy'
+            ? defenderResolvedAttack.resolvedValue
+            : 0;
+          const defenseRoll = match.commitRollsByAttackId.get(`${attack.id}:defense`);
+          const attackDefense = Number(defenseRoll?.roll?.outcome);
+          Object.assign(retaliationResult, this.applyRetaliationDamage({
+            match,
+            attackerId,
+            attackerSlotIndex: attack.attackerSlotIndex,
+            retaliationDamage,
+            attackDefense,
+          }));
+        }
+
+        commitExecutionByAttackId.set(attack.id, {
+          ...executionResult,
+          ...retaliationResult,
+        });
       }
     }
 

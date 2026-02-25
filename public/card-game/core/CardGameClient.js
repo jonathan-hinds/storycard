@@ -1637,6 +1637,9 @@ export class CardGameClient {
         durationMs: 760,
         resolvedDamage: Number.isFinite(step?.resolvedDamage) ? step.resolvedDamage : null,
         resolvedHealing: Number.isFinite(step?.resolvedHealing) ? step.resolvedHealing : null,
+        retaliationDamage: Number.isFinite(step?.retaliationDamage) ? step.retaliationDamage : 0,
+        retaliationAppliedDamage: Number.isFinite(step?.retaliationAppliedDamage) ? step.retaliationAppliedDamage : 0,
+        defenseRemaining: Number.isFinite(step?.defenseRemaining) ? step.defenseRemaining : null,
         didHit: false,
         initialized: false,
       });
@@ -1742,6 +1745,31 @@ export class CardGameClient {
             animation.defenderCard.userData.catalogCard.health = currentHealth + animation.resolvedHealing;
             this.refreshCardFace(animation.defenderCard);
           }
+          if (Number.isFinite(animation.retaliationDamage) && animation.retaliationDamage > 0) {
+            this.spawnDamagePopup({
+              amount: animation.retaliationDamage,
+              worldPoint: card.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              time,
+            });
+
+            const attackerHealth = Number(card.userData?.catalogCard?.health);
+            const retaliationAppliedDamage = Number.isFinite(animation.retaliationAppliedDamage)
+              ? Math.max(0, Math.floor(animation.retaliationAppliedDamage))
+              : 0;
+            if (Number.isFinite(attackerHealth) && retaliationAppliedDamage > 0) {
+              const nextAttackerHealth = attackerHealth - retaliationAppliedDamage;
+              card.userData.catalogCard.health = nextAttackerHealth;
+              this.refreshCardFace(card);
+              if (nextAttackerHealth < 0) {
+                this.beginCardDeathAnimation(card, collisionAxis.clone().multiplyScalar(-1), time);
+              }
+            }
+
+            if (Number.isFinite(animation.defenseRemaining) && card?.userData?.cardId) {
+              this.setCardStatDisplayOverride(card.userData.cardId, 'defense', Math.max(0, Math.floor(animation.defenseRemaining)));
+            }
+          }
+
           if (!defenderDied) this.combatShakeEffects.push({
             card: animation.defenderCard,
             startAtMs: time,
