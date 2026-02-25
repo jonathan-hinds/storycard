@@ -1101,6 +1101,9 @@ export class CardGameClient {
     }
 
     card.userData.attackCommitted = true;
+    card.userData.committedAbilityIndex = Number.isInteger(card.userData.selectedAbilityIndex)
+      ? card.userData.selectedAbilityIndex
+      : 0;
     card.userData.targetSlotIndex = Number.isInteger(targetSlotIndex) ? targetSlotIndex : null;
     card.userData.targetSide = targetSide || null;
     await this.notifyCardStateCommitted(card);
@@ -1345,6 +1348,9 @@ export class CardGameClient {
       card.userData.isAnimating = false;
       card.userData.canAttack = cfg.canAttack === true;
       card.userData.attackCommitted = cfg.attackCommitted === true;
+      card.userData.committedAbilityIndex = card.userData.attackCommitted === true
+        ? (Number.isInteger(cfg.committedAbilityIndex) ? cfg.committedAbilityIndex : null)
+        : null;
       card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
       card.userData.targetSide = cfg.targetSide || null;
       card.userData.catalogCard = cfg.catalogCard ?? null;
@@ -1587,7 +1593,9 @@ export class CardGameClient {
           attackerSlotIndex: normalizeToLocalSlotIndex(card.userData.slotIndex, this.template.playerSide),
           targetSlotIndex,
           targetSide,
-          selectedAbilityIndex: Number.isInteger(card.userData.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0,
+          selectedAbilityIndex: Number.isInteger(card.userData.committedAbilityIndex)
+            ? card.userData.committedAbilityIndex
+            : (Number.isInteger(card.userData.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0),
         };
       });
   }
