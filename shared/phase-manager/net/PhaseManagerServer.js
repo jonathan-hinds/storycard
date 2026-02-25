@@ -254,6 +254,62 @@ class PhaseManagerServer {
     return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : 0;
   }
 
+  resolveAbilityValue({ ability, rollValue = null }) {
+    if (!ability || ability.valueSourceType === 'none') return 0;
+    if (ability.valueSourceType === 'fixed') {
+      const fixedValue = Number(ability.valueSourceFixed);
+      return Number.isFinite(fixedValue) ? Math.max(0, Math.floor(fixedValue)) : 0;
+    }
+
+    const outcome = Number(rollValue);
+    return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : 0;
+  }
+
+  applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue }) {
+    if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
+    if (effectId !== 'damage_enemy' && effectId !== 'heal_target') {
+      return { executed: true, reason: 'no_effect' };
+    }
+
+    const hasDamage = effectId === 'damage_enemy' && resolvedValue > 0;
+    const hasHealing = effectId === 'heal_target' && resolvedValue > 0;
+    if (!hasDamage && !hasHealing) {
+      return { executed: true, reason: 'no_value' };
+    }
+    if (!Number.isInteger(targetSlotIndex)) {
+      return { executed: false, reason: 'target_missing' };
+    }
+
+    const defenderId = targetSide === 'player'
+      ? casterId
+      : match.players.find((id) => id !== casterId);
+    if (!defenderId) {
+      return { executed: false, reason: 'target_missing' };
+    }
+
+    const defenderState = match.cardsByPlayer.get(defenderId);
+    const defenderCard = defenderState?.board?.find((card) => card.slotIndex === targetSlotIndex);
+    if (!defenderCard?.catalogCard) {
+      return { executed: false, reason: 'target_missing' };
+    }
+
+    const currentHealth = Number(defenderCard.catalogCard.health);
+    if (!Number.isFinite(currentHealth)) {
+      return { executed: false, reason: 'target_invalid' };
+    }
+
+    const nextHealth = hasDamage
+      ? currentHealth - resolvedValue
+      : currentHealth + resolvedValue;
+    defenderCard.catalogCard.health = nextHealth;
+
+    if (nextHealth < 0) {
+      defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
+    }
+
+    return { executed: true };
+  }
+
   resolveCommitAttackStep(match, attackerId, attack) {
     const attackerState = match.cardsByPlayer.get(attackerId);
     const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
@@ -287,55 +343,15 @@ class PhaseManagerServer {
         }
 
         const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, attack);
-        if (
-          resolvedAttack.effectId !== 'damage_enemy'
-          && resolvedAttack.effectId !== 'heal_target'
-        ) {
-          commitExecutionByAttackId.set(attack.id, { executed: true, reason: 'no_effect' });
-          continue;
-        }
-
-        const hasDamage = resolvedAttack.effectId === 'damage_enemy' && resolvedAttack.resolvedDamage > 0;
-        const hasHealing = resolvedAttack.effectId === 'heal_target' && resolvedAttack.resolvedHealing > 0;
-        if (!hasDamage && !hasHealing) {
-          commitExecutionByAttackId.set(attack.id, { executed: true, reason: 'no_value' });
-          continue;
-        }
-        if (!Number.isInteger(attack.targetSlotIndex)) {
-          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'target_missing' });
-          continue;
-        }
-
-        const defenderId = attack.targetSide === 'player'
-          ? attackerId
-          : match.players.find((id) => id !== attackerId);
-        if (!defenderId) {
-          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'target_missing' });
-          continue;
-        }
-
-        const defenderState = match.cardsByPlayer.get(defenderId);
-        const defenderCard = defenderState?.board?.find((card) => card.slotIndex === attack.targetSlotIndex);
-        if (!defenderCard?.catalogCard) {
-          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'target_missing' });
-          continue;
-        }
-
-        const currentHealth = Number(defenderCard.catalogCard.health);
-        if (!Number.isFinite(currentHealth)) {
-          commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'target_invalid' });
-          continue;
-        }
-
-        commitExecutionByAttackId.set(attack.id, { executed: true });
-        const nextHealth = hasDamage
-          ? currentHealth - resolvedAttack.resolvedDamage
-          : currentHealth + resolvedAttack.resolvedHealing;
-        defenderCard.catalogCard.health = nextHealth;
-
-        if (nextHealth < 0) {
-          defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
-        }
+        const executionResult = this.applyResolvedAbilityEffect({
+          match,
+          casterId: attackerId,
+          targetSide: attack.targetSide,
+          targetSlotIndex: attack.targetSlotIndex,
+          effectId: resolvedAttack.effectId,
+          resolvedValue: resolvedAttack.resolvedValue,
+        });
+        commitExecutionByAttackId.set(attack.id, executionResult);
       }
     }
 
@@ -869,6 +885,21 @@ class PhaseManagerServer {
     if (active.casterId !== playerId) {
       return { error: 'only the caster may complete this spell', statusCode: 403 };
     }
+
+    const spellCard = active.cardSnapshot?.catalogCard || null;
+    const spellAbility = this.getAttackAbilityForCard({ catalogCard: spellCard }, active.selectedAbilityIndex);
+    const resolvedValue = this.resolveAbilityValue({
+      ability: spellAbility,
+      rollValue: active.rollOutcome,
+    });
+    this.applyResolvedAbilityEffect({
+      match,
+      casterId: playerId,
+      targetSide: active.targetSide,
+      targetSlotIndex: active.targetSlotIndex,
+      effectId: spellAbility?.effectId || 'none',
+      resolvedValue,
+    });
 
     active.completedAt = Date.now();
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };

@@ -848,14 +848,6 @@ export class CardGameClient {
       await new Promise((resolve) => window.setTimeout(resolve, 760));
     }
 
-    if (selectedAbility?.effectId === 'damage_enemy' && targetCard) {
-      const currentHealth = Number(targetCard.userData?.catalogCard?.health);
-      if (Number.isFinite(currentHealth)) {
-        targetCard.userData.catalogCard.health = currentHealth - outcome;
-        this.refreshCardFace(targetCard);
-      }
-    }
-
     await new Promise((resolve) => window.setTimeout(resolve, SPELL_ATTACK_DELAY_AFTER_IMPACT_MS));
     this.beginCardDeathAnimation(card, new THREE.Vector3(0, 0, -1), performance.now());
     card.userData.zone = CARD_ZONE_TYPES.DISCARD;
