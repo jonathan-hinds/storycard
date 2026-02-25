@@ -12,14 +12,6 @@ const phaseManager = new PhaseManagerClient({
     playerSummaryEl: document.getElementById('phase-manager-player-summary'),
     opponentSummaryEl: document.getElementById('phase-manager-opponent-summary'),
     queueSummaryEl: document.getElementById('phase-manager-queue-summary'),
-    upkeepPlaneXInput: document.getElementById('upkeep-plane-x'),
-    upkeepPlaneYInput: document.getElementById('upkeep-plane-y'),
-    upkeepPlaneZInput: document.getElementById('upkeep-plane-z'),
-    upkeepBackgroundSelect: document.getElementById('upkeep-background-asset'),
-    upkeepNumberXInput: document.getElementById('upkeep-number-x'),
-    upkeepNumberYInput: document.getElementById('upkeep-number-y'),
-    upkeepExportBtn: document.getElementById('upkeep-export-json'),
-    upkeepExportOutput: document.getElementById('upkeep-export-output'),
   },
 });
 

@@ -1,64 +1,9 @@
 import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
 import { CardRollerOverlay } from './CardRollerOverlay.js';
-import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 
 const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
-const UPKEEP_TUNING_STORAGE_KEY = 'storycard.phaseManager.upkeepHudTuning.v1';
-const DEFAULT_UPKEEP_HUD_TUNING = Object.freeze({
-  planePosition: { x: 1.2, y: 0.72, z: -2.2 },
-  numberOffset: { x: 0, y: 0 },
-  backgroundAsset: 'none',
-});
-const UPKEEP_BACKGROUND_ASSET_OPTIONS = Object.freeze([
-  { label: 'None', value: 'none' },
-  { label: 'CardFront', value: '/public/assets/CardFront.png' },
-  { label: 'CardFront2', value: '/public/assets/CardFront2.png' },
-  { label: 'CardFront2 hole', value: '/public/assets/CardFront2hole.png' },
-  { label: 'CardFront Spell', value: '/public/assets/CardFrontSpell.png' },
-  { label: 'Card Back', value: '/public/assets/CardBack.png' },
-]);
-
-function normalizeHudNumber(value, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function sanitizeUpkeepHudTuning(tuning = {}) {
-  return {
-    planePosition: {
-      x: normalizeHudNumber(tuning?.planePosition?.x, DEFAULT_UPKEEP_HUD_TUNING.planePosition.x),
-      y: normalizeHudNumber(tuning?.planePosition?.y, DEFAULT_UPKEEP_HUD_TUNING.planePosition.y),
-      z: normalizeHudNumber(tuning?.planePosition?.z, DEFAULT_UPKEEP_HUD_TUNING.planePosition.z),
-    },
-    numberOffset: {
-      x: normalizeHudNumber(tuning?.numberOffset?.x, DEFAULT_UPKEEP_HUD_TUNING.numberOffset.x),
-      y: normalizeHudNumber(tuning?.numberOffset?.y, DEFAULT_UPKEEP_HUD_TUNING.numberOffset.y),
-    },
-    backgroundAsset: typeof tuning?.backgroundAsset === 'string' ? tuning.backgroundAsset : DEFAULT_UPKEEP_HUD_TUNING.backgroundAsset,
-  };
-}
-
-function loadUpkeepHudTuning() {
-  try {
-    const raw = window.localStorage.getItem(UPKEEP_TUNING_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_UPKEEP_HUD_TUNING };
-    return sanitizeUpkeepHudTuning(JSON.parse(raw));
-  } catch (error) {
-    return { ...DEFAULT_UPKEEP_HUD_TUNING };
-  }
-}
-
-function saveUpkeepHudTuning(tuning) {
-  const next = sanitizeUpkeepHudTuning(tuning);
-  try {
-    window.localStorage.setItem(UPKEEP_TUNING_STORAGE_KEY, JSON.stringify(next));
-  } catch (error) {
-    // no-op
-  }
-  return next;
-}
 
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -90,18 +35,7 @@ export class PhaseManagerClient {
     this.cardRollerOverlay = null;
     this.playedRemoteSpellResolutionIds = new Set();
     this.previewTuning = loadPreviewTuning();
-    this.upkeepHudTuning = loadUpkeepHudTuning();
     this.playerId = createTabPlayerId();
-    this.upkeepHud = {
-      group: null,
-      backgroundPlane: null,
-      numberSprite: null,
-      numberCanvas: null,
-      numberTexture: null,
-      currentAsset: null,
-    };
-    this.upkeepAssetTextureCache = new Map();
-    this.upkeepTextureLoader = new THREE.TextureLoader();
 
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
     this.readyUp = this.readyUp.bind(this);
@@ -136,7 +70,6 @@ export class PhaseManagerClient {
     matchmakingBtn.addEventListener('click', this.beginMatchmaking);
     readyBtn.addEventListener('click', this.readyUp);
     resetBtn.addEventListener('click', this.resetMatch);
-    this.bindUpkeepHudControls();
     this.renderMatch();
     this.matchmakingPollTimer = window.setInterval(() => this.pollMatchmakingStatus(), this.options.pollIntervalMs);
     this.pollMatchmakingStatus();
@@ -156,7 +89,6 @@ export class PhaseManagerClient {
       this.cardRollerOverlay.destroy();
       this.cardRollerOverlay = null;
     }
-    this.destroyUpkeepHud();
   }
 
   stopMatchmakingPolling() {
@@ -164,186 +96,6 @@ export class PhaseManagerClient {
       window.clearInterval(this.matchmakingPollTimer);
       this.matchmakingPollTimer = 0;
     }
-  }
-
-  destroyUpkeepHud() {
-    if (this.upkeepHud.group?.parent) {
-      this.upkeepHud.group.parent.remove(this.upkeepHud.group);
-    }
-    this.upkeepHud.backgroundPlane?.geometry?.dispose?.();
-    this.upkeepHud.backgroundPlane?.material?.dispose?.();
-    this.upkeepHud.numberTexture?.dispose?.();
-    this.upkeepHud.numberSprite?.material?.dispose?.();
-    this.upkeepHud = {
-      group: null,
-      backgroundPlane: null,
-      numberSprite: null,
-      numberCanvas: null,
-      numberTexture: null,
-      currentAsset: null,
-    };
-  }
-
-  initializeUpkeepHud() {
-    if (!this.client?.camera || this.upkeepHud.group) return;
-
-    const group = new THREE.Group();
-    const backgroundPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.95, 0.58),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 1, depthTest: false }),
-    );
-    backgroundPlane.renderOrder = 1000;
-    group.add(backgroundPlane);
-
-    const numberCanvas = document.createElement('canvas');
-    numberCanvas.width = 256;
-    numberCanvas.height = 256;
-    const numberTexture = new THREE.CanvasTexture(numberCanvas);
-
-    const numberSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: numberTexture, transparent: true, depthTest: false }));
-    numberSprite.renderOrder = 1001;
-    numberSprite.scale.set(0.4, 0.4, 1);
-    group.add(numberSprite);
-
-    this.upkeepHud = {
-      group,
-      backgroundPlane,
-      numberSprite,
-      numberCanvas,
-      numberTexture,
-      currentAsset: null,
-    };
-
-    this.client.camera.add(group);
-    this.applyUpkeepHudTuning();
-    this.applyUpkeepBackgroundAsset(this.upkeepHudTuning.backgroundAsset);
-    this.updateUpkeepNumberSprite();
-  }
-
-  updateUpkeepNumberSprite() {
-    if (!this.upkeepHud.numberCanvas || !this.upkeepHud.numberTexture) return;
-    const upkeepValue = Math.max(1, Math.min(10, Number(this.match?.upkeep) || 1));
-    const ctx = this.upkeepHud.numberCanvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, this.upkeepHud.numberCanvas.width, this.upkeepHud.numberCanvas.height);
-    ctx.font = 'bold 180px Inter, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 22;
-    ctx.strokeText(String(upkeepValue), 128, 130);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(String(upkeepValue), 128, 130);
-    this.upkeepHud.numberTexture.needsUpdate = true;
-  }
-
-  applyUpkeepBackgroundAsset(assetPath) {
-    if (!this.upkeepHud.backgroundPlane || this.upkeepHud.currentAsset === assetPath) return;
-    this.upkeepHud.currentAsset = assetPath;
-    const material = this.upkeepHud.backgroundPlane.material;
-
-    if (!assetPath || assetPath === 'none') {
-      material.map = null;
-      material.opacity = 0;
-      material.needsUpdate = true;
-      return;
-    }
-
-    material.opacity = 1;
-    const cachedTexture = this.upkeepAssetTextureCache.get(assetPath);
-    if (cachedTexture) {
-      material.map = cachedTexture;
-      material.needsUpdate = true;
-      return;
-    }
-
-    this.upkeepTextureLoader.load(assetPath, (texture) => {
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.wrapS = THREE.ClampToEdgeWrapping;
-      texture.wrapT = THREE.ClampToEdgeWrapping;
-      this.upkeepAssetTextureCache.set(assetPath, texture);
-      if (this.upkeepHud.currentAsset !== assetPath || !this.upkeepHud.backgroundPlane) return;
-      this.upkeepHud.backgroundPlane.material.map = texture;
-      this.upkeepHud.backgroundPlane.material.needsUpdate = true;
-    });
-  }
-
-  applyUpkeepHudTuning() {
-    this.upkeepHudTuning = sanitizeUpkeepHudTuning(this.upkeepHudTuning);
-    const tuning = this.upkeepHudTuning;
-    if (this.upkeepHud.group) {
-      this.upkeepHud.group.position.set(tuning.planePosition.x, tuning.planePosition.y, tuning.planePosition.z);
-    }
-    if (this.upkeepHud.numberSprite) {
-      this.upkeepHud.numberSprite.position.set(tuning.numberOffset.x, tuning.numberOffset.y, 0.01);
-    }
-    this.applyUpkeepBackgroundAsset(tuning.backgroundAsset);
-  }
-
-  bindUpkeepHudControls() {
-    const {
-      upkeepPlaneXInput,
-      upkeepPlaneYInput,
-      upkeepPlaneZInput,
-      upkeepNumberXInput,
-      upkeepNumberYInput,
-      upkeepBackgroundSelect,
-      upkeepExportBtn,
-      upkeepExportOutput,
-    } = this.elements;
-    if (!upkeepPlaneXInput) return;
-
-    upkeepBackgroundSelect.innerHTML = '';
-    UPKEEP_BACKGROUND_ASSET_OPTIONS.forEach((assetOption) => {
-      const option = document.createElement('option');
-      option.value = assetOption.value;
-      option.textContent = assetOption.label;
-      upkeepBackgroundSelect.append(option);
-    });
-
-    const persistAndApply = () => {
-      this.upkeepHudTuning = saveUpkeepHudTuning(this.upkeepHudTuning);
-      this.applyUpkeepHudTuning();
-      if (upkeepExportOutput) upkeepExportOutput.value = JSON.stringify(this.upkeepHudTuning, null, 2);
-    };
-
-    upkeepPlaneXInput.value = String(this.upkeepHudTuning.planePosition.x);
-    upkeepPlaneYInput.value = String(this.upkeepHudTuning.planePosition.y);
-    upkeepPlaneZInput.value = String(this.upkeepHudTuning.planePosition.z);
-    upkeepNumberXInput.value = String(this.upkeepHudTuning.numberOffset.x);
-    upkeepNumberYInput.value = String(this.upkeepHudTuning.numberOffset.y);
-    upkeepBackgroundSelect.value = this.upkeepHudTuning.backgroundAsset;
-
-    upkeepPlaneXInput.addEventListener('input', () => {
-      this.upkeepHudTuning.planePosition.x = Number(upkeepPlaneXInput.value);
-      persistAndApply();
-    });
-    upkeepPlaneYInput.addEventListener('input', () => {
-      this.upkeepHudTuning.planePosition.y = Number(upkeepPlaneYInput.value);
-      persistAndApply();
-    });
-    upkeepPlaneZInput.addEventListener('input', () => {
-      this.upkeepHudTuning.planePosition.z = Number(upkeepPlaneZInput.value);
-      persistAndApply();
-    });
-    upkeepNumberXInput.addEventListener('input', () => {
-      this.upkeepHudTuning.numberOffset.x = Number(upkeepNumberXInput.value);
-      persistAndApply();
-    });
-    upkeepNumberYInput.addEventListener('input', () => {
-      this.upkeepHudTuning.numberOffset.y = Number(upkeepNumberYInput.value);
-      persistAndApply();
-    });
-    upkeepBackgroundSelect.addEventListener('change', () => {
-      this.upkeepHudTuning.backgroundAsset = upkeepBackgroundSelect.value;
-      persistAndApply();
-    });
-    upkeepExportBtn?.addEventListener('click', () => {
-      if (upkeepExportOutput) upkeepExportOutput.value = JSON.stringify(this.upkeepHudTuning, null, 2);
-    });
-
-    if (upkeepExportOutput) upkeepExportOutput.value = JSON.stringify(this.upkeepHudTuning, null, 2);
   }
 
   getBoardSlotLayout() {
@@ -670,15 +422,11 @@ export class PhaseManagerClient {
         cardGameClient: this.client,
       });
       this.client.setPreviewTuning(this.previewTuning);
-      this.initializeUpkeepHud();
     } else {
       this.client.template = template;
       this.client.resetDemo();
       this.client.setPreviewTuning(this.previewTuning);
-      this.initializeUpkeepHud();
     }
-
-    this.updateUpkeepNumberSprite();
 
     if (shouldAnimateInitialDeal) this.lastAnimatedMatchId = this.match.id;
     if (shouldAnimateTurnDraw) this.lastAnimatedTurnKey = turnAnimationKey;
@@ -925,7 +673,6 @@ export class PhaseManagerClient {
     this.commitSequencePromise = null;
     this.playedRemoteSpellResolutionIds.clear();
     if (this.client) {
-      this.destroyUpkeepHud();
       this.client.destroy();
       this.client = null;
     }
@@ -1040,7 +787,6 @@ export class PhaseManagerClient {
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
     if (this.client) {
-      this.destroyUpkeepHud();
       this.client.destroy();
       this.client = null;
     }

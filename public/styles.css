@@ -147,18 +147,6 @@ button {
   font-size: 16px;
 }
 
-textarea {
-  border: 1px solid #3f4b67;
-  border-radius: 0.4rem;
-  background: #121723;
-  color: #eef2ff;
-  padding: 0.45rem 0.6rem;
-  font-size: 13px;
-  width: 100%;
-  box-sizing: border-box;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-}
-
 button {
   cursor: pointer;
   touch-action: manipulation;
