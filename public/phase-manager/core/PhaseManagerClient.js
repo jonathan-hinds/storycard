@@ -12,6 +12,7 @@ const DEFAULT_UPKEEP_TEXT_POSITION = { x: 0.27, y: 0 };
 const DEFAULT_UPKEEP_TEXT_SCALE = 0.5;
 const DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH = '/public/assets/upkeepcontainer3.png';
 const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
+const READY_BUTTON_LABEL = 'READY UP';
 
 function getFrustumHalfExtents(fovDegrees, aspect, depth) {
   const safeDepth = Math.max(Math.abs(depth), 0.001);
@@ -51,6 +52,7 @@ export class PhaseManagerClient {
     this.activeCommitSequenceKey = null;
     this.cardRollerOverlay = null;
     this.upkeepDisplay = null;
+    this.readyButtonDisplay = null;
     this.upkeepPosition = { ...DEFAULT_UPKEEP_POSITION };
     this.upkeepPanelSize = { ...DEFAULT_UPKEEP_PANEL_SIZE };
     this.upkeepTextPosition = { ...DEFAULT_UPKEEP_TEXT_POSITION };
@@ -71,13 +73,16 @@ export class PhaseManagerClient {
     this.handleUpkeepBackgroundChange = this.handleUpkeepBackgroundChange.bind(this);
     this.exportUpkeepPosition = this.exportUpkeepPosition.bind(this);
     this.handleWindowResize = this.handleWindowResize.bind(this);
+    this.handleCanvasPointerUp = this.handleCanvasPointerUp.bind(this);
   }
 
   handleWindowResize() {
     this.positionUpkeepDisplay();
+    this.positionReadyButtonDisplay();
     this.syncUpkeepPositionInputs();
     window.requestAnimationFrame(() => {
       this.positionUpkeepDisplay();
+      this.positionReadyButtonDisplay();
       this.syncUpkeepPositionInputs();
     });
   }
@@ -177,7 +182,7 @@ export class PhaseManagerClient {
       z: this.parseUpkeepPositionValue(upkeepZInput?.value, this.upkeepPosition.z),
     };
     this.syncUpkeepPositionInputs();
-    this.positionUpkeepDisplay();
+    this.positionReadyButtonDisplay();
   }
 
   handleUpkeepPanelStyleInput() {
@@ -192,9 +197,9 @@ export class PhaseManagerClient {
     };
     this.upkeepTextScale = this.parseUpkeepPositionValue(upkeepTextSizeInput?.value, this.upkeepTextScale);
     this.syncUpkeepPositionInputs();
-    this.positionUpkeepDisplay();
-    if (this.upkeepDisplay?.value != null) {
-      this.drawUpkeepDisplay(this.upkeepDisplay.value);
+    this.positionReadyButtonDisplay();
+    if (this.readyButtonDisplay) {
+      this.drawReadyButtonDisplay();
     }
   }
 
@@ -246,8 +251,8 @@ export class PhaseManagerClient {
     } catch (error) {
       this.upkeepBackgroundImage = null;
     }
-    if (this.upkeepDisplay?.value != null) {
-      this.drawUpkeepDisplay(this.upkeepDisplay.value);
+    if (this.readyButtonDisplay) {
+      this.drawReadyButtonDisplay();
     }
   }
 
@@ -268,6 +273,7 @@ export class PhaseManagerClient {
 
   start() {
     const {
+      canvas,
       matchmakingBtn,
       readyBtn,
       resetBtn,
@@ -284,6 +290,8 @@ export class PhaseManagerClient {
     } = this.elements;
     matchmakingBtn.addEventListener('click', this.beginMatchmaking);
     readyBtn.addEventListener('click', this.readyUp);
+    readyBtn.hidden = true;
+    canvas?.addEventListener('pointerup', this.handleCanvasPointerUp);
     resetBtn.addEventListener('click', this.resetMatch);
     upkeepXInput?.addEventListener('input', this.handleUpkeepPositionInput);
     upkeepYInput?.addEventListener('input', this.handleUpkeepPositionInput);
@@ -309,6 +317,7 @@ export class PhaseManagerClient {
 
   destroy() {
     const {
+      canvas,
       matchmakingBtn,
       readyBtn,
       resetBtn,
@@ -326,6 +335,7 @@ export class PhaseManagerClient {
     this.stopMatchmakingPolling();
     matchmakingBtn.removeEventListener('click', this.beginMatchmaking);
     readyBtn.removeEventListener('click', this.readyUp);
+    canvas?.removeEventListener('pointerup', this.handleCanvasPointerUp);
     resetBtn.removeEventListener('click', this.resetMatch);
     upkeepXInput?.removeEventListener('input', this.handleUpkeepPositionInput);
     upkeepYInput?.removeEventListener('input', this.handleUpkeepPositionInput);
@@ -347,6 +357,7 @@ export class PhaseManagerClient {
       this.cardRollerOverlay = null;
     }
     this.teardownUpkeepDisplay();
+    this.teardownReadyButtonDisplay();
   }
 
   createUpkeepTexture() {
@@ -421,6 +432,141 @@ export class PhaseManagerClient {
   positionUpkeepDisplay() {
     if (!this.upkeepDisplay || !this.client?.camera) return;
     const { panelMesh, textMesh } = this.upkeepDisplay;
+    const depth = Math.max(Math.abs(DEFAULT_UPKEEP_POSITION.z), 0.001);
+    const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
+    const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
+    const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
+    const panelWorldWidth = DEFAULT_UPKEEP_PANEL_SIZE.width * scaleFactor;
+    const panelWorldHeight = DEFAULT_UPKEEP_PANEL_SIZE.height * scaleFactor;
+    const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
+    const panelHalfNormalizedY = panelWorldHeight / Math.max(currentFrustum.halfHeight * 2, 0.001);
+    const targetNormalizedX = THREE.MathUtils.clamp((DEFAULT_UPKEEP_POSITION.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
+    const targetNormalizedY = THREE.MathUtils.clamp(1 - (DEFAULT_UPKEEP_POSITION.y * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
+    const x = targetNormalizedX * currentFrustum.halfWidth;
+    const y = targetNormalizedY * currentFrustum.halfHeight;
+    panelMesh.position.set(x, y, DEFAULT_UPKEEP_POSITION.z);
+    panelMesh.scale.set(scaleFactor, scaleFactor, 1);
+    panelMesh.rotation.set(0, 0, 0);
+
+    const textOffsetX = panelWorldWidth * DEFAULT_UPKEEP_TEXT_POSITION.x;
+    const textOffsetY = panelWorldHeight * DEFAULT_UPKEEP_TEXT_POSITION.y;
+    textMesh.position.set(x + textOffsetX, y + textOffsetY, DEFAULT_UPKEEP_POSITION.z + 0.001);
+    textMesh.scale.set(scaleFactor, scaleFactor, 1);
+    textMesh.rotation.set(0, 0, 0);
+  }
+
+  drawUpkeepDisplay(upkeepValue) {
+    if (!this.upkeepDisplay) return;
+    const {
+      panelCanvas,
+      panelTexture,
+      textCanvas,
+      textTexture,
+    } = this.upkeepDisplay;
+    const panelCtx = panelCanvas.getContext('2d');
+    const textCtx = textCanvas.getContext('2d');
+    if (!panelCtx || !textCtx) return;
+
+    panelCtx.clearRect(0, 0, panelCanvas.width, panelCanvas.height);
+    textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+
+    const upkeepBackground = this.upkeepBackgroundCache.get(DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH) || null;
+    if (upkeepBackground) {
+      panelCtx.drawImage(upkeepBackground, 0, 0, panelCanvas.width, panelCanvas.height);
+    } else {
+      const panelPadding = 14;
+      const panelRadius = 24;
+      const panelX = panelPadding;
+      const panelY = panelPadding;
+      const panelWidth = panelCanvas.width - (panelPadding * 2);
+      const panelHeight = panelCanvas.height - (panelPadding * 2);
+
+      panelCtx.beginPath();
+      panelCtx.roundRect(panelX, panelY, panelWidth, panelHeight, panelRadius);
+      panelCtx.fillStyle = 'rgba(8, 11, 18, 0.72)';
+      panelCtx.fill();
+      panelCtx.lineWidth = 5;
+      panelCtx.strokeStyle = 'rgba(190, 210, 255, 0.55)';
+      panelCtx.stroke();
+    }
+
+    textCtx.font = `900 ${Math.round(126 * DEFAULT_UPKEEP_TEXT_SCALE)}px Arial, sans-serif`;
+    textCtx.textAlign = 'center';
+    textCtx.textBaseline = 'middle';
+    textCtx.lineJoin = 'round';
+    textCtx.lineWidth = 16;
+    textCtx.strokeStyle = '#000000';
+    textCtx.fillStyle = '#ffffff';
+
+    const text = `${upkeepValue}`;
+    const x = textCanvas.width * 0.5;
+    const y = textCanvas.height * 0.5;
+    textCtx.strokeText(text, x, y);
+    textCtx.fillText(text, x, y);
+
+    panelTexture.needsUpdate = true;
+    textTexture.needsUpdate = true;
+    this.upkeepDisplay.value = upkeepValue;
+  }
+
+  ensureReadyButtonDisplay() {
+    if (!this.client?.camera || !this.client?.scene) return;
+    if (this.readyButtonDisplay) return;
+    if (this.client.camera.parent !== this.client.scene) {
+      this.client.scene.add(this.client.camera);
+    }
+
+    const { canvas: panelCanvas, texture: panelTexture } = this.createUpkeepTexture();
+    const panelMaterial = new THREE.MeshBasicMaterial({
+      map: panelTexture,
+      transparent: true,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_UPKEEP_PANEL_SIZE.width, DEFAULT_UPKEEP_PANEL_SIZE.height), panelMaterial);
+    panelMesh.renderOrder = 1002;
+    this.client.camera.add(panelMesh);
+
+    const { canvas: textCanvas, texture: textTexture } = this.createUpkeepTexture();
+    const textMaterial = new THREE.MeshBasicMaterial({
+      map: textTexture,
+      transparent: true,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_UPKEEP_PANEL_SIZE.width, DEFAULT_UPKEEP_PANEL_SIZE.height), textMaterial);
+    textMesh.renderOrder = 1003;
+    this.client.camera.add(textMesh);
+
+    this.readyButtonDisplay = {
+      panelCanvas,
+      panelTexture,
+      panelMaterial,
+      panelMesh,
+      textCanvas,
+      textTexture,
+      textMaterial,
+      textMesh,
+    };
+  }
+
+  teardownReadyButtonDisplay() {
+    if (!this.readyButtonDisplay) return;
+    const { panelMesh, panelMaterial, panelTexture, textMesh, textMaterial, textTexture } = this.readyButtonDisplay;
+    panelMesh.parent?.remove(panelMesh);
+    panelMesh.geometry.dispose();
+    panelMaterial.dispose();
+    panelTexture.dispose();
+    textMesh.parent?.remove(textMesh);
+    textMesh.geometry.dispose();
+    textMaterial.dispose();
+    textTexture.dispose();
+    this.readyButtonDisplay = null;
+  }
+
+  positionReadyButtonDisplay() {
+    if (!this.readyButtonDisplay || !this.client?.camera) return;
+    const { panelMesh, textMesh } = this.readyButtonDisplay;
     const depth = Math.max(Math.abs(this.upkeepPosition.z), 0.001);
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
@@ -446,14 +592,14 @@ export class PhaseManagerClient {
     textMesh.rotation.set(0, 0, 0);
   }
 
-  drawUpkeepDisplay(upkeepValue) {
-    if (!this.upkeepDisplay) return;
+  drawReadyButtonDisplay() {
+    if (!this.readyButtonDisplay) return;
     const {
       panelCanvas,
       panelTexture,
       textCanvas,
       textTexture,
-    } = this.upkeepDisplay;
+    } = this.readyButtonDisplay;
     const panelCtx = panelCanvas.getContext('2d');
     const textCtx = textCanvas.getContext('2d');
     if (!panelCtx || !textCtx) return;
@@ -480,23 +626,52 @@ export class PhaseManagerClient {
       panelCtx.stroke();
     }
 
+    const activeSpell = this.getActiveSpellResolution();
+    const spellLocked = Boolean(activeSpell && activeSpell.completedAt == null);
+    const canInteract = Boolean(this.match && this.match.phase === 1 && !this.match.youAreReady && !spellLocked);
     textCtx.font = `900 ${Math.round(126 * this.upkeepTextScale)}px Arial, sans-serif`;
     textCtx.textAlign = 'center';
     textCtx.textBaseline = 'middle';
     textCtx.lineJoin = 'round';
     textCtx.lineWidth = 16;
     textCtx.strokeStyle = '#000000';
-    textCtx.fillStyle = '#ffffff';
+    textCtx.fillStyle = canInteract ? '#ffffff' : '#aeb6cc';
 
-    const text = `${upkeepValue}`;
     const x = textCanvas.width * 0.5;
     const y = textCanvas.height * 0.5;
-    textCtx.strokeText(text, x, y);
-    textCtx.fillText(text, x, y);
+    textCtx.strokeText(READY_BUTTON_LABEL, x, y);
+    textCtx.fillText(READY_BUTTON_LABEL, x, y);
+
+    if (!canInteract) {
+      panelCtx.fillStyle = 'rgba(8, 11, 18, 0.42)';
+      panelCtx.fillRect(0, 0, panelCanvas.width, panelCanvas.height);
+    }
 
     panelTexture.needsUpdate = true;
     textTexture.needsUpdate = true;
-    this.upkeepDisplay.value = upkeepValue;
+  }
+
+  syncReadyButtonDisplay() {
+    if (!this.client || !this.match) return;
+    this.ensureReadyButtonDisplay();
+    this.positionReadyButtonDisplay();
+    this.drawReadyButtonDisplay();
+  }
+
+  handleCanvasPointerUp(event) {
+    if (!this.readyButtonDisplay || !this.client?.camera || !this.elements.canvas) return;
+    const rect = this.elements.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const pointer = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -(((event.clientY - rect.top) / rect.height) * 2 - 1),
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(pointer, this.client.camera);
+    const hits = raycaster.intersectObject(this.readyButtonDisplay.panelMesh, false);
+    if (!hits.length) return;
+    this.readyUp();
   }
 
   syncUpkeepDisplay() {
@@ -714,6 +889,7 @@ export class PhaseManagerClient {
     const canInteract = isDecisionPhase && !playerIsReady && !spellLocked;
 
     readyBtn.disabled = !canInteract;
+    if (this.readyButtonDisplay) this.drawReadyButtonDisplay();
     if (!this.client) return;
 
     this.client.options = {
@@ -795,6 +971,7 @@ export class PhaseManagerClient {
     if (!this.match) {
       statusEl.textContent = 'Click matchmaking to create a 1v1 phase test.';
       this.teardownUpkeepDisplay();
+      this.teardownReadyButtonDisplay();
       this.setReadyLockState();
       this.updateSummaryPanels();
       return;
@@ -848,6 +1025,7 @@ export class PhaseManagerClient {
     }
 
     this.syncUpkeepDisplay();
+    this.syncReadyButtonDisplay();
 
     if (shouldAnimateInitialDeal) this.lastAnimatedMatchId = this.match.id;
     if (shouldAnimateTurnDraw) this.lastAnimatedTurnKey = turnAnimationKey;
