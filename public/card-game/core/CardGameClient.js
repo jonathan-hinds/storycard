@@ -41,8 +41,12 @@ const CARD_OUTLINE_HIGHLIGHT_COLOR = 0xffffff;
 const SPELL_CENTER_POSITION = Object.freeze(new THREE.Vector3(1.05, 0.32, 0.2));
 const SPELL_ATTACK_DELAY_AFTER_IMPACT_MS = 2000;
 const SPELL_DEATH_SETTLE_WAIT_MS = 700;
-const DAMAGE_POPUP_DURATION_MS = 620;
-const DAMAGE_POPUP_DRIFT_DISTANCE = 86;
+const COMBAT_NUMBER_DURATION_MS = 620;
+const COMBAT_NUMBER_DRIFT_DISTANCE = 86;
+const COMBAT_NUMBER_VARIANTS = Object.freeze({
+  damage: 'damage',
+  beneficial: 'beneficial',
+});
 const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 
@@ -324,19 +328,19 @@ export class CardGameClient {
     return { x, y };
   }
 
-  spawnDamagePopup({ amount, worldPoint, time = performance.now() }) {
+  spawnCombatNumberPopup({ amount, worldPoint, time = performance.now(), prefix = '', variant = COMBAT_NUMBER_VARIANTS.damage }) {
     if (!this.damagePopupLayer || !Number.isFinite(amount) || amount <= 0 || !worldPoint) return;
     const start = this.getScreenPositionForWorldPoint(worldPoint);
     if (!start) return;
 
     const driftAngle = Math.random() * Math.PI * 2;
-    const driftDistance = DAMAGE_POPUP_DRIFT_DISTANCE * (0.65 + Math.random() * 0.45);
+    const driftDistance = COMBAT_NUMBER_DRIFT_DISTANCE * (0.65 + Math.random() * 0.45);
     const driftX = Math.cos(driftAngle) * driftDistance;
     const driftY = Math.sin(driftAngle) * driftDistance - 36;
 
     const node = document.createElement('div');
-    node.className = 'damage-number-popup';
-    node.textContent = `-${Math.round(amount)}`;
+    node.className = `damage-number-popup damage-number-popup--${variant}`;
+    node.textContent = `${prefix}${Math.round(amount)}`;
     node.style.left = `${start.x}px`;
     node.style.top = `${start.y}px`;
     this.damagePopupLayer.append(node);
@@ -344,12 +348,20 @@ export class CardGameClient {
     this.damagePopups.push({
       node,
       startAtMs: time,
-      durationMs: DAMAGE_POPUP_DURATION_MS,
+      durationMs: COMBAT_NUMBER_DURATION_MS,
       startX: start.x,
       startY: start.y,
       driftX,
       driftY,
     });
+  }
+
+  spawnDamagePopup({ amount, worldPoint, time = performance.now() }) {
+    this.spawnCombatNumberPopup({ amount, worldPoint, time, prefix: '-', variant: COMBAT_NUMBER_VARIANTS.damage });
+  }
+
+  spawnBeneficialPopup({ amount, worldPoint, time = performance.now() }) {
+    this.spawnCombatNumberPopup({ amount, worldPoint, time, prefix: '+', variant: COMBAT_NUMBER_VARIANTS.beneficial });
   }
 
   applyDamagePopups(time) {
@@ -1694,6 +1706,11 @@ export class CardGameClient {
               }
             }
           } else if (Number.isFinite(animation.resolvedHealing) && animation.resolvedHealing > 0 && canUpdateHealth) {
+            this.spawnBeneficialPopup({
+              amount: animation.resolvedHealing,
+              worldPoint: animation.defenderCard.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              time,
+            });
             animation.defenderCard.userData.catalogCard.health = currentHealth + animation.resolvedHealing;
             this.refreshCardFace(animation.defenderCard);
           }
