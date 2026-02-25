@@ -324,7 +324,12 @@ export class PhaseManagerClient {
       && this.client?.state?.activeSpellResolutionId !== activeSpell.id;
     if (isOpponentCasting && typeof this.client?.playRemoteSpellResolution === 'function') {
       this.client.playRemoteSpellResolution(activeSpell).then((played) => {
-        if (played) this.playedRemoteSpellResolutionIds.add(activeSpell.id);
+        if (!played) return;
+        this.playedRemoteSpellResolutionIds.add(activeSpell.id);
+        // Remote spell playback can run while scene refreshes are intentionally paused.
+        // Force a post-playback render so both players reconcile to server-authoritative
+        // card health/board state even if no new polling delta arrives afterwards.
+        if (this.match) this.renderMatch();
       }).catch((error) => {
         this.elements.statusEl.textContent = `Spell sync error: ${error.message}`;
       });
