@@ -21,6 +21,15 @@ const D6_SKIN_TEXTURE_PATH = '/public/assets/d6skin.png';
 const textureLoader = new THREE.TextureLoader();
 const textureCache = new Map();
 
+function tagSharedTexture(texture) {
+  if (!texture) return texture;
+  texture.userData = {
+    ...(texture.userData || {}),
+    persistentSharedTexture: true,
+  };
+  return texture;
+}
+
 const DIE_UV_EXPORTS = {
   6: {
     dieId: null,
@@ -90,7 +99,7 @@ const DIE_UV_EXPORTS = {
 function getTexture(path) {
   if (!path) return null;
   if (!textureCache.has(path)) {
-    const texture = textureLoader.load(path);
+    const texture = tagSharedTexture(textureLoader.load(path));
     texture.colorSpace = THREE.SRGBColorSpace;
     textureCache.set(path, texture);
   }
@@ -120,7 +129,7 @@ function createDebugGroundTexture() {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(1, 1);
-  return texture;
+  return tagSharedTexture(texture);
 }
 
 const DEBUG_GROUND_TEXTURE = createDebugGroundTexture();
@@ -1150,6 +1159,57 @@ function createSceneForCanvas(canvas, sides) {
   };
 }
 
+function disposeMaterial(material) {
+  if (!material) return;
+  const materials = Array.isArray(material) ? material : [material];
+  materials.forEach((entry) => {
+    if (!entry) return;
+    const textureKeys = [
+      'map',
+      'alphaMap',
+      'aoMap',
+      'bumpMap',
+      'displacementMap',
+      'emissiveMap',
+      'envMap',
+      'lightMap',
+      'metalnessMap',
+      'normalMap',
+      'roughnessMap',
+    ];
+    textureKeys.forEach((key) => {
+      const texture = entry[key];
+      if (texture && texture.userData?.persistentSharedTexture !== true) {
+        texture.dispose();
+      }
+    });
+    entry.dispose();
+  });
+}
+
+function disposeObject3D(root) {
+  if (!root) return;
+  root.traverse((node) => {
+    if (node.geometry) node.geometry.dispose();
+    if (node.material) disposeMaterial(node.material);
+  });
+}
+
+function destroySceneForCanvas(visual) {
+  if (!visual) return;
+  if (visual.scene) {
+    disposeObject3D(visual.scene);
+    visual.scene.clear();
+  }
+  if (visual.renderer) {
+    if (visual.renderer.renderLists) visual.renderer.renderLists.dispose();
+    visual.renderer.dispose();
+    if (typeof visual.renderer.forceContextLoss === 'function') {
+      visual.renderer.forceContextLoss();
+    }
+  }
+}
+
 function resizeRendererToDisplaySize(visual) {
   const canvas = visual.renderer.domElement;
   const width = canvas.clientWidth || canvas.width;
@@ -1192,4 +1252,5 @@ export {
   getCurrentRollValue,
   resizeRendererToDisplaySize,
   syncCameraToDie,
+  destroySceneForCanvas,
 };
