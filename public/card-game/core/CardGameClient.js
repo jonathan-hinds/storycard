@@ -967,6 +967,45 @@ export class CardGameClient {
     });
   }
 
+  playTransientSpellReveal({ cardId, color = 0x000000, owner = 'player', catalogCard = null, durationMs = 1600 } = {}) {
+    if (!catalogCard) return;
+    const faceTexture = createCardLabelTexture(catalogCard, {
+      backgroundImagePath: getDefaultCardBackgroundImagePath(catalogCard.cardKind),
+    });
+    const revealCard = CardMeshFactory.createCard({
+      id: `${cardId || 'spell'}-reveal-${Date.now()}`,
+      width: 1.8,
+      height: 2.5,
+      thickness: 0.08,
+      cornerRadius: 0.15,
+      color,
+      faceTexture,
+    });
+    const startZ = owner === this.template.playerSide ? 2.7 : -2.1;
+    revealCard.position.set(SPELL_CENTER_POSITION.x, 0.32, startZ);
+    revealCard.rotation.set(CARD_FACE_ROTATION_X, 0, 0);
+    revealCard.userData.locked = true;
+    revealCard.renderOrder = 3;
+    this.scene.add(revealCard);
+
+    this.cardAnimations.push({
+      card: revealCard,
+      startAtMs: performance.now(),
+      durationMs: 460,
+      fromPosition: revealCard.position.clone(),
+      fromRotation: revealCard.rotation.clone(),
+      targetPosition: SPELL_CENTER_POSITION.clone(),
+      targetRotation: new THREE.Euler(CARD_FACE_ROTATION_X, 0, 0),
+      arcHeight: 0.42,
+      swirlAmplitude: 0,
+      scaleFrom: 1,
+      scaleTo: 1.03,
+      onComplete: () => {
+        window.setTimeout(() => this.scene.remove(revealCard), durationMs);
+      },
+    });
+  }
+
   resetDemo() {
     this.clearSpellRollerPanel();
     this.clearHighlights();

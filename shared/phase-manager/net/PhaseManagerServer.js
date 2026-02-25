@@ -164,8 +164,44 @@ class PhaseManagerServer {
           ...rollEntry,
           attackerSide: rollEntry.attackerId === playerId ? 'player' : 'opponent',
         })),
+        spellCastEvents: Array.isArray(match.spellCastEvents)
+          ? match.spellCastEvents.map((event) => ({
+            ...event,
+            casterSide: event.casterId === playerId ? 'player' : 'opponent',
+          }))
+          : [],
       },
     };
+  }
+
+  recordSpellCastEvents(match, playerId, previousState, nextState) {
+    if (!match || !previousState || !nextState) return;
+    if (!Array.isArray(match.spellCastEvents)) match.spellCastEvents = [];
+
+    const previousHandSpellIds = new Set(
+      (previousState.hand || [])
+        .filter((card) => card?.catalogCard?.cardKind === 'Spell')
+        .map((card) => card.id),
+    );
+
+    const nextDiscard = Array.isArray(nextState.discard) ? nextState.discard : [];
+    nextDiscard.forEach((card) => {
+      if (!card || !previousHandSpellIds.has(card.id)) return;
+      match.spellCastEvents.push({
+        id: `spell-cast-${Date.now()}-${card.id}`,
+        casterId: playerId,
+        card: {
+          id: card.id,
+          color: card.color,
+          catalogCard: card.catalogCard || null,
+        },
+        createdAt: Date.now(),
+      });
+    });
+
+    if (match.spellCastEvents.length > 24) {
+      match.spellCastEvents = match.spellCastEvents.slice(-24);
+    }
   }
 
   drawCardAtStartOfDecisionPhase(playerState) {
@@ -642,6 +678,7 @@ class PhaseManagerServer {
         commitCompletedPlayers: new Set(),
         commitAnimationCompletedPlayers: new Set(),
         commitAllRolledAt: null,
+        spellCastEvents: [],
         createdAt: Date.now(),
       };
       this.phaseMatches.set(matchId, match);
@@ -690,6 +727,8 @@ class PhaseManagerServer {
       return { error: validated.error, statusCode: 400 };
     }
 
+    this.recordSpellCastEvents(match, playerId, playerState, validated);
+
     playerState.hand = validated.hand;
     playerState.board = validated.board;
     playerState.discard = validated.discard;
@@ -726,6 +765,8 @@ class PhaseManagerServer {
     if (validated.error) {
       return { error: validated.error, statusCode: 400 };
     }
+
+    this.recordSpellCastEvents(match, playerId, playerState, validated);
 
     playerState.hand = validated.hand;
     playerState.board = validated.board;
