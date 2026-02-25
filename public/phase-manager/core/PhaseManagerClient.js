@@ -72,6 +72,9 @@ export class PhaseManagerClient {
 
   handleWindowResize() {
     this.positionUpkeepDisplay();
+    window.requestAnimationFrame(() => {
+      this.positionUpkeepDisplay();
+    });
   }
 
   async postJson(url, body) {
