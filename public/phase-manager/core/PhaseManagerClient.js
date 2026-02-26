@@ -59,15 +59,20 @@ export class PhaseManagerClient {
     this.upkeepDisplay = null;
     this.readyButtonDisplay = null;
     this.upkeepCounterPosition = { ...DEFAULT_UPKEEP_POSITION };
-    this.upkeepCounterScale = 0.76;
-    this.upkeepPosition = { ...DEFAULT_READY_BUTTON_POSITION };
-    this.upkeepPanelSize = { ...DEFAULT_READY_BUTTON_PANEL_SIZE };
-    this.upkeepTextPosition = { ...DEFAULT_READY_BUTTON_TEXT_POSITION };
-    this.upkeepTextScale = DEFAULT_READY_BUTTON_TEXT_SCALE;
-    this.upkeepBackgroundAssetPath = DEFAULT_READY_BUTTON_BACKGROUND_ASSET_PATH;
-    this.upkeepBackgroundImage = null;
-    this.upkeepBackgroundCache = new Map();
-    this.availableUpkeepAssets = [];
+    this.upkeepCounterPanelSize = { ...DEFAULT_UPKEEP_PANEL_SIZE };
+    this.upkeepCounterTextPosition = { ...DEFAULT_UPKEEP_TEXT_POSITION };
+    this.upkeepCounterTextScale = DEFAULT_UPKEEP_TEXT_SCALE;
+    this.upkeepCounterBackgroundAssetPath = DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH;
+    this.upkeepCounterBackgroundImage = null;
+    this.readyButtonPosition = { ...DEFAULT_READY_BUTTON_POSITION };
+    this.readyButtonPanelSize = { ...DEFAULT_READY_BUTTON_PANEL_SIZE };
+    this.readyButtonTextPosition = { ...DEFAULT_READY_BUTTON_TEXT_POSITION };
+    this.readyButtonTextScale = DEFAULT_READY_BUTTON_TEXT_SCALE;
+    this.readyButtonBackgroundAssetPath = DEFAULT_READY_BUTTON_BACKGROUND_ASSET_PATH;
+    this.readyButtonBackgroundImage = null;
+    this.backgroundAssetCache = new Map();
+    this.availableBackgroundAssets = [];
+    this.boundControlListeners = [];
     this.playedRemoteSpellResolutionIds = new Set();
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
@@ -75,11 +80,13 @@ export class PhaseManagerClient {
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
     this.readyUp = this.readyUp.bind(this);
     this.resetMatch = this.resetMatch.bind(this);
-    this.handleUpkeepPositionInput = this.handleUpkeepPositionInput.bind(this);
+    this.handleReadyPositionInput = this.handleReadyPositionInput.bind(this);
+    this.handleReadyStyleInput = this.handleReadyStyleInput.bind(this);
     this.handleUpkeepCounterInput = this.handleUpkeepCounterInput.bind(this);
     this.handleUpkeepPanelStyleInput = this.handleUpkeepPanelStyleInput.bind(this);
+    this.handleReadyBackgroundChange = this.handleReadyBackgroundChange.bind(this);
     this.handleUpkeepBackgroundChange = this.handleUpkeepBackgroundChange.bind(this);
-    this.exportUpkeepPosition = this.exportUpkeepPosition.bind(this);
+    this.exportLayout = this.exportLayout.bind(this);
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.handleCanvasPointerUp = this.handleCanvasPointerUp.bind(this);
   }
@@ -137,245 +144,213 @@ export class PhaseManagerClient {
   }
 
   syncUpkeepPositionInputs() {
-    const {
-      upkeepXInput,
-      upkeepYInput,
-      upkeepZInput,
-      upkeepCounterXInput,
-      upkeepCounterYInput,
-      upkeepCounterScaleInput,
-      upkeepWidthInput,
-      upkeepHeightInput,
-      upkeepTextXInput,
-      upkeepTextYInput,
-      upkeepTextSizeInput,
-      upkeepXValueEl,
-      upkeepYValueEl,
-      upkeepZValueEl,
-      upkeepCounterXValueEl,
-      upkeepCounterYValueEl,
-      upkeepCounterScaleValueEl,
-      upkeepWidthValueEl,
-      upkeepHeightValueEl,
-      upkeepTextXValueEl,
-      upkeepTextYValueEl,
-      upkeepTextSizeValueEl,
-    } = this.elements;
     const viewport = this.getUpkeepViewportSize();
-    const xValue = this.upkeepPosition.x.toFixed(3);
-    const yValue = this.upkeepPosition.y.toFixed(3);
-    const zValue = this.upkeepPosition.z.toFixed(2);
-    const upkeepCounterXValue = this.upkeepCounterPosition.x.toFixed(3);
-    const upkeepCounterYValue = this.upkeepCounterPosition.y.toFixed(3);
-    const upkeepCounterScaleValue = this.upkeepCounterScale.toFixed(2);
-    const widthValue = this.upkeepPanelSize.width.toFixed(2);
-    const heightValue = this.upkeepPanelSize.height.toFixed(2);
-    const textXValue = this.upkeepTextPosition.x.toFixed(2);
-    const textYValue = this.upkeepTextPosition.y.toFixed(2);
-    const textSizeValue = this.upkeepTextScale.toFixed(2);
-    if (upkeepXInput) upkeepXInput.value = xValue;
-    if (upkeepYInput) upkeepYInput.value = yValue;
-    if (upkeepZInput) upkeepZInput.value = zValue;
-    if (upkeepCounterXInput) upkeepCounterXInput.value = upkeepCounterXValue;
-    if (upkeepCounterYInput) upkeepCounterYInput.value = upkeepCounterYValue;
-    if (upkeepCounterScaleInput) upkeepCounterScaleInput.value = upkeepCounterScaleValue;
-    if (upkeepWidthInput) upkeepWidthInput.value = widthValue;
-    if (upkeepHeightInput) upkeepHeightInput.value = heightValue;
-    if (upkeepTextXInput) upkeepTextXInput.value = textXValue;
-    if (upkeepTextYInput) upkeepTextYInput.value = textYValue;
-    if (upkeepTextSizeInput) upkeepTextSizeInput.value = textSizeValue;
-    if (upkeepXValueEl) upkeepXValueEl.textContent = `${xValue} (${Math.round(this.upkeepPosition.x * viewport.width)}px)`;
-    if (upkeepYValueEl) upkeepYValueEl.textContent = `${yValue} (${Math.round(this.upkeepPosition.y * viewport.height)}px)`;
-    if (upkeepZValueEl) upkeepZValueEl.textContent = zValue;
-    if (upkeepCounterXValueEl) upkeepCounterXValueEl.textContent = `${upkeepCounterXValue} (${Math.round(this.upkeepCounterPosition.x * viewport.width)}px)`;
-    if (upkeepCounterYValueEl) upkeepCounterYValueEl.textContent = `${upkeepCounterYValue} (${Math.round(this.upkeepCounterPosition.y * viewport.height)}px)`;
-    if (upkeepCounterScaleValueEl) upkeepCounterScaleValueEl.textContent = upkeepCounterScaleValue;
-    if (upkeepWidthValueEl) upkeepWidthValueEl.textContent = widthValue;
-    if (upkeepHeightValueEl) upkeepHeightValueEl.textContent = heightValue;
-    if (upkeepTextXValueEl) upkeepTextXValueEl.textContent = textXValue;
-    if (upkeepTextYValueEl) upkeepTextYValueEl.textContent = textYValue;
-    if (upkeepTextSizeValueEl) upkeepTextSizeValueEl.textContent = textSizeValue;
+    this.syncControlPair('readyX', this.readyButtonPosition.x, 3, `${Math.round(this.readyButtonPosition.x * viewport.width)}px`);
+    this.syncControlPair('readyY', this.readyButtonPosition.y, 3, `${Math.round(this.readyButtonPosition.y * viewport.height)}px`);
+    this.syncControlPair('readyZ', this.readyButtonPosition.z, 2);
+    this.syncControlPair('readyWidth', this.readyButtonPanelSize.width, 2);
+    this.syncControlPair('readyHeight', this.readyButtonPanelSize.height, 2);
+    this.syncControlPair('readyTextX', this.readyButtonTextPosition.x, 2);
+    this.syncControlPair('readyTextY', this.readyButtonTextPosition.y, 2);
+    this.syncControlPair('readyTextSize', this.readyButtonTextScale, 2);
+
+    this.syncControlPair('upkeepX', this.upkeepCounterPosition.x, 3, `${Math.round(this.upkeepCounterPosition.x * viewport.width)}px`);
+    this.syncControlPair('upkeepY', this.upkeepCounterPosition.y, 3, `${Math.round(this.upkeepCounterPosition.y * viewport.height)}px`);
+    this.syncControlPair('upkeepZ', this.upkeepCounterPosition.z, 2);
+    this.syncControlPair('upkeepWidth', this.upkeepCounterPanelSize.width, 2);
+    this.syncControlPair('upkeepHeight', this.upkeepCounterPanelSize.height, 2);
+    this.syncControlPair('upkeepTextX', this.upkeepCounterTextPosition.x, 2);
+    this.syncControlPair('upkeepTextY', this.upkeepCounterTextPosition.y, 2);
+    this.syncControlPair('upkeepTextSize', this.upkeepCounterTextScale, 2);
   }
 
-  handleUpkeepPositionInput() {
-    const { upkeepXInput, upkeepYInput, upkeepZInput } = this.elements;
-    this.upkeepPosition = {
-      x: THREE.MathUtils.clamp(this.parseUpkeepPositionValue(upkeepXInput?.value, this.upkeepPosition.x), 0, 1),
-      y: THREE.MathUtils.clamp(this.parseUpkeepPositionValue(upkeepYInput?.value, this.upkeepPosition.y), 0, 1),
-      z: this.parseUpkeepPositionValue(upkeepZInput?.value, this.upkeepPosition.z),
+  syncControlPair(prefix, value, decimals = 2, suffix = '') {
+    const valueText = Number(value).toFixed(decimals);
+    const rangeInput = this.elements[`${prefix}Input`];
+    const numberInput = this.elements[`${prefix}NumberInput`];
+    const valueEl = this.elements[`${prefix}ValueEl`];
+    if (rangeInput) rangeInput.value = valueText;
+    if (numberInput) numberInput.value = valueText;
+    if (valueEl) valueEl.textContent = suffix ? `${valueText} (${suffix})` : valueText;
+  }
+
+  getControlValue(prefix, fallback) {
+    return this.parseUpkeepPositionValue(this.elements[`${prefix}Input`]?.value, fallback);
+  }
+
+  handleReadyPositionInput() {
+    this.readyButtonPosition = {
+      x: THREE.MathUtils.clamp(this.getControlValue('readyX', this.readyButtonPosition.x), 0, 1),
+      y: THREE.MathUtils.clamp(this.getControlValue('readyY', this.readyButtonPosition.y), 0, 1),
+      z: this.getControlValue('readyZ', this.readyButtonPosition.z),
     };
     this.syncUpkeepPositionInputs();
     this.positionReadyButtonDisplay();
   }
 
-  handleUpkeepCounterInput() {
-    const { upkeepCounterXInput, upkeepCounterYInput, upkeepCounterScaleInput } = this.elements;
-    this.upkeepCounterPosition = {
-      x: THREE.MathUtils.clamp(this.parseUpkeepPositionValue(upkeepCounterXInput?.value, this.upkeepCounterPosition.x), 0, 1),
-      y: THREE.MathUtils.clamp(this.parseUpkeepPositionValue(upkeepCounterYInput?.value, this.upkeepCounterPosition.y), 0, 1),
-      z: this.upkeepCounterPosition.z,
+  handleReadyStyleInput() {
+    this.readyButtonPanelSize = {
+      width: this.getControlValue('readyWidth', this.readyButtonPanelSize.width),
+      height: this.getControlValue('readyHeight', this.readyButtonPanelSize.height),
     };
-    this.upkeepCounterScale = THREE.MathUtils.clamp(
-      this.parseUpkeepPositionValue(upkeepCounterScaleInput?.value, this.upkeepCounterScale),
-      0.2,
-      4,
-    );
+    this.readyButtonTextPosition = {
+      x: this.getControlValue('readyTextX', this.readyButtonTextPosition.x),
+      y: this.getControlValue('readyTextY', this.readyButtonTextPosition.y),
+    };
+    this.readyButtonTextScale = this.getControlValue('readyTextSize', this.readyButtonTextScale);
+    this.syncUpkeepPositionInputs();
+    this.positionReadyButtonDisplay();
+    this.drawReadyButtonDisplay();
+  }
+
+  handleUpkeepCounterInput() {
+    this.upkeepCounterPosition = {
+      x: THREE.MathUtils.clamp(this.getControlValue('upkeepX', this.upkeepCounterPosition.x), 0, 1),
+      y: THREE.MathUtils.clamp(this.getControlValue('upkeepY', this.upkeepCounterPosition.y), 0, 1),
+      z: this.getControlValue('upkeepZ', this.upkeepCounterPosition.z),
+    };
     this.syncUpkeepPositionInputs();
     this.positionUpkeepDisplay();
   }
 
   handleUpkeepPanelStyleInput() {
-    const { upkeepWidthInput, upkeepHeightInput, upkeepTextXInput, upkeepTextYInput, upkeepTextSizeInput } = this.elements;
-    this.upkeepPanelSize = {
-      width: this.parseUpkeepPositionValue(upkeepWidthInput?.value, this.upkeepPanelSize.width),
-      height: this.parseUpkeepPositionValue(upkeepHeightInput?.value, this.upkeepPanelSize.height),
+    this.upkeepCounterPanelSize = {
+      width: this.getControlValue('upkeepWidth', this.upkeepCounterPanelSize.width),
+      height: this.getControlValue('upkeepHeight', this.upkeepCounterPanelSize.height),
     };
-    this.upkeepTextPosition = {
-      x: this.parseUpkeepPositionValue(upkeepTextXInput?.value, this.upkeepTextPosition.x),
-      y: this.parseUpkeepPositionValue(upkeepTextYInput?.value, this.upkeepTextPosition.y),
+    this.upkeepCounterTextPosition = {
+      x: this.getControlValue('upkeepTextX', this.upkeepCounterTextPosition.x),
+      y: this.getControlValue('upkeepTextY', this.upkeepCounterTextPosition.y),
     };
-    this.upkeepTextScale = this.parseUpkeepPositionValue(upkeepTextSizeInput?.value, this.upkeepTextScale);
+    this.upkeepCounterTextScale = this.getControlValue('upkeepTextSize', this.upkeepCounterTextScale);
     this.syncUpkeepPositionInputs();
-    this.positionReadyButtonDisplay();
-    if (this.readyButtonDisplay) {
-      this.drawReadyButtonDisplay();
-    }
+    this.positionUpkeepDisplay();
+    this.drawUpkeepDisplay(this.upkeepDisplay?.value ?? 1, this.match?.upkeepTotal ?? 10);
   }
 
   async fetchUpkeepAssets() {
     try {
       const payload = await this.getJson('/api/assets');
-      this.availableUpkeepAssets = Array.isArray(payload?.assets) ? payload.assets : [];
+      this.availableBackgroundAssets = Array.isArray(payload?.assets) ? payload.assets : [];
     } catch (error) {
-      this.availableUpkeepAssets = [];
+      this.availableBackgroundAssets = [];
     }
     this.syncUpkeepBackgroundOptions();
   }
 
   syncUpkeepBackgroundOptions() {
-    const { upkeepBackgroundSelect } = this.elements;
-    if (!upkeepBackgroundSelect) return;
-
+    const selects = [this.elements.readyBackgroundSelect, this.elements.upkeepBackgroundSelect].filter(Boolean);
     const optionMarkup = ['<option value="">Default generated panel</option>']
-      .concat(this.availableUpkeepAssets.map((asset) => `<option value="${asset.path}">${asset.name}</option>`))
+      .concat(this.availableBackgroundAssets.map((asset) => `<option value="${asset.path}">${asset.name}</option>`))
       .join('');
-    upkeepBackgroundSelect.innerHTML = optionMarkup;
-    upkeepBackgroundSelect.value = this.upkeepBackgroundAssetPath;
+    selects.forEach((select) => {
+      select.innerHTML = optionMarkup;
+    });
+    if (this.elements.readyBackgroundSelect) this.elements.readyBackgroundSelect.value = this.readyButtonBackgroundAssetPath;
+    if (this.elements.upkeepBackgroundSelect) this.elements.upkeepBackgroundSelect.value = this.upkeepCounterBackgroundAssetPath;
   }
 
-  async loadUpkeepBackground(path) {
-    if (!path) {
-      this.upkeepBackgroundImage = null;
-      return;
-    }
-    if (this.upkeepBackgroundCache.has(path)) {
-      this.upkeepBackgroundImage = this.upkeepBackgroundCache.get(path);
-      return;
-    }
+  async loadBackgroundAsset(path) {
+    if (!path) return null;
+    if (this.backgroundAssetCache.has(path)) return this.backgroundAssetCache.get(path);
     const image = await new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('Failed to load upkeep background asset'));
+      img.onerror = () => reject(new Error('Failed to load background asset'));
       img.src = path;
     });
-    this.upkeepBackgroundCache.set(path, image);
-    this.upkeepBackgroundImage = image;
+    this.backgroundAssetCache.set(path, image);
+    return image;
   }
 
-  async preloadBackgroundAsset(path) {
-    if (!path || this.upkeepBackgroundCache.has(path)) return;
-    const image = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('Failed to preload upkeep background asset'));
-      img.src = path;
-    });
-    this.upkeepBackgroundCache.set(path, image);
+  async handleReadyBackgroundChange() {
+    const selectedPath = this.elements.readyBackgroundSelect?.value || '';
+    this.readyButtonBackgroundAssetPath = selectedPath;
+    this.readyButtonBackgroundImage = await this.loadBackgroundAsset(selectedPath).catch(() => null);
+    this.drawReadyButtonDisplay();
   }
 
   async handleUpkeepBackgroundChange() {
     const selectedPath = this.elements.upkeepBackgroundSelect?.value || '';
-    this.upkeepBackgroundAssetPath = selectedPath;
-    try {
-      await this.loadUpkeepBackground(selectedPath);
-    } catch (error) {
-      this.upkeepBackgroundImage = null;
-    }
-    if (this.readyButtonDisplay) {
-      this.drawReadyButtonDisplay();
-    }
+    this.upkeepCounterBackgroundAssetPath = selectedPath;
+    this.upkeepCounterBackgroundImage = await this.loadBackgroundAsset(selectedPath).catch(() => null);
+    this.drawUpkeepDisplay(this.upkeepDisplay?.value ?? 1, this.match?.upkeepTotal ?? 10);
   }
 
-  exportUpkeepPosition() {
-    const { upkeepExportOutputEl } = this.elements;
+  exportLayout() {
+    const { layoutExportOutputEl } = this.elements;
     const serialized = JSON.stringify({
-      position: this.upkeepPosition,
-      panelSize: this.upkeepPanelSize,
-      textPosition: this.upkeepTextPosition,
-      textScale: this.upkeepTextScale,
-      backgroundAssetPath: this.upkeepBackgroundAssetPath,
-      upkeepCounter: {
+      readyUp: {
+        backgroundAssetPath: this.readyButtonBackgroundAssetPath,
+        position: this.readyButtonPosition,
+        panelSize: this.readyButtonPanelSize,
+        textPosition: this.readyButtonTextPosition,
+        textScale: this.readyButtonTextScale,
+      },
+      upkeep: {
+        backgroundAssetPath: this.upkeepCounterBackgroundAssetPath,
         position: this.upkeepCounterPosition,
-        scale: this.upkeepCounterScale,
+        panelSize: this.upkeepCounterPanelSize,
+        textPosition: this.upkeepCounterTextPosition,
+        textScale: this.upkeepCounterTextScale,
       },
     });
-    if (upkeepExportOutputEl) upkeepExportOutputEl.textContent = serialized;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(serialized).catch(() => {});
-    }
+    if (layoutExportOutputEl) layoutExportOutputEl.textContent = serialized;
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(serialized).catch(() => {});
+  }
+
+  bindMirroredInputs(rangeInput, numberInput, callback) {
+    if (!rangeInput || !numberInput) return;
+    const fromRange = () => {
+      numberInput.value = rangeInput.value;
+      callback();
+    };
+    const fromNumber = () => {
+      rangeInput.value = numberInput.value;
+      callback();
+    };
+    rangeInput.addEventListener('input', fromRange);
+    numberInput.addEventListener('input', fromNumber);
+    this.boundControlListeners.push(() => {
+      rangeInput.removeEventListener('input', fromRange);
+      numberInput.removeEventListener('input', fromNumber);
+    });
   }
 
   start() {
-    const {
-      canvas,
-      matchmakingBtn,
-      readyBtn,
-      resetBtn,
-      upkeepXInput,
-      upkeepYInput,
-      upkeepZInput,
-      upkeepCounterXInput,
-      upkeepCounterYInput,
-      upkeepCounterScaleInput,
-      upkeepWidthInput,
-      upkeepHeightInput,
-      upkeepTextXInput,
-      upkeepTextYInput,
-      upkeepTextSizeInput,
-      upkeepBackgroundSelect,
-      upkeepExportBtn,
-    } = this.elements;
+    const { canvas, matchmakingBtn, readyBtn, resetBtn, layoutExportBtn, readyBackgroundSelect, upkeepBackgroundSelect } = this.elements;
     matchmakingBtn.addEventListener('click', this.beginMatchmaking);
     readyBtn.addEventListener('click', this.readyUp);
     readyBtn.hidden = true;
     canvas?.addEventListener('pointerup', this.handleCanvasPointerUp);
     resetBtn.addEventListener('click', this.resetMatch);
-    upkeepXInput?.addEventListener('input', this.handleUpkeepPositionInput);
-    upkeepYInput?.addEventListener('input', this.handleUpkeepPositionInput);
-    upkeepZInput?.addEventListener('input', this.handleUpkeepPositionInput);
-    upkeepCounterXInput?.addEventListener('input', this.handleUpkeepCounterInput);
-    upkeepCounterYInput?.addEventListener('input', this.handleUpkeepCounterInput);
-    upkeepCounterScaleInput?.addEventListener('input', this.handleUpkeepCounterInput);
-    upkeepWidthInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
-    upkeepHeightInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
-    upkeepTextXInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
-    upkeepTextYInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
-    upkeepTextSizeInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
+
+    this.bindMirroredInputs(this.elements.readyXInput, this.elements.readyXNumberInput, this.handleReadyPositionInput);
+    this.bindMirroredInputs(this.elements.readyYInput, this.elements.readyYNumberInput, this.handleReadyPositionInput);
+    this.bindMirroredInputs(this.elements.readyZInput, this.elements.readyZNumberInput, this.handleReadyPositionInput);
+    this.bindMirroredInputs(this.elements.readyWidthInput, this.elements.readyWidthNumberInput, this.handleReadyStyleInput);
+    this.bindMirroredInputs(this.elements.readyHeightInput, this.elements.readyHeightNumberInput, this.handleReadyStyleInput);
+    this.bindMirroredInputs(this.elements.readyTextXInput, this.elements.readyTextXNumberInput, this.handleReadyStyleInput);
+    this.bindMirroredInputs(this.elements.readyTextYInput, this.elements.readyTextYNumberInput, this.handleReadyStyleInput);
+    this.bindMirroredInputs(this.elements.readyTextSizeInput, this.elements.readyTextSizeNumberInput, this.handleReadyStyleInput);
+
+    this.bindMirroredInputs(this.elements.upkeepXInput, this.elements.upkeepXNumberInput, this.handleUpkeepCounterInput);
+    this.bindMirroredInputs(this.elements.upkeepYInput, this.elements.upkeepYNumberInput, this.handleUpkeepCounterInput);
+    this.bindMirroredInputs(this.elements.upkeepZInput, this.elements.upkeepZNumberInput, this.handleUpkeepCounterInput);
+    this.bindMirroredInputs(this.elements.upkeepWidthInput, this.elements.upkeepWidthNumberInput, this.handleUpkeepPanelStyleInput);
+    this.bindMirroredInputs(this.elements.upkeepHeightInput, this.elements.upkeepHeightNumberInput, this.handleUpkeepPanelStyleInput);
+    this.bindMirroredInputs(this.elements.upkeepTextXInput, this.elements.upkeepTextXNumberInput, this.handleUpkeepPanelStyleInput);
+    this.bindMirroredInputs(this.elements.upkeepTextYInput, this.elements.upkeepTextYNumberInput, this.handleUpkeepPanelStyleInput);
+    this.bindMirroredInputs(this.elements.upkeepTextSizeInput, this.elements.upkeepTextSizeNumberInput, this.handleUpkeepPanelStyleInput);
+
+    readyBackgroundSelect?.addEventListener('change', this.handleReadyBackgroundChange);
     upkeepBackgroundSelect?.addEventListener('change', this.handleUpkeepBackgroundChange);
-    upkeepExportBtn?.addEventListener('click', this.exportUpkeepPosition);
+    layoutExportBtn?.addEventListener('click', this.exportLayout);
     window.addEventListener('resize', this.handleWindowResize);
     this.syncUpkeepPositionInputs();
     this.syncUpkeepBackgroundOptions();
-    this.preloadBackgroundAsset(DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH)
-      .then(() => {
-        if (this.upkeepDisplay?.value !== null) {
-          this.drawUpkeepDisplay(this.upkeepDisplay.value);
-        }
-      })
-      .catch(() => {});
-    this.loadUpkeepBackground(this.upkeepBackgroundAssetPath).catch(() => {
-      this.upkeepBackgroundImage = null;
-    });
+    this.loadBackgroundAsset(DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH).then((img) => { this.upkeepCounterBackgroundImage = img; }).catch(() => {});
+    this.loadBackgroundAsset(DEFAULT_READY_BUTTON_BACKGROUND_ASSET_PATH).then((img) => { this.readyButtonBackgroundImage = img; }).catch(() => {});
     this.fetchUpkeepAssets();
     this.renderMatch();
     this.matchmakingPollTimer = window.setInterval(() => this.pollMatchmakingStatus(), this.options.pollIntervalMs);
@@ -383,43 +358,17 @@ export class PhaseManagerClient {
   }
 
   destroy() {
-    const {
-      canvas,
-      matchmakingBtn,
-      readyBtn,
-      resetBtn,
-      upkeepXInput,
-      upkeepYInput,
-      upkeepZInput,
-      upkeepCounterXInput,
-      upkeepCounterYInput,
-      upkeepCounterScaleInput,
-      upkeepWidthInput,
-      upkeepHeightInput,
-      upkeepTextXInput,
-      upkeepTextYInput,
-      upkeepTextSizeInput,
-      upkeepBackgroundSelect,
-      upkeepExportBtn,
-    } = this.elements;
+    const { canvas, matchmakingBtn, readyBtn, resetBtn, layoutExportBtn, readyBackgroundSelect, upkeepBackgroundSelect } = this.elements;
     this.stopMatchmakingPolling();
     matchmakingBtn.removeEventListener('click', this.beginMatchmaking);
     readyBtn.removeEventListener('click', this.readyUp);
     canvas?.removeEventListener('pointerup', this.handleCanvasPointerUp);
     resetBtn.removeEventListener('click', this.resetMatch);
-    upkeepXInput?.removeEventListener('input', this.handleUpkeepPositionInput);
-    upkeepYInput?.removeEventListener('input', this.handleUpkeepPositionInput);
-    upkeepZInput?.removeEventListener('input', this.handleUpkeepPositionInput);
-    upkeepCounterXInput?.removeEventListener('input', this.handleUpkeepCounterInput);
-    upkeepCounterYInput?.removeEventListener('input', this.handleUpkeepCounterInput);
-    upkeepCounterScaleInput?.removeEventListener('input', this.handleUpkeepCounterInput);
-    upkeepWidthInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
-    upkeepHeightInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
-    upkeepTextXInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
-    upkeepTextYInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
-    upkeepTextSizeInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
+    readyBackgroundSelect?.removeEventListener('change', this.handleReadyBackgroundChange);
     upkeepBackgroundSelect?.removeEventListener('change', this.handleUpkeepBackgroundChange);
-    upkeepExportBtn?.removeEventListener('click', this.exportUpkeepPosition);
+    layoutExportBtn?.removeEventListener('click', this.exportLayout);
+    this.boundControlListeners.forEach((unbind) => unbind());
+    this.boundControlListeners = [];
     window.removeEventListener('resize', this.handleWindowResize);
     if (this.client) {
       this.client.destroy();
@@ -485,6 +434,7 @@ export class PhaseManagerClient {
       textMaterial,
       textMesh,
       value: null,
+      total: null,
     };
   }
 
@@ -509,8 +459,10 @@ export class PhaseManagerClient {
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
     const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
-    const panelWorldWidth = DEFAULT_UPKEEP_PANEL_SIZE.width * scaleFactor * this.upkeepCounterScale;
-    const panelWorldHeight = DEFAULT_UPKEEP_PANEL_SIZE.height * scaleFactor * this.upkeepCounterScale;
+    const widthScale = this.upkeepCounterPanelSize.width / DEFAULT_UPKEEP_PANEL_SIZE.width;
+    const heightScale = this.upkeepCounterPanelSize.height / DEFAULT_UPKEEP_PANEL_SIZE.height;
+    const panelWorldWidth = DEFAULT_UPKEEP_PANEL_SIZE.width * scaleFactor * widthScale;
+    const panelWorldHeight = DEFAULT_UPKEEP_PANEL_SIZE.height * scaleFactor * heightScale;
     const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
     const panelHalfNormalizedY = panelWorldHeight / Math.max(currentFrustum.halfHeight * 2, 0.001);
     const targetNormalizedX = THREE.MathUtils.clamp((this.upkeepCounterPosition.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
@@ -518,17 +470,17 @@ export class PhaseManagerClient {
     const x = targetNormalizedX * currentFrustum.halfWidth;
     const y = targetNormalizedY * currentFrustum.halfHeight;
     panelMesh.position.set(x, y, this.upkeepCounterPosition.z);
-    panelMesh.scale.set(scaleFactor * this.upkeepCounterScale, scaleFactor * this.upkeepCounterScale, 1);
+    panelMesh.scale.set(scaleFactor * widthScale, scaleFactor * heightScale, 1);
     panelMesh.rotation.set(0, 0, 0);
 
-    const textOffsetX = panelWorldWidth * DEFAULT_UPKEEP_TEXT_POSITION.x;
-    const textOffsetY = panelWorldHeight * DEFAULT_UPKEEP_TEXT_POSITION.y;
+    const textOffsetX = panelWorldWidth * this.upkeepCounterTextPosition.x;
+    const textOffsetY = panelWorldHeight * this.upkeepCounterTextPosition.y;
     textMesh.position.set(x + textOffsetX, y + textOffsetY, this.upkeepCounterPosition.z + 0.001);
-    textMesh.scale.set(scaleFactor * this.upkeepCounterScale, scaleFactor * this.upkeepCounterScale, 1);
+    textMesh.scale.set(scaleFactor, scaleFactor, 1);
     textMesh.rotation.set(0, 0, 0);
   }
 
-  drawUpkeepDisplay(upkeepValue) {
+  drawUpkeepDisplay(upkeepValue, upkeepTotal = 10) {
     if (!this.upkeepDisplay) return;
     const {
       panelCanvas,
@@ -543,7 +495,7 @@ export class PhaseManagerClient {
     panelCtx.clearRect(0, 0, panelCanvas.width, panelCanvas.height);
     textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
 
-    const upkeepBackground = this.upkeepBackgroundCache.get(DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH) || null;
+    const upkeepBackground = this.upkeepCounterBackgroundImage || this.backgroundAssetCache.get(DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH) || null;
     if (upkeepBackground) {
       panelCtx.drawImage(upkeepBackground, 0, 0, panelCanvas.width, panelCanvas.height);
     } else {
@@ -563,7 +515,7 @@ export class PhaseManagerClient {
       panelCtx.stroke();
     }
 
-    textCtx.font = `900 ${Math.round(126 * DEFAULT_UPKEEP_TEXT_SCALE)}px Arial, sans-serif`;
+    textCtx.font = `900 ${Math.round(126 * this.upkeepCounterTextScale)}px Arial, sans-serif`;
     textCtx.textAlign = 'center';
     textCtx.textBaseline = 'middle';
     textCtx.lineJoin = 'round';
@@ -571,7 +523,7 @@ export class PhaseManagerClient {
     textCtx.strokeStyle = '#000000';
     textCtx.fillStyle = '#ffffff';
 
-    const text = `${upkeepValue}`;
+    const text = `Essence: ${upkeepValue}/${upkeepTotal}`;
     const x = textCanvas.width * 0.5;
     const y = textCanvas.height * 0.5;
     textCtx.strokeText(text, x, y);
@@ -580,6 +532,7 @@ export class PhaseManagerClient {
     panelTexture.needsUpdate = true;
     textTexture.needsUpdate = true;
     this.upkeepDisplay.value = upkeepValue;
+    this.upkeepDisplay.total = upkeepTotal;
   }
 
   ensureReadyButtonDisplay() {
@@ -640,27 +593,27 @@ export class PhaseManagerClient {
   positionReadyButtonDisplay() {
     if (!this.readyButtonDisplay || !this.client?.camera) return;
     const { panelMesh, textMesh } = this.readyButtonDisplay;
-    const depth = Math.max(Math.abs(this.upkeepPosition.z), 0.001);
+    const depth = Math.max(Math.abs(this.readyButtonPosition.z), 0.001);
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
     const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
-    const widthScale = this.upkeepPanelSize.width / DEFAULT_READY_BUTTON_PANEL_SIZE.width;
-    const heightScale = this.upkeepPanelSize.height / DEFAULT_READY_BUTTON_PANEL_SIZE.height;
+    const widthScale = this.readyButtonPanelSize.width / DEFAULT_READY_BUTTON_PANEL_SIZE.width;
+    const heightScale = this.readyButtonPanelSize.height / DEFAULT_READY_BUTTON_PANEL_SIZE.height;
     const panelWorldWidth = DEFAULT_READY_BUTTON_PANEL_SIZE.width * scaleFactor * widthScale;
     const panelWorldHeight = DEFAULT_READY_BUTTON_PANEL_SIZE.height * scaleFactor * heightScale;
     const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
     const panelHalfNormalizedY = panelWorldHeight / Math.max(currentFrustum.halfHeight * 2, 0.001);
-    const targetNormalizedX = THREE.MathUtils.clamp((this.upkeepPosition.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
-    const targetNormalizedY = THREE.MathUtils.clamp(1 - (this.upkeepPosition.y * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
+    const targetNormalizedX = THREE.MathUtils.clamp((this.readyButtonPosition.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
+    const targetNormalizedY = THREE.MathUtils.clamp(1 - (this.readyButtonPosition.y * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
     const x = targetNormalizedX * currentFrustum.halfWidth;
     const y = targetNormalizedY * currentFrustum.halfHeight;
-    panelMesh.position.set(x, y, this.upkeepPosition.z);
+    panelMesh.position.set(x, y, this.readyButtonPosition.z);
     panelMesh.scale.set(scaleFactor * widthScale, scaleFactor * heightScale, 1);
     panelMesh.rotation.set(0, 0, 0);
 
-    const textOffsetX = panelWorldWidth * this.upkeepTextPosition.x;
-    const textOffsetY = panelWorldHeight * this.upkeepTextPosition.y;
-    textMesh.position.set(x + textOffsetX, y + textOffsetY, this.upkeepPosition.z + 0.001);
+    const textOffsetX = panelWorldWidth * this.readyButtonTextPosition.x;
+    const textOffsetY = panelWorldHeight * this.readyButtonTextPosition.y;
+    textMesh.position.set(x + textOffsetX, y + textOffsetY, this.readyButtonPosition.z + 0.001);
     textMesh.scale.set(scaleFactor, scaleFactor, 1);
     textMesh.rotation.set(0, 0, 0);
   }
@@ -680,8 +633,8 @@ export class PhaseManagerClient {
     panelCtx.clearRect(0, 0, panelCanvas.width, panelCanvas.height);
     textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
 
-    if (this.upkeepBackgroundImage) {
-      panelCtx.drawImage(this.upkeepBackgroundImage, 0, 0, panelCanvas.width, panelCanvas.height);
+    if (this.readyButtonBackgroundImage) {
+      panelCtx.drawImage(this.readyButtonBackgroundImage, 0, 0, panelCanvas.width, panelCanvas.height);
     } else {
       const panelPadding = 14;
       const panelRadius = 24;
@@ -702,7 +655,7 @@ export class PhaseManagerClient {
     const activeSpell = this.getActiveSpellResolution();
     const spellLocked = Boolean(activeSpell && activeSpell.completedAt == null);
     const canInteract = Boolean(this.match && this.match.phase === 1 && !this.match.youAreReady && !spellLocked);
-    textCtx.font = `900 ${Math.round(126 * this.upkeepTextScale)}px Arial, sans-serif`;
+    textCtx.font = `900 ${Math.round(126 * this.readyButtonTextScale)}px Arial, sans-serif`;
     textCtx.textAlign = 'center';
     textCtx.textBaseline = 'middle';
     textCtx.lineJoin = 'round';
@@ -750,10 +703,11 @@ export class PhaseManagerClient {
   syncUpkeepDisplay() {
     if (!this.client || !this.match) return;
     const upkeepValue = Number.isInteger(this.match.upkeep) ? this.match.upkeep : 1;
+    const upkeepTotal = Number.isInteger(this.match.upkeepTotal) ? this.match.upkeepTotal : 10;
     this.ensureUpkeepDisplay();
     this.positionUpkeepDisplay();
-    if (this.upkeepDisplay?.value !== upkeepValue) {
-      this.drawUpkeepDisplay(upkeepValue);
+    if (this.upkeepDisplay?.value !== upkeepValue || this.upkeepDisplay?.total !== upkeepTotal) {
+      this.drawUpkeepDisplay(upkeepValue, upkeepTotal);
     }
   }
 
