@@ -458,6 +458,27 @@ button {
     0 0 8px rgba(0, 0, 0, 0.66);
 }
 
+.target-effectiveness-badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  color: #ffffff;
+  font-size: clamp(1.15rem, 2.8vw, 1.95rem);
+  font-weight: 900;
+  line-height: 1;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  text-shadow:
+    0 2px 0 #000000,
+    0 -2px 0 #000000,
+    2px 0 0 #000000,
+    -2px 0 0 #000000,
+    0 0 8px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+  z-index: 1;
+  will-change: left, top;
+}
+
 .cards-project-layout {
   min-height: calc(100vh - 60px);
   display: grid;
