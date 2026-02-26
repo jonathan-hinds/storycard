@@ -38,11 +38,20 @@ export class DieRollerClient {
 
 
   ensureVisual(sides = 6) {
-    if (this.visual && this.visualSides === sides) return;
+    const resolvedSides = Number.isFinite(sides) ? Math.max(2, Math.floor(sides)) : 6;
+    if (this.visual && this.visualSides === resolvedSides) return;
+
     this.#disposeVisual();
-    this.visual = createSceneForCanvas(this.canvas, sides);
-    this.visualSides = sides;
-    this.#applyRenderTuning();
+
+    try {
+      this.visual = createSceneForCanvas(this.canvas, resolvedSides);
+      this.visualSides = resolvedSides;
+      this.#applyRenderTuning();
+    } catch (error) {
+      this.visual = null;
+      this.visualSides = null;
+      throw error;
+    }
   }
 
   #disposeVisual() {
@@ -91,10 +100,17 @@ export class DieRollerClient {
 
       const first = results[0];
       if (first) {
-        this.ensureVisual(first.sides);
-        this.currentRoll = first.roll;
-        this.rollQueue = [...first.roll.frames];
-        this.#ensureLoop();
+        try {
+          this.ensureVisual(first.sides);
+          this.currentRoll = first.roll;
+          this.rollQueue = [...first.roll.frames];
+          this.#ensureLoop();
+        } catch (renderError) {
+          console.warn('Die visual failed to initialize; continuing with authoritative roll result.', renderError);
+          this.currentRoll = null;
+          this.rollQueue = [];
+          this.handlers.onSettled?.({ value: first.roll?.outcome ?? null, roll: first.roll, degraded: true });
+        }
       }
 
       const payload = {

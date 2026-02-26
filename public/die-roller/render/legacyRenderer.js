@@ -1204,9 +1204,6 @@ function destroySceneForCanvas(visual) {
   if (visual.renderer) {
     if (visual.renderer.renderLists) visual.renderer.renderLists.dispose();
     visual.renderer.dispose();
-    if (typeof visual.renderer.forceContextLoss === 'function') {
-      visual.renderer.forceContextLoss();
-    }
   }
 }
 
