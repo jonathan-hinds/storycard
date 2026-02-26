@@ -1,7 +1,7 @@
 const assert = require('assert');
 const { PhaseManagerServer } = require('../shared/phase-manager');
 
-function createBoardCard({ id, slotIndex, health, ability1 }) {
+function createBoardCard({ id, slotIndex, health, ability1, type = null }) {
   return {
     id,
     slotIndex,
@@ -11,6 +11,7 @@ function createBoardCard({ id, slotIndex, health, ability1 }) {
     selectedAbilityIndex: 0,
     catalogCard: {
       health,
+      type,
       ability1,
       ability2: null,
     },
@@ -146,6 +147,23 @@ const server = new PhaseManagerServer();
 
   assert.ok(!validated.error, 'friendly targets should allow absolute board slot indexes');
   assert.equal(validated.board[0].targetSlotIndex, 0, 'friendly absolute target slot should normalize to local side index');
+}
+
+
+{
+  const healAbility = {
+    effectId: 'heal_target',
+    valueSourceType: 'fixed',
+    valueSourceFixed: 2,
+  };
+  const { match, attackerId, targetCard } = createMatchWithAttackerAbility(healAbility, 4);
+  match.cardsByPlayer.get(attackerId).board[0].catalogCard.type = 'Nature';
+  targetCard.catalogCard.type = 'Nature';
+  match.cardsByPlayer.get(attackerId).board.push(targetCard);
+
+  server.applyCommitEffects(match);
+
+  assert.equal(targetCard.catalogCard.health, 7, 'same-type creature healing should gain 1.5x bonus rounded up');
 }
 
 console.log('phase manager healing checks passed');

@@ -11,6 +11,13 @@ const DEFAULT_OPTIONS = {
 };
 
 const MAX_UPKEEP = 10;
+const TYPE_ADVANTAGE_MULTIPLIER = 1.5;
+const TYPE_ADVANTAGE_BY_ATTACKER = {
+  Fire: 'Nature',
+  Nature: 'Arcane',
+  Arcane: 'Water',
+  Water: 'Fire',
+};
 
 class PhaseManagerServer {
   constructor(options = {}) {
@@ -299,15 +306,72 @@ class PhaseManagerServer {
     return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : 0;
   }
 
-  applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue }) {
+  normalizeCardType(cardType) {
+    return typeof cardType === 'string' ? cardType.trim() : '';
+  }
+
+  applyTypeAdvantageToValue({ effectId, resolvedValue, sourceType, targetType }) {
+    const normalizedResolvedValue = Number.isFinite(resolvedValue)
+      ? Math.max(0, Math.floor(resolvedValue))
+      : 0;
+    if (normalizedResolvedValue <= 0) return normalizedResolvedValue;
+
+    const normalizedSourceType = this.normalizeCardType(sourceType);
+    const normalizedTargetType = this.normalizeCardType(targetType);
+
+    let hasAdvantage = false;
+    if (effectId === 'damage_enemy') {
+      hasAdvantage = TYPE_ADVANTAGE_BY_ATTACKER[normalizedSourceType] === normalizedTargetType;
+    } else if (effectId === 'heal_target' || effectId === 'retaliation_bonus') {
+      hasAdvantage = normalizedSourceType && normalizedSourceType === normalizedTargetType;
+    }
+
+    if (!hasAdvantage) {
+      return normalizedResolvedValue;
+    }
+
+    return Math.ceil(normalizedResolvedValue * TYPE_ADVANTAGE_MULTIPLIER);
+  }
+
+  getTargetCardForEffect({ match, casterId, targetSide, targetSlotIndex }) {
+    if (!match || !casterId || !Number.isInteger(targetSlotIndex)) return null;
+    const targetPlayerId = targetSide === 'player'
+      ? casterId
+      : match.players.find((id) => id !== casterId);
+    if (!targetPlayerId) return null;
+    const targetState = match.cardsByPlayer.get(targetPlayerId);
+    return targetState?.board?.find((card) => card.slotIndex === targetSlotIndex) || null;
+  }
+
+  resolveTypeAdjustedAbilityValue({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue, sourceType }) {
+    const targetCard = this.getTargetCardForEffect({ match, casterId, targetSide, targetSlotIndex });
+    const targetType = targetCard?.catalogCard?.type;
+    return this.applyTypeAdvantageToValue({
+      effectId,
+      resolvedValue,
+      sourceType,
+      targetType,
+    });
+  }
+
+  applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue, sourceType }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
     if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus') {
       return { executed: true, reason: 'no_effect' };
     }
 
-    const hasDamage = effectId === 'damage_enemy' && resolvedValue > 0;
-    const hasHealing = effectId === 'heal_target' && resolvedValue > 0;
-    const hasRetaliationBonus = effectId === 'retaliation_bonus' && resolvedValue > 0;
+    const adjustedResolvedValue = this.resolveTypeAdjustedAbilityValue({
+      match,
+      casterId,
+      targetSide,
+      targetSlotIndex,
+      effectId,
+      resolvedValue,
+      sourceType,
+    });
+    const hasDamage = effectId === 'damage_enemy' && adjustedResolvedValue > 0;
+    const hasHealing = effectId === 'heal_target' && adjustedResolvedValue > 0;
+    const hasRetaliationBonus = effectId === 'retaliation_bonus' && adjustedResolvedValue > 0;
     if (!hasDamage && !hasHealing && !hasRetaliationBonus) {
       return { executed: true, reason: 'no_value' };
     }
@@ -338,18 +402,18 @@ class PhaseManagerServer {
       const normalizedExistingBonus = Number.isFinite(existingBonus)
         ? Math.max(0, Math.floor(existingBonus))
         : 0;
-      defenderCard.retaliationBonus = normalizedExistingBonus + resolvedValue;
-      return { executed: true };
+      defenderCard.retaliationBonus = normalizedExistingBonus + adjustedResolvedValue;
+      return { executed: true, appliedValue: adjustedResolvedValue };
     }
 
-    const nextHealth = hasDamage ? currentHealth - resolvedValue : currentHealth + resolvedValue;
+    const nextHealth = hasDamage ? currentHealth - adjustedResolvedValue : currentHealth + adjustedResolvedValue;
     defenderCard.catalogCard.health = nextHealth;
 
     if (nextHealth < 0) {
       defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
     }
 
-    return { executed: true };
+    return { executed: true, appliedValue: adjustedResolvedValue };
   }
 
   applyRetaliationDamage({ match, attackerId, attackerSlotIndex, retaliationDamage = 0, attackDefense = 0 }) {
@@ -416,15 +480,25 @@ class PhaseManagerServer {
     const attackerState = match.cardsByPlayer.get(attackerId);
     const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
     const ability = this.getAttackAbilityForCard(attackerCard, attack.selectedAbilityIndex);
-    const resolvedValue = this.resolveAttackValue({
+    const baseResolvedValue = this.resolveAttackValue({
       ability,
       attackId: attack.id,
       commitRollsByAttackId: match.commitRollsByAttackId,
+    });
+    const resolvedValue = this.resolveTypeAdjustedAbilityValue({
+      match,
+      casterId: attackerId,
+      targetSide: attack.targetSide,
+      targetSlotIndex: attack.targetSlotIndex,
+      effectId: ability?.effectId || 'none',
+      resolvedValue: baseResolvedValue,
+      sourceType: attackerCard?.catalogCard?.type,
     });
 
     return {
       ...attack,
       effectId: ability?.effectId || 'none',
+      baseResolvedValue,
       resolvedValue,
       resolvedDamage: ability?.effectId === 'damage_enemy' ? resolvedValue : 0,
       resolvedHealing: ability?.effectId === 'heal_target' ? resolvedValue : 0,
@@ -461,8 +535,15 @@ class PhaseManagerServer {
           targetSide: attack.targetSide,
           targetSlotIndex: attack.targetSlotIndex,
           effectId: resolvedAttack.effectId,
-          resolvedValue: resolvedAttack.resolvedValue,
+          resolvedValue: resolvedAttack.baseResolvedValue,
+          sourceType: attackerCard?.catalogCard?.type,
         });
+        const executedResolvedValue = Number.isFinite(executionResult.appliedValue)
+          ? executionResult.appliedValue
+          : resolvedAttack.resolvedValue;
+        resolvedAttack.resolvedValue = executedResolvedValue;
+        resolvedAttack.resolvedDamage = resolvedAttack.effectId === 'damage_enemy' ? executedResolvedValue : 0;
+        resolvedAttack.resolvedHealing = resolvedAttack.effectId === 'heal_target' ? executedResolvedValue : 0;
 
         const retaliationResult = {
           retaliationDamage: 0,
@@ -1034,11 +1115,20 @@ class PhaseManagerServer {
     // both clients can animate/preview the same resolved value before completion.
     const spellCard = active.cardSnapshot?.catalogCard || null;
     const spellAbility = this.getAttackAbilityForCard({ catalogCard: spellCard }, active.selectedAbilityIndex);
-    const resolvedValue = this.resolveAbilityValue({
+    const baseResolvedValue = this.resolveAbilityValue({
       ability: spellAbility,
       rollValue: active.rollOutcome,
     });
     const effectId = spellAbility?.effectId || 'none';
+    const resolvedValue = this.resolveTypeAdjustedAbilityValue({
+      match,
+      casterId: playerId,
+      targetSide: active.targetSide,
+      targetSlotIndex: active.targetSlotIndex,
+      effectId,
+      resolvedValue: baseResolvedValue,
+      sourceType: spellCard?.type,
+    });
     active.effectId = effectId;
     active.resolvedValue = resolvedValue;
     active.resolvedDamage = effectId === 'damage_enemy' ? resolvedValue : 0;
@@ -1068,18 +1158,28 @@ class PhaseManagerServer {
 
     const spellCard = active.cardSnapshot?.catalogCard || null;
     const spellAbility = this.getAttackAbilityForCard({ catalogCard: spellCard }, active.selectedAbilityIndex);
-    const resolvedValue = this.resolveAbilityValue({
+    const baseResolvedValue = this.resolveAbilityValue({
       ability: spellAbility,
       rollValue: active.rollOutcome,
     });
     const effectId = spellAbility?.effectId || 'none';
+    const resolvedValue = this.resolveTypeAdjustedAbilityValue({
+      match,
+      casterId: playerId,
+      targetSide: active.targetSide,
+      targetSlotIndex: active.targetSlotIndex,
+      effectId,
+      resolvedValue: baseResolvedValue,
+      sourceType: spellCard?.type,
+    });
     const executionResult = this.applyResolvedAbilityEffect({
       match,
       casterId: playerId,
       targetSide: active.targetSide,
       targetSlotIndex: active.targetSlotIndex,
       effectId,
-      resolvedValue,
+      resolvedValue: baseResolvedValue,
+      sourceType: spellCard?.type,
     });
 
     active.effectId = effectId;

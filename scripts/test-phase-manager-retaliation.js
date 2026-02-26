@@ -3,7 +3,7 @@ const { PhaseManagerServer } = require('../shared/phase-manager');
 
 const server = new PhaseManagerServer();
 
-function createCreature({ id, slotIndex, health, attackCommitted = true, targetSlotIndex = 0, targetSide = 'opponent', damageValue = 0 }) {
+function createCreature({ id, slotIndex, health, attackCommitted = true, targetSlotIndex = 0, targetSide = 'opponent', damageValue = 0, type = null }) {
   return {
     id,
     slotIndex,
@@ -13,6 +13,7 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
     selectedAbilityIndex: 0,
     catalogCard: {
       health,
+      type,
       ability1: {
         effectId: 'damage_enemy',
         valueSourceType: 'fixed',
@@ -172,5 +173,37 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
   assert.equal(execution.retaliationDamage, 3, 'retaliation damage should include temporary retaliation bonuses');
 }
 
+
+
+{
+  const match = {
+    id: 'match-retaliation-type-advantage',
+    players: ['p1', 'p2'],
+    cardsByPlayer: new Map(),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+  };
+
+  const attacker = createCreature({ id: 'fire-attacker', slotIndex: 0, health: 6, damageValue: 3, type: 'Fire' });
+  const defender = createCreature({ id: 'nature-defender', slotIndex: 0, health: 8, damageValue: 0, type: 'Nature', attackCommitted: false, targetSlotIndex: null, targetSide: null });
+
+  match.cardsByPlayer.set('p1', { board: [attacker] });
+  match.cardsByPlayer.set('p2', { board: [defender] });
+  match.pendingCommitAttacksByPlayer.set('p1', [{
+    id: 'p1:0:opponent:0',
+    attackerSlotIndex: 0,
+    targetSlotIndex: 0,
+    targetSide: 'opponent',
+    selectedAbilityIndex: 0,
+  }]);
+  match.pendingCommitAttacksByPlayer.set('p2', []);
+
+  server.applyCommitEffects(match);
+
+  assert.equal(defender.catalogCard.health, 3, 'type-vulnerable creature target should take 1.5x damage rounded up');
+  const execution = match.commitExecutionByAttackId.get('p1:0:opponent:0');
+  assert.equal(execution.appliedValue, 5, 'execution metadata should expose type-adjusted value');
+}
 
 console.log('phase manager retaliation checks passed');
