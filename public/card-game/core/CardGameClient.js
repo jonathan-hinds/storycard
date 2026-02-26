@@ -48,6 +48,13 @@ const COMBAT_NUMBER_VARIANTS = Object.freeze({
   beneficial: 'beneficial',
 });
 const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
+const TYPE_ADVANTAGE_MULTIPLIER_DEFAULT = 1.5;
+const TYPE_ADVANTAGE_BY_ATTACKER = Object.freeze({
+  Fire: 'Nature',
+  Nature: 'Arcane',
+  Arcane: 'Water',
+  Water: 'Fire',
+});
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 
 export class CardGameClient {
@@ -92,6 +99,7 @@ export class CardGameClient {
     this.combatShakeEffects = [];
     this.deathAnimations = [];
     this.damagePopups = [];
+    this.targetEffectivenessBadges = [];
     this.pointerNdc = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -285,6 +293,7 @@ export class CardGameClient {
       card.scale.setScalar(card.userData.isAttackHover ? ATTACK_TARGET_SCALE : 1);
     }
     this.clearAttackTargetHover();
+    this.clearTargetEffectivenessBadges();
   }
 
   applySelectionGlow(card) {
@@ -317,6 +326,92 @@ export class CardGameClient {
     layer.className = 'damage-number-overlay-layer';
     this.canvasContainer.append(layer);
     this.damagePopupLayer = layer;
+  }
+
+  clearTargetEffectivenessBadges() {
+    this.targetEffectivenessBadges.forEach((badge) => badge.node?.remove());
+    this.targetEffectivenessBadges = [];
+  }
+
+  getCardBadgeWorldPoint(card) {
+    if (!card) return null;
+    const badgeOffset = new THREE.Vector3(0, 0.22, 0);
+    return card.localToWorld(badgeOffset);
+  }
+
+  positionTargetEffectivenessBadges() {
+    if (!this.targetEffectivenessBadges.length) return;
+    for (const badge of this.targetEffectivenessBadges) {
+      const worldPoint = this.getCardBadgeWorldPoint(badge.card);
+      const screen = this.getScreenPositionForWorldPoint(worldPoint);
+      if (!screen) {
+        badge.node.style.display = 'none';
+        continue;
+      }
+      badge.node.style.display = 'block';
+      badge.node.style.left = `${screen.x}px`;
+      badge.node.style.top = `${screen.y}px`;
+    }
+  }
+
+  createTargetEffectivenessBadge(card, bonusPercent) {
+    if (!this.damagePopupLayer || !card || !Number.isFinite(bonusPercent) || bonusPercent <= 0) return;
+    const node = document.createElement('div');
+    node.className = 'target-effectiveness-badge';
+    node.textContent = `+${Math.round(bonusPercent)}%`;
+    this.damagePopupLayer.append(node);
+    this.targetEffectivenessBadges.push({ card, node });
+  }
+
+  normalizeCardType(cardType) {
+    return typeof cardType === 'string' ? cardType.trim() : '';
+  }
+
+  resolveTypeAdvantageMultiplier(sourceCard, ability) {
+    const directMultiplierCandidates = [
+      ability?.superEffectiveMultiplier,
+      ability?.typeAdvantageMultiplier,
+      sourceCard?.userData?.catalogCard?.superEffectiveMultiplier,
+      sourceCard?.userData?.catalogCard?.typeAdvantageMultiplier,
+    ];
+    const directMultiplier = directMultiplierCandidates
+      .map((value) => Number(value))
+      .find((value) => Number.isFinite(value) && value > 1);
+    const baseMultiplier = directMultiplier || TYPE_ADVANTAGE_MULTIPLIER_DEFAULT;
+
+    const bonusPercentCandidates = [
+      ability?.superEffectiveBonusPercent,
+      ability?.effectivenessBonusPercent,
+      sourceCard?.userData?.catalogCard?.superEffectiveBonusPercent,
+      sourceCard?.userData?.catalogCard?.effectivenessBonusPercent,
+    ];
+    const bonusPercent = bonusPercentCandidates
+      .map((value) => Number(value))
+      .find((value) => Number.isFinite(value));
+
+    if (!Number.isFinite(bonusPercent)) return baseMultiplier;
+    return baseMultiplier * Math.max(0, 1 + (bonusPercent / 100));
+  }
+
+  getTypeAdvantageBonusPercent({ sourceCard, targetCard, ability }) {
+    if (!sourceCard || !targetCard || !ability) return 0;
+
+    const normalizedSourceType = this.normalizeCardType(sourceCard?.userData?.catalogCard?.type);
+    const normalizedTargetType = this.normalizeCardType(targetCard?.userData?.catalogCard?.type);
+    if (!normalizedSourceType || !normalizedTargetType) return 0;
+
+    const effectId = String(ability?.effectId || '').trim();
+    let hasAdvantage = false;
+    if (effectId === 'damage_enemy') {
+      hasAdvantage = TYPE_ADVANTAGE_BY_ATTACKER[normalizedSourceType] === normalizedTargetType;
+    } else if (effectId === 'heal_target' || effectId === 'retaliation_bonus') {
+      hasAdvantage = normalizedSourceType === normalizedTargetType;
+    }
+    if (!hasAdvantage) return 0;
+
+    const multiplier = this.resolveTypeAdvantageMultiplier(sourceCard, ability);
+    if (!Number.isFinite(multiplier) || multiplier <= 1) return 0;
+    return (multiplier - 1) * 100;
   }
 
   getScreenPositionForWorldPoint(worldPoint) {
@@ -611,6 +706,7 @@ export class CardGameClient {
       sourceCardId: card.userData.cardId,
       sourceSlotIndex: card.userData.slotIndex,
       targetType,
+      ability,
     };
     this.beginPreviewReturn();
     if (targetType === TARGET_TYPES.none) {
@@ -639,7 +735,15 @@ export class CardGameClient {
     const sourceCard = this.getCardById(pending?.sourceCardId);
     if (!pending || !sourceCard) return;
     this.clearHighlights();
-    this.getCardsForTargetType(pending.targetType, sourceCard).forEach((card) => this.applySelectionGlow(card));
+    this.getCardsForTargetType(pending.targetType, sourceCard).forEach((card) => {
+      this.applySelectionGlow(card);
+      const bonusPercent = this.getTypeAdvantageBonusPercent({
+        sourceCard,
+        targetCard: card,
+        ability: pending.ability,
+      });
+      this.createTargetEffectivenessBadge(card, bonusPercent);
+    });
   }
 
   parseDieSides(value, fallback = 6) {
@@ -2127,6 +2231,7 @@ export class CardGameClient {
     this.applyHandledCardSway(time);
     this.applyPlacedCardAmbientSway(time);
     this.positionSpellRollerPanel();
+    this.positionTargetEffectivenessBadges();
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = requestAnimationFrame(this.animate);
   }
@@ -2146,6 +2251,7 @@ export class CardGameClient {
     this.state.spellRollerLayer = null;
     this.damagePopups.forEach((popup) => popup.node?.remove());
     this.damagePopups = [];
+    this.clearTargetEffectivenessBadges();
     this.damagePopupLayer?.remove();
     this.damagePopupLayer = null;
     this.cardBackTexture?.dispose?.();
