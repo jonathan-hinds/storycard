@@ -28,23 +28,6 @@ function getFrustumHalfExtents(fovDegrees, aspect, depth) {
   };
 }
 
-function getHudMobileScale(aspect) {
-  const safeAspect = Math.max(aspect, 0.001);
-  if (safeAspect >= UPKEEP_REFERENCE_CAMERA.aspect) {
-    return 1;
-  }
-
-  const compressionRatio = THREE.MathUtils.clamp(
-    (UPKEEP_REFERENCE_CAMERA.aspect - safeAspect) / UPKEEP_REFERENCE_CAMERA.aspect,
-    0,
-    1,
-  );
-
-  // Keep desktop scale unchanged, but gently shrink HUD elements on narrow/mobile viewports
-  // so upkeep + ready button retain their relative layout without overlapping.
-  return 1 - (compressionRatio * 0.2);
-}
-
 function createTabPlayerId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
     return `player-${window.crypto.randomUUID().slice(0, 8)}`;
@@ -475,8 +458,7 @@ export class PhaseManagerClient {
     const depth = Math.max(Math.abs(DEFAULT_UPKEEP_POSITION.z), 0.001);
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
-    const mobileScale = getHudMobileScale(this.client.camera.aspect);
-    const scaleFactor = (currentFrustum.halfHeight / referenceFrustum.halfHeight) * mobileScale;
+    const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
     const panelWorldWidth = DEFAULT_UPKEEP_PANEL_SIZE.width * scaleFactor;
     const panelWorldHeight = DEFAULT_UPKEEP_PANEL_SIZE.height * scaleFactor;
     const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
@@ -611,8 +593,7 @@ export class PhaseManagerClient {
     const depth = Math.max(Math.abs(this.upkeepPosition.z), 0.001);
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
-    const mobileScale = getHudMobileScale(this.client.camera.aspect);
-    const scaleFactor = (currentFrustum.halfHeight / referenceFrustum.halfHeight) * mobileScale;
+    const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
     const widthScale = this.upkeepPanelSize.width / DEFAULT_READY_BUTTON_PANEL_SIZE.width;
     const heightScale = this.upkeepPanelSize.height / DEFAULT_READY_BUTTON_PANEL_SIZE.height;
     const panelWorldWidth = DEFAULT_READY_BUTTON_PANEL_SIZE.width * scaleFactor * widthScale;
