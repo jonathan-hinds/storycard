@@ -966,15 +966,36 @@ export class CardGameClient {
     });
   }
 
-  resolveSpellAbilityValue(ability, rollOutcome) {
+  resolveSpellAbilityValue(ability, rollOutcome, { sourceCard = null, targetCard = null } = {}) {
     if (!ability || ability.valueSourceType === 'none') return 0;
+    const effectId = String(ability?.effectId || '').trim();
+
+    const applyTypeAdvantageIfNeeded = (baseValue) => {
+      if (!Number.isFinite(baseValue) || baseValue <= 0) return 0;
+      if (!sourceCard || !targetCard) return baseValue;
+      const bonusPercent = this.getTypeAdvantageBonusPercent({
+        sourceCard,
+        targetCard,
+        ability,
+      });
+      if (!Number.isFinite(bonusPercent) || bonusPercent <= 0) return baseValue;
+      if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus') {
+        return baseValue;
+      }
+      const multiplier = this.resolveTypeAdvantageMultiplier(sourceCard, ability);
+      if (!Number.isFinite(multiplier) || multiplier <= 1) return baseValue;
+      return Math.ceil(baseValue * multiplier);
+    };
+
     if (ability.valueSourceType === 'fixed') {
       const fixedValue = Number(ability.valueSourceFixed);
-      return Number.isFinite(fixedValue) ? Math.max(0, Math.floor(fixedValue)) : 0;
+      const baseValue = Number.isFinite(fixedValue) ? Math.max(0, Math.floor(fixedValue)) : 0;
+      return applyTypeAdvantageIfNeeded(baseValue);
     }
 
     const parsedOutcome = Number(rollOutcome);
-    return Number.isFinite(parsedOutcome) ? Math.max(0, Math.floor(parsedOutcome)) : 0;
+    const baseValue = Number.isFinite(parsedOutcome) ? Math.max(0, Math.floor(parsedOutcome)) : 0;
+    return applyTypeAdvantageIfNeeded(baseValue);
   }
 
   async runSpellResolution({ card, targetCard, selectedAbility }) {
@@ -1075,7 +1096,10 @@ export class CardGameClient {
     }
 
     if (targetCard) {
-      const resolvedValue = this.resolveSpellAbilityValue(selectedAbility, outcome);
+      const resolvedValue = this.resolveSpellAbilityValue(selectedAbility, outcome, {
+        sourceCard: card,
+        targetCard,
+      });
       targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' ? resolvedValue : null;
       targetCard.userData.pendingSpellHealing = selectedAbility?.effectId === 'heal_target' ? resolvedValue : null;
       this.queueSpellAttackAnimation(card, targetCard);
