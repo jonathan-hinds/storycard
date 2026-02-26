@@ -54,12 +54,45 @@ export class CardRollerOverlay {
     this.rollDelayMs = rollDelayMs;
     this.postSettleDelayMs = postSettleDelayMs;
     this.postUpdateDelayMs = postUpdateDelayMs;
+    this.slotEntries = new Map();
     this.activeRollers = [];
     this.positionTick = 0;
 
     this.layer = document.createElement('div');
     this.layer.className = 'card-roller-overlay-layer';
     this.host.append(this.layer);
+  }
+
+  ensureSlotEntry(globalSlotIndex) {
+    if (!Number.isInteger(globalSlotIndex) || globalSlotIndex < 0) return null;
+    const existing = this.slotEntries.get(globalSlotIndex);
+    if (existing) return existing;
+
+    const panel = document.createElement('div');
+    panel.className = 'card-roller-overlay-panel';
+    panel.dataset.state = 'idle';
+    panel.style.display = 'none';
+    this.layer.append(panel);
+
+    const roller = new DieRollerClient({ container: panel, assets: {} });
+    const entry = {
+      panel,
+      roller,
+      globalSlotIndex,
+      hasRolled: false,
+      removeListeners: null,
+    };
+    this.slotEntries.set(globalSlotIndex, entry);
+    return entry;
+  }
+
+  hideEntry(entry) {
+    if (!entry) return;
+    entry.removeListeners?.();
+    entry.hasRolled = false;
+    entry.panel.dataset.state = 'idle';
+    entry.panel.style.display = 'none';
+    entry.panel.removeAttribute('title');
   }
 
   async pause(ms) {
@@ -222,22 +255,16 @@ export class CardRollerOverlay {
       if (!card) continue;
 
       const attackRollSequence = this.getResolvedRollSequence(rollSequence);
-      const panel = document.createElement('div');
-      panel.className = 'card-roller-overlay-panel';
-      this.layer.append(panel);
+      const entry = this.ensureSlotEntry(globalSlotIndex);
+      if (!entry) continue;
 
-      const roller = new DieRollerClient({ container: panel, assets: {} });
+      const { panel, roller } = entry;
       const firstRollType = attackRollSequence[0];
       const firstRollDetails = this.getRollTypeForCard(card, firstRollType);
       roller.renderStaticPreview(firstRollDetails.sides);
 
-      const entry = {
-        panel,
-        roller,
-        globalSlotIndex,
-        hasRolled: false,
-        removeListeners: null,
-      };
+      entry.hasRolled = false;
+      panel.style.display = 'block';
       this.activeRollers.push(entry);
       this.positionRollerEntry(entry);
 
@@ -348,16 +375,15 @@ export class CardRollerOverlay {
       cancelAnimationFrame(this.positionTick);
       this.positionTick = 0;
     }
-    this.activeRollers.forEach((entry) => {
-      entry.removeListeners?.();
-      entry.roller.destroy();
-    });
+    this.activeRollers.forEach((entry) => this.hideEntry(entry));
     this.activeRollers = [];
-    this.layer.replaceChildren();
   }
 
   destroy() {
     this.clear();
+    this.slotEntries.forEach((entry) => entry.roller.destroy());
+    this.slotEntries.clear();
+    this.layer.replaceChildren();
     if (this.layer.parentNode) this.layer.parentNode.removeChild(this.layer);
   }
 }

@@ -132,6 +132,7 @@ export class CardGameClient {
       spellResolutionInProgress: false,
       activeSpellRoller: null,
       spellRollerLayer: null,
+      spellRollerSlot: null,
       activeSpellResolutionId: null,
       remoteSpellResolutionPromise: null,
     };
@@ -665,15 +666,23 @@ export class CardGameClient {
       this.state.spellRollerLayer = layer;
     }
 
-    const panel = document.createElement('div');
-    panel.className = 'card-roller-overlay-panel';
-    panel.dataset.state = 'pending';
-    panel.title = 'Click to roll spell EFCT die';
-    panel.style.left = '0';
-    panel.style.top = '0';
+    if (!this.state.spellRollerSlot?.panel || !this.state.spellRollerSlot.panel.isConnected) {
+      const panel = document.createElement('div');
+      panel.className = 'card-roller-overlay-panel';
+      panel.style.left = '0';
+      panel.style.top = '0';
+      panel.style.display = 'none';
+      this.state.spellRollerLayer.append(panel);
+
+      const roller = new DieRollerClient({ container: panel, assets: {} });
+      this.state.spellRollerSlot = { panel, roller };
+    }
+
     this.state.spellRollerLayer.dataset.active = 'true';
-    this.state.spellRollerLayer.append(panel);
-    return panel;
+    this.state.spellRollerSlot.panel.style.display = 'block';
+    this.state.spellRollerSlot.panel.dataset.state = 'pending';
+    this.state.spellRollerSlot.panel.title = 'Click to roll spell EFCT die';
+    return this.state.spellRollerSlot.panel;
   }
 
   buildCardMeshConfigFromSnapshot(cardSnapshot, fallbackId) {
@@ -701,7 +710,8 @@ export class CardGameClient {
     const panel = this.createSpellRollerPanel(card);
     if (!panel) return null;
 
-    const roller = new DieRollerClient({ container: panel, assets: {} });
+    const roller = this.state.spellRollerSlot?.roller;
+    if (!roller) return null;
     this.state.activeSpellRoller = { panel, roller, card };
     roller.renderStaticPreview(dieSides);
     this.positionSpellRollerPanel();
@@ -756,7 +766,8 @@ export class CardGameClient {
 
     panel.title = 'Waiting for caster roll';
     panel.dataset.state = 'waiting';
-    const roller = new DieRollerClient({ container: panel, assets: {} });
+    const roller = this.state.spellRollerSlot?.roller;
+    if (!roller) return null;
     this.state.activeSpellRoller = { panel, roller, card };
     roller.renderStaticPreview(dieSides);
     this.positionSpellRollerPanel();
@@ -817,8 +828,9 @@ export class CardGameClient {
   clearSpellRollerPanel() {
     const active = this.state.activeSpellRoller;
     if (!active) return;
-    active.roller?.destroy?.();
-    active.panel?.remove();
+    active.panel.dataset.state = 'idle';
+    active.panel.style.display = 'none';
+    active.panel.removeAttribute('title');
     if (this.state.spellRollerLayer) this.state.spellRollerLayer.dataset.active = 'false';
     this.state.activeSpellRoller = null;
   }
@@ -2128,6 +2140,8 @@ export class CardGameClient {
     window.removeEventListener('resize', this.updateSize);
     this.resetBtn?.removeEventListener('click', this.resetDemo);
     this.clearSpellRollerPanel();
+    this.state.spellRollerSlot?.roller?.destroy?.();
+    this.state.spellRollerSlot = null;
     this.state.spellRollerLayer?.remove();
     this.state.spellRollerLayer = null;
     this.damagePopups.forEach((popup) => popup.node?.remove());
