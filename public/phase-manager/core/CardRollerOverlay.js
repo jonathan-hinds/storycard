@@ -56,10 +56,17 @@ export class CardRollerOverlay {
     this.postUpdateDelayMs = postUpdateDelayMs;
     this.activeRollers = [];
     this.positionTick = 0;
+    this.rollExecution = Promise.resolve();
 
     this.layer = document.createElement('div');
     this.layer.className = 'card-roller-overlay-layer';
     this.host.append(this.layer);
+
+    this.sharedRollerHost = document.createElement('div');
+    this.sharedRollerHost.className = 'card-roller-overlay-shared-host';
+    this.sharedRollerHost.style.display = 'none';
+    this.layer.append(this.sharedRollerHost);
+    this.sharedRoller = new DieRollerClient({ container: this.sharedRollerHost, assets: {} });
   }
 
   async pause(ms) {
@@ -123,6 +130,24 @@ export class CardRollerOverlay {
     const statKey = ROLL_TYPE_TO_STAT_KEY[rollType] || rollType;
     if (typeof outcome === 'number') {
       this.cardGameClient?.setCardStatDisplayOverride(cardId, statKey, outcome);
+    }
+  }
+
+  enqueueRollTask(task) {
+    const run = this.rollExecution.then(task, task);
+    this.rollExecution = run.catch(() => {});
+    return run;
+  }
+
+  async runSequenceInPanel(panel, sequenceRunner) {
+    const roller = this.sharedRoller;
+    panel.append(roller.canvas);
+    try {
+      return await sequenceRunner(roller);
+    } finally {
+      roller.handlers.onSettled = null;
+      roller.handlers.onError = null;
+      this.sharedRollerHost.append(roller.canvas);
     }
   }
 
@@ -226,14 +251,8 @@ export class CardRollerOverlay {
       panel.className = 'card-roller-overlay-panel';
       this.layer.append(panel);
 
-      const roller = new DieRollerClient({ container: panel, assets: {} });
-      const firstRollType = attackRollSequence[0];
-      const firstRollDetails = this.getRollTypeForCard(card, firstRollType);
-      roller.renderStaticPreview(firstRollDetails.sides);
-
       const entry = {
         panel,
-        roller,
         globalSlotIndex,
         hasRolled: false,
         removeListeners: null,
@@ -254,13 +273,13 @@ export class CardRollerOverlay {
           panel.dataset.state = 'rolling';
 
           try {
-            const outcomes = await this.rollLocalSequence({
+            const outcomes = await this.enqueueRollTask(() => this.runSequenceInPanel(panel, (roller) => this.rollLocalSequence({
               card,
               attackStep: step,
               rollSequence: attackRollSequence,
               roller,
               onAttackRoll,
-            });
+            })));
             panel.dataset.state = 'settled';
             return outcomes;
           } catch (error) {
@@ -291,7 +310,6 @@ export class CardRollerOverlay {
 
           entry.removeListeners = () => {
             removeRollTriggerListeners(panel, wrappedTrigger);
-            removeRollTriggerListeners(roller.canvas, wrappedTrigger);
             entry.removeListeners = null;
           };
 
@@ -303,7 +321,6 @@ export class CardRollerOverlay {
           };
 
           addRollTriggerListeners(panel);
-          addRollTriggerListeners(roller.canvas);
         });
 
         pendingRolls.push(triggerPromise);
@@ -313,13 +330,13 @@ export class CardRollerOverlay {
 
         pendingRolls.push((async () => {
           panel.dataset.state = 'rolling';
-          const outcomes = await this.rollRemoteSequence({
+          const outcomes = await this.enqueueRollTask(() => this.runSequenceInPanel(panel, (roller) => this.rollRemoteSequence({
             card,
             attackStep: step,
             rollSequence: attackRollSequence,
             roller,
             waitForRemoteRoll,
-          });
+          })));
           panel.dataset.state = 'settled';
           return outcomes;
         })());
@@ -350,14 +367,16 @@ export class CardRollerOverlay {
     }
     this.activeRollers.forEach((entry) => {
       entry.removeListeners?.();
-      entry.roller.destroy();
     });
     this.activeRollers = [];
     this.layer.replaceChildren();
+    this.layer.append(this.sharedRollerHost);
   }
 
   destroy() {
     this.clear();
+    this.sharedRoller?.destroy();
+    this.sharedRoller = null;
     if (this.layer.parentNode) this.layer.parentNode.removeChild(this.layer);
   }
 }
