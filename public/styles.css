@@ -321,7 +321,7 @@ button {
 
 .phase-manager-upkeep-slider-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 7.5rem;
+  grid-template-columns: minmax(0, 1fr) 6rem minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.55rem;
   align-items: center;
   margin-bottom: 0.45rem;
@@ -333,6 +333,10 @@ button {
 }
 
 .phase-manager-upkeep-slider-row input[type='range'] {
+  width: 100%;
+}
+
+.phase-manager-upkeep-slider-row input[type='number'] {
   width: 100%;
 }
 

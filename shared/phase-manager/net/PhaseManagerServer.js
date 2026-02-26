@@ -190,6 +190,7 @@ class PhaseManagerServer {
       id: match.id,
       turnNumber: match.turnNumber,
       upkeep: match.upkeep,
+      upkeepTotal: MAX_UPKEEP,
       phase: match.phase,
       youAreReady: match.readyPlayers.has(playerId),
       opponentIsReady: opponentId ? match.readyPlayers.has(opponentId) : false,
