@@ -261,7 +261,7 @@ export function createCardLabelTexture(card, {
       if (!ability) return;
       const isOutlined = outlineIndices?.has(index) || selectedAbilityIndex === index;
       if (!isOutlined) return;
-      ctx.strokeStyle = selectedAbilityIndex === index ? '#ffe16d' : 'rgba(255, 255, 255, 1)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
       ctx.lineWidth = selectedAbilityIndex === index ? 8 : 5;
       drawRoundedRect(ctx, x - (width / 2), y - (height / 2), width, height, abilityBannerLayout.boxBevel * abilityBannerLayout.size);
       ctx.stroke();
