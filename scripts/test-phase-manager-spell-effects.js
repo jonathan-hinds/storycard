@@ -163,6 +163,23 @@ function createSpellMatch({
 }
 
 {
+  const { server, playerId, spellId, opponentState } = createSpellMatch({
+    targetHealth: 3,
+    rollOutcome: 3,
+    ability: {
+      effectId: 'damage_enemy',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
+
+  const result = server.completeSpellResolution({ playerId, spellId });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(opponentState.board.length, 0, 'spell damage should remove targets that reach exactly zero health');
+}
+
+{
   const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
     targetHealth: 6,
     rollOutcome: 3,
