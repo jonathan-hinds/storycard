@@ -243,3 +243,103 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
 }
 
 console.log('phase manager retaliation checks passed');
+
+
+{
+  const match = {
+    id: 'match-retaliation-speed-order',
+    players: ['p1', 'p2'],
+    turnNumber: 1,
+    upkeep: 1,
+    phase: 2,
+    readyPlayers: new Set(),
+    lastDrawnCardsByPlayer: new Map(),
+    cardsByPlayer: new Map(),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+  };
+
+  const fastAttacker = createCreature({ id: 'fast', slotIndex: 0, health: 5, damageValue: 2, targetSlotIndex: 0, targetSide: 'opponent' });
+  const tieLateAttacker = createCreature({ id: 'late', slotIndex: 1, health: 5, damageValue: 2, targetSlotIndex: 0, targetSide: 'opponent' });
+  const tieEarlyAttacker = createCreature({ id: 'early', slotIndex: 0, health: 5, damageValue: 2, targetSlotIndex: 1, targetSide: 'opponent' });
+  const slowAttacker = createCreature({ id: 'slow', slotIndex: 1, health: 5, damageValue: 2, targetSlotIndex: 1, targetSide: 'opponent' });
+
+  match.cardsByPlayer.set('p1', { hand: [], board: [fastAttacker, tieLateAttacker], deck: [] });
+  match.cardsByPlayer.set('p2', { hand: [], board: [tieEarlyAttacker, slowAttacker], deck: [] });
+  match.pendingCommitAttacksByPlayer.set('p1', [
+    {
+      id: 'p1:0:opponent:0',
+      attackerSlotIndex: 0,
+      targetSlotIndex: 0,
+      targetSide: 'opponent',
+      selectedAbilityIndex: 0,
+    },
+    {
+      id: 'p1:1:opponent:0',
+      attackerSlotIndex: 1,
+      targetSlotIndex: 0,
+      targetSide: 'opponent',
+      selectedAbilityIndex: 0,
+    },
+  ]);
+  match.pendingCommitAttacksByPlayer.set('p2', [
+    {
+      id: 'p2:0:opponent:1',
+      attackerSlotIndex: 0,
+      targetSlotIndex: 1,
+      targetSide: 'opponent',
+      selectedAbilityIndex: 0,
+    },
+    {
+      id: 'p2:1:opponent:1',
+      attackerSlotIndex: 1,
+      targetSlotIndex: 1,
+      targetSide: 'opponent',
+      selectedAbilityIndex: 0,
+    },
+  ]);
+
+  match.commitRollsByAttackId.set('p1:0:opponent:0:speed', {
+    attackId: 'p1:0:opponent:0',
+    attackerId: 'p1',
+    rollType: 'speed',
+    roll: { outcome: 6 },
+    submittedAt: 100,
+  });
+  match.commitRollsByAttackId.set('p1:1:opponent:0:speed', {
+    attackId: 'p1:1:opponent:0',
+    attackerId: 'p1',
+    rollType: 'speed',
+    roll: { outcome: 4 },
+    submittedAt: 300,
+  });
+  match.commitRollsByAttackId.set('p2:0:opponent:1:speed', {
+    attackId: 'p2:0:opponent:1',
+    attackerId: 'p2',
+    rollType: 'speed',
+    roll: { outcome: 4 },
+    submittedAt: 200,
+  });
+  match.commitRollsByAttackId.set('p2:1:opponent:1:speed', {
+    attackId: 'p2:1:opponent:1',
+    attackerId: 'p2',
+    rollType: 'speed',
+    roll: { outcome: 1 },
+    submittedAt: 400,
+  });
+
+  const ordered = server.getOrderedCommitAttacks(match).map(({ attack }) => attack.id);
+  assert.deepEqual(
+    ordered,
+    ['p1:0:opponent:0', 'p2:0:opponent:1', 'p1:1:opponent:0', 'p2:1:opponent:1'],
+    'commit order should sort by highest speed and use earliest speed resolution as tie breaker',
+  );
+
+  const serialized = server.serializeMatchForPlayer(match, 'p1');
+  assert.deepEqual(
+    serialized.meta.commitAttacks.map((attack) => attack.id),
+    ordered,
+    'serialized commit attacks should preserve speed-based ordering for animation playback',
+  );
+}
