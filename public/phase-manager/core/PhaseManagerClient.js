@@ -58,6 +58,8 @@ export class PhaseManagerClient {
     this.cardRollerOverlay = null;
     this.upkeepDisplay = null;
     this.readyButtonDisplay = null;
+    this.upkeepCounterPosition = { ...DEFAULT_UPKEEP_POSITION };
+    this.upkeepCounterScale = 1;
     this.upkeepPosition = { ...DEFAULT_READY_BUTTON_POSITION };
     this.upkeepPanelSize = { ...DEFAULT_READY_BUTTON_PANEL_SIZE };
     this.upkeepTextPosition = { ...DEFAULT_READY_BUTTON_TEXT_POSITION };
@@ -74,6 +76,7 @@ export class PhaseManagerClient {
     this.readyUp = this.readyUp.bind(this);
     this.resetMatch = this.resetMatch.bind(this);
     this.handleUpkeepPositionInput = this.handleUpkeepPositionInput.bind(this);
+    this.handleUpkeepCounterInput = this.handleUpkeepCounterInput.bind(this);
     this.handleUpkeepPanelStyleInput = this.handleUpkeepPanelStyleInput.bind(this);
     this.handleUpkeepBackgroundChange = this.handleUpkeepBackgroundChange.bind(this);
     this.exportUpkeepPosition = this.exportUpkeepPosition.bind(this);
@@ -138,6 +141,9 @@ export class PhaseManagerClient {
       upkeepXInput,
       upkeepYInput,
       upkeepZInput,
+      upkeepCounterXInput,
+      upkeepCounterYInput,
+      upkeepCounterScaleInput,
       upkeepWidthInput,
       upkeepHeightInput,
       upkeepTextXInput,
@@ -146,6 +152,9 @@ export class PhaseManagerClient {
       upkeepXValueEl,
       upkeepYValueEl,
       upkeepZValueEl,
+      upkeepCounterXValueEl,
+      upkeepCounterYValueEl,
+      upkeepCounterScaleValueEl,
       upkeepWidthValueEl,
       upkeepHeightValueEl,
       upkeepTextXValueEl,
@@ -156,6 +165,9 @@ export class PhaseManagerClient {
     const xValue = this.upkeepPosition.x.toFixed(3);
     const yValue = this.upkeepPosition.y.toFixed(3);
     const zValue = this.upkeepPosition.z.toFixed(2);
+    const upkeepCounterXValue = this.upkeepCounterPosition.x.toFixed(3);
+    const upkeepCounterYValue = this.upkeepCounterPosition.y.toFixed(3);
+    const upkeepCounterScaleValue = this.upkeepCounterScale.toFixed(2);
     const widthValue = this.upkeepPanelSize.width.toFixed(2);
     const heightValue = this.upkeepPanelSize.height.toFixed(2);
     const textXValue = this.upkeepTextPosition.x.toFixed(2);
@@ -164,6 +176,9 @@ export class PhaseManagerClient {
     if (upkeepXInput) upkeepXInput.value = xValue;
     if (upkeepYInput) upkeepYInput.value = yValue;
     if (upkeepZInput) upkeepZInput.value = zValue;
+    if (upkeepCounterXInput) upkeepCounterXInput.value = upkeepCounterXValue;
+    if (upkeepCounterYInput) upkeepCounterYInput.value = upkeepCounterYValue;
+    if (upkeepCounterScaleInput) upkeepCounterScaleInput.value = upkeepCounterScaleValue;
     if (upkeepWidthInput) upkeepWidthInput.value = widthValue;
     if (upkeepHeightInput) upkeepHeightInput.value = heightValue;
     if (upkeepTextXInput) upkeepTextXInput.value = textXValue;
@@ -172,6 +187,9 @@ export class PhaseManagerClient {
     if (upkeepXValueEl) upkeepXValueEl.textContent = `${xValue} (${Math.round(this.upkeepPosition.x * viewport.width)}px)`;
     if (upkeepYValueEl) upkeepYValueEl.textContent = `${yValue} (${Math.round(this.upkeepPosition.y * viewport.height)}px)`;
     if (upkeepZValueEl) upkeepZValueEl.textContent = zValue;
+    if (upkeepCounterXValueEl) upkeepCounterXValueEl.textContent = `${upkeepCounterXValue} (${Math.round(this.upkeepCounterPosition.x * viewport.width)}px)`;
+    if (upkeepCounterYValueEl) upkeepCounterYValueEl.textContent = `${upkeepCounterYValue} (${Math.round(this.upkeepCounterPosition.y * viewport.height)}px)`;
+    if (upkeepCounterScaleValueEl) upkeepCounterScaleValueEl.textContent = upkeepCounterScaleValue;
     if (upkeepWidthValueEl) upkeepWidthValueEl.textContent = widthValue;
     if (upkeepHeightValueEl) upkeepHeightValueEl.textContent = heightValue;
     if (upkeepTextXValueEl) upkeepTextXValueEl.textContent = textXValue;
@@ -188,6 +206,22 @@ export class PhaseManagerClient {
     };
     this.syncUpkeepPositionInputs();
     this.positionReadyButtonDisplay();
+  }
+
+  handleUpkeepCounterInput() {
+    const { upkeepCounterXInput, upkeepCounterYInput, upkeepCounterScaleInput } = this.elements;
+    this.upkeepCounterPosition = {
+      x: THREE.MathUtils.clamp(this.parseUpkeepPositionValue(upkeepCounterXInput?.value, this.upkeepCounterPosition.x), 0, 1),
+      y: THREE.MathUtils.clamp(this.parseUpkeepPositionValue(upkeepCounterYInput?.value, this.upkeepCounterPosition.y), 0, 1),
+      z: this.upkeepCounterPosition.z,
+    };
+    this.upkeepCounterScale = THREE.MathUtils.clamp(
+      this.parseUpkeepPositionValue(upkeepCounterScaleInput?.value, this.upkeepCounterScale),
+      0.2,
+      4,
+    );
+    this.syncUpkeepPositionInputs();
+    this.positionUpkeepDisplay();
   }
 
   handleUpkeepPanelStyleInput() {
@@ -280,6 +314,10 @@ export class PhaseManagerClient {
       textPosition: this.upkeepTextPosition,
       textScale: this.upkeepTextScale,
       backgroundAssetPath: this.upkeepBackgroundAssetPath,
+      upkeepCounter: {
+        position: this.upkeepCounterPosition,
+        scale: this.upkeepCounterScale,
+      },
     });
     if (upkeepExportOutputEl) upkeepExportOutputEl.textContent = serialized;
     if (navigator.clipboard?.writeText) {
@@ -296,6 +334,9 @@ export class PhaseManagerClient {
       upkeepXInput,
       upkeepYInput,
       upkeepZInput,
+      upkeepCounterXInput,
+      upkeepCounterYInput,
+      upkeepCounterScaleInput,
       upkeepWidthInput,
       upkeepHeightInput,
       upkeepTextXInput,
@@ -312,6 +353,9 @@ export class PhaseManagerClient {
     upkeepXInput?.addEventListener('input', this.handleUpkeepPositionInput);
     upkeepYInput?.addEventListener('input', this.handleUpkeepPositionInput);
     upkeepZInput?.addEventListener('input', this.handleUpkeepPositionInput);
+    upkeepCounterXInput?.addEventListener('input', this.handleUpkeepCounterInput);
+    upkeepCounterYInput?.addEventListener('input', this.handleUpkeepCounterInput);
+    upkeepCounterScaleInput?.addEventListener('input', this.handleUpkeepCounterInput);
     upkeepWidthInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepHeightInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepTextXInput?.addEventListener('input', this.handleUpkeepPanelStyleInput);
@@ -347,6 +391,9 @@ export class PhaseManagerClient {
       upkeepXInput,
       upkeepYInput,
       upkeepZInput,
+      upkeepCounterXInput,
+      upkeepCounterYInput,
+      upkeepCounterScaleInput,
       upkeepWidthInput,
       upkeepHeightInput,
       upkeepTextXInput,
@@ -363,6 +410,9 @@ export class PhaseManagerClient {
     upkeepXInput?.removeEventListener('input', this.handleUpkeepPositionInput);
     upkeepYInput?.removeEventListener('input', this.handleUpkeepPositionInput);
     upkeepZInput?.removeEventListener('input', this.handleUpkeepPositionInput);
+    upkeepCounterXInput?.removeEventListener('input', this.handleUpkeepCounterInput);
+    upkeepCounterYInput?.removeEventListener('input', this.handleUpkeepCounterInput);
+    upkeepCounterScaleInput?.removeEventListener('input', this.handleUpkeepCounterInput);
     upkeepWidthInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepHeightInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
     upkeepTextXInput?.removeEventListener('input', this.handleUpkeepPanelStyleInput);
@@ -455,26 +505,26 @@ export class PhaseManagerClient {
   positionUpkeepDisplay() {
     if (!this.upkeepDisplay || !this.client?.camera) return;
     const { panelMesh, textMesh } = this.upkeepDisplay;
-    const depth = Math.max(Math.abs(DEFAULT_UPKEEP_POSITION.z), 0.001);
+    const depth = Math.max(Math.abs(this.upkeepCounterPosition.z), 0.001);
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
     const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
-    const panelWorldWidth = DEFAULT_UPKEEP_PANEL_SIZE.width * scaleFactor;
-    const panelWorldHeight = DEFAULT_UPKEEP_PANEL_SIZE.height * scaleFactor;
+    const panelWorldWidth = DEFAULT_UPKEEP_PANEL_SIZE.width * scaleFactor * this.upkeepCounterScale;
+    const panelWorldHeight = DEFAULT_UPKEEP_PANEL_SIZE.height * scaleFactor * this.upkeepCounterScale;
     const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
     const panelHalfNormalizedY = panelWorldHeight / Math.max(currentFrustum.halfHeight * 2, 0.001);
-    const targetNormalizedX = THREE.MathUtils.clamp((DEFAULT_UPKEEP_POSITION.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
-    const targetNormalizedY = THREE.MathUtils.clamp(1 - (DEFAULT_UPKEEP_POSITION.y * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
+    const targetNormalizedX = THREE.MathUtils.clamp((this.upkeepCounterPosition.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
+    const targetNormalizedY = THREE.MathUtils.clamp(1 - (this.upkeepCounterPosition.y * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
     const x = targetNormalizedX * currentFrustum.halfWidth;
     const y = targetNormalizedY * currentFrustum.halfHeight;
-    panelMesh.position.set(x, y, DEFAULT_UPKEEP_POSITION.z);
-    panelMesh.scale.set(scaleFactor, scaleFactor, 1);
+    panelMesh.position.set(x, y, this.upkeepCounterPosition.z);
+    panelMesh.scale.set(scaleFactor * this.upkeepCounterScale, scaleFactor * this.upkeepCounterScale, 1);
     panelMesh.rotation.set(0, 0, 0);
 
     const textOffsetX = panelWorldWidth * DEFAULT_UPKEEP_TEXT_POSITION.x;
     const textOffsetY = panelWorldHeight * DEFAULT_UPKEEP_TEXT_POSITION.y;
-    textMesh.position.set(x + textOffsetX, y + textOffsetY, DEFAULT_UPKEEP_POSITION.z + 0.001);
-    textMesh.scale.set(scaleFactor, scaleFactor, 1);
+    textMesh.position.set(x + textOffsetX, y + textOffsetY, this.upkeepCounterPosition.z + 0.001);
+    textMesh.scale.set(scaleFactor * this.upkeepCounterScale, scaleFactor * this.upkeepCounterScale, 1);
     textMesh.rotation.set(0, 0, 0);
   }
 
