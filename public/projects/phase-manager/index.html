@@ -63,69 +63,6 @@
           <p id="phase-manager-status" class="debug-pill">Loading…</p>
         </div>
 
-        <div class="card phase-manager-upkeep-controls">
-          <h2>Ready Button Display Controls</h2>
-          <p class="phase-manager-upkeep-note">Adjust the in-canvas Ready Up button position, size, text placement, and background image. X/Y are normalized to the canvas (0,0 = top-left, 1,0 = top-right) and stay aligned across screen sizes.</p>
-
-          <div class="phase-manager-upkeep-slider-row">
-            <label for="phase-manager-upkeep-x">X</label>
-            <input id="phase-manager-upkeep-x" type="range" min="0.000" max="1.000" step="0.001" value="0.721" />
-            <output id="phase-manager-upkeep-x-value" for="phase-manager-upkeep-x">0.721</output>
-          </div>
-
-          <div class="phase-manager-upkeep-slider-row">
-            <label for="phase-manager-upkeep-y">Y</label>
-            <input id="phase-manager-upkeep-y" type="range" min="0.000" max="1.000" step="0.001" value="0.102" />
-            <output id="phase-manager-upkeep-y-value" for="phase-manager-upkeep-y">0.102</output>
-          </div>
-
-          <div class="phase-manager-upkeep-slider-row">
-            <label for="phase-manager-upkeep-z">Z</label>
-            <input id="phase-manager-upkeep-z" type="range" min="-6.00" max="-1.00" step="0.01" value="-6.00" />
-            <output id="phase-manager-upkeep-z-value" for="phase-manager-upkeep-z">-6.00</output>
-          </div>
-
-          <div class="phase-manager-upkeep-slider-row">
-            <label for="phase-manager-upkeep-width">W</label>
-            <input id="phase-manager-upkeep-width" type="range" min="0.60" max="15.00" step="0.01" value="1.58" />
-            <output id="phase-manager-upkeep-width-value" for="phase-manager-upkeep-width">1.58</output>
-          </div>
-
-          <div class="phase-manager-upkeep-slider-row">
-            <label for="phase-manager-upkeep-height">H</label>
-            <input id="phase-manager-upkeep-height" type="range" min="0.20" max="6.00" step="0.01" value="0.48" />
-            <output id="phase-manager-upkeep-height-value" for="phase-manager-upkeep-height">0.48</output>
-          </div>
-
-          <div class="phase-manager-upkeep-slider-row">
-            <label for="phase-manager-upkeep-text-x">TX</label>
-            <input id="phase-manager-upkeep-text-x" type="range" min="-0.50" max="0.50" step="0.01" value="-0.02" />
-            <output id="phase-manager-upkeep-text-x-value" for="phase-manager-upkeep-text-x">-0.02</output>
-          </div>
-
-          <div class="phase-manager-upkeep-slider-row">
-            <label for="phase-manager-upkeep-text-y">TY</label>
-            <input id="phase-manager-upkeep-text-y" type="range" min="-0.50" max="0.50" step="0.01" value="-0.03" />
-            <output id="phase-manager-upkeep-text-y-value" for="phase-manager-upkeep-text-y">-0.03</output>
-          </div>
-
-          <div class="phase-manager-upkeep-slider-row">
-            <label for="phase-manager-upkeep-text-size">TS</label>
-            <input id="phase-manager-upkeep-text-size" type="range" min="0.50" max="2.00" step="0.01" value="0.50" />
-            <output id="phase-manager-upkeep-text-size-value" for="phase-manager-upkeep-text-size">0.50</output>
-          </div>
-
-          <div class="phase-manager-upkeep-field-row">
-            <label for="phase-manager-upkeep-background">Background</label>
-            <select id="phase-manager-upkeep-background">
-              <option value="">Default generated panel</option>
-            </select>
-          </div>
-
-          <button id="phase-manager-upkeep-export" type="button" class="secondary-action">Export Ready Button Config</button>
-          <output id="phase-manager-upkeep-export-output" class="debug-pill" aria-live="polite">Ready button config export will appear here.</output>
-        </div>
-
       </section>
 
       <section class="single-card-stage-wrap phase-manager-stage-wrap">
