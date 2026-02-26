@@ -61,6 +61,65 @@
           <p id="phase-manager-player-summary" class="debug-pill">Player: waiting for matchmaking</p>
           <p id="phase-manager-opponent-summary" class="debug-pill">Opponent: waiting for matchmaking</p>
           <p id="phase-manager-status" class="debug-pill">Loading…</p>
+
+          <div class="phase-manager-upkeep-controls">
+            <h3>HUD Layout Tweaks</h3>
+            <p class="phase-manager-upkeep-note">Adjust X/Y placement and scale, then export JSON to share your layout.</p>
+
+            <div class="phase-manager-upkeep-field-row">
+              <label for="phase-manager-upkeep-counter-x">Upkeep X</label>
+              <div class="phase-manager-upkeep-slider-row">
+                <input id="phase-manager-upkeep-counter-x" type="range" min="0" max="1" step="0.001" />
+                <output id="phase-manager-upkeep-counter-x-value" for="phase-manager-upkeep-counter-x"></output>
+              </div>
+            </div>
+            <div class="phase-manager-upkeep-field-row">
+              <label for="phase-manager-upkeep-counter-y">Upkeep Y</label>
+              <div class="phase-manager-upkeep-slider-row">
+                <input id="phase-manager-upkeep-counter-y" type="range" min="0" max="1" step="0.001" />
+                <output id="phase-manager-upkeep-counter-y-value" for="phase-manager-upkeep-counter-y"></output>
+              </div>
+            </div>
+            <div class="phase-manager-upkeep-field-row">
+              <label for="phase-manager-upkeep-counter-scale">Upkeep Scale</label>
+              <div class="phase-manager-upkeep-slider-row">
+                <input id="phase-manager-upkeep-counter-scale" type="range" min="0.2" max="4" step="0.01" />
+                <output id="phase-manager-upkeep-counter-scale-value" for="phase-manager-upkeep-counter-scale"></output>
+              </div>
+            </div>
+
+            <div class="phase-manager-upkeep-field-row">
+              <label for="phase-manager-upkeep-x">Ready X</label>
+              <div class="phase-manager-upkeep-slider-row">
+                <input id="phase-manager-upkeep-x" type="range" min="0" max="1" step="0.001" />
+                <output id="phase-manager-upkeep-x-value" for="phase-manager-upkeep-x"></output>
+              </div>
+            </div>
+            <div class="phase-manager-upkeep-field-row">
+              <label for="phase-manager-upkeep-y">Ready Y</label>
+              <div class="phase-manager-upkeep-slider-row">
+                <input id="phase-manager-upkeep-y" type="range" min="0" max="1" step="0.001" />
+                <output id="phase-manager-upkeep-y-value" for="phase-manager-upkeep-y"></output>
+              </div>
+            </div>
+            <div class="phase-manager-upkeep-field-row">
+              <label for="phase-manager-upkeep-width">Ready Scale X</label>
+              <div class="phase-manager-upkeep-slider-row">
+                <input id="phase-manager-upkeep-width" type="range" min="0.25" max="3" step="0.01" />
+                <output id="phase-manager-upkeep-width-value" for="phase-manager-upkeep-width"></output>
+              </div>
+            </div>
+            <div class="phase-manager-upkeep-field-row">
+              <label for="phase-manager-upkeep-height">Ready Scale Y</label>
+              <div class="phase-manager-upkeep-slider-row">
+                <input id="phase-manager-upkeep-height" type="range" min="0.25" max="3" step="0.01" />
+                <output id="phase-manager-upkeep-height-value" for="phase-manager-upkeep-height"></output>
+              </div>
+            </div>
+
+            <button id="phase-manager-upkeep-export" type="button" class="secondary-action">Export HUD JSON</button>
+            <output id="phase-manager-upkeep-export-output"></output>
+          </div>
         </div>
 
       </section>
