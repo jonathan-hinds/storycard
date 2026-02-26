@@ -119,6 +119,21 @@ export class CardRollerOverlay {
     return rollSequence;
   }
 
+  createRollerForEntry(entry) {
+    if (!entry?.panel) return null;
+    if (entry.roller) return entry.roller;
+
+    const roller = new DieRollerClient({ container: entry.panel, assets: {} });
+    entry.roller = roller;
+    return roller;
+  }
+
+  destroyRollerForEntry(entry) {
+    if (!entry?.roller) return;
+    entry.roller.destroy();
+    entry.roller = null;
+  }
+
   applyOutcomeToCard(cardId, rollType, outcome) {
     const statKey = ROLL_TYPE_TO_STAT_KEY[rollType] || rollType;
     if (typeof outcome === 'number') {
@@ -226,14 +241,9 @@ export class CardRollerOverlay {
       panel.className = 'card-roller-overlay-panel';
       this.layer.append(panel);
 
-      const roller = new DieRollerClient({ container: panel, assets: {} });
-      const firstRollType = attackRollSequence[0];
-      const firstRollDetails = this.getRollTypeForCard(card, firstRollType);
-      roller.renderStaticPreview(firstRollDetails.sides);
-
       const entry = {
         panel,
-        roller,
+        roller: null,
         globalSlotIndex,
         hasRolled: false,
         removeListeners: null,
@@ -254,6 +264,7 @@ export class CardRollerOverlay {
           panel.dataset.state = 'rolling';
 
           try {
+            const roller = this.createRollerForEntry(entry);
             const outcomes = await this.rollLocalSequence({
               card,
               attackStep: step,
@@ -261,9 +272,11 @@ export class CardRollerOverlay {
               roller,
               onAttackRoll,
             });
+            this.destroyRollerForEntry(entry);
             panel.dataset.state = 'settled';
             return outcomes;
           } catch (error) {
+            this.destroyRollerForEntry(entry);
             throw error;
           }
         };
@@ -291,7 +304,6 @@ export class CardRollerOverlay {
 
           entry.removeListeners = () => {
             removeRollTriggerListeners(panel, wrappedTrigger);
-            removeRollTriggerListeners(roller.canvas, wrappedTrigger);
             entry.removeListeners = null;
           };
 
@@ -303,7 +315,6 @@ export class CardRollerOverlay {
           };
 
           addRollTriggerListeners(panel);
-          addRollTriggerListeners(roller.canvas);
         });
 
         pendingRolls.push(triggerPromise);
@@ -313,6 +324,7 @@ export class CardRollerOverlay {
 
         pendingRolls.push((async () => {
           panel.dataset.state = 'rolling';
+          const roller = this.createRollerForEntry(entry);
           const outcomes = await this.rollRemoteSequence({
             card,
             attackStep: step,
@@ -320,6 +332,7 @@ export class CardRollerOverlay {
             roller,
             waitForRemoteRoll,
           });
+          this.destroyRollerForEntry(entry);
           panel.dataset.state = 'settled';
           return outcomes;
         })());
@@ -350,7 +363,7 @@ export class CardRollerOverlay {
     }
     this.activeRollers.forEach((entry) => {
       entry.removeListeners?.();
-      entry.roller.destroy();
+      this.destroyRollerForEntry(entry);
     });
     this.activeRollers = [];
     this.layer.replaceChildren();
