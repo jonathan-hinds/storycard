@@ -173,6 +173,42 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
   assert.equal(execution.retaliationDamage, 3, 'retaliation damage should include temporary retaliation bonuses');
 }
 
+{
+  const match = {
+    id: 'match-retaliation-exact-lethal',
+    players: ['p1', 'p2'],
+    cardsByPlayer: new Map(),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+  };
+
+  const attacker = createCreature({ id: 'a', slotIndex: 0, health: 3, damageValue: 3 });
+  const defender = createCreature({ id: 'b', slotIndex: 0, health: 5, damageValue: 3, attackCommitted: true, targetSlotIndex: 0, targetSide: 'opponent' });
+
+  match.cardsByPlayer.set('p1', { board: [attacker] });
+  match.cardsByPlayer.set('p2', { board: [defender] });
+  match.pendingCommitAttacksByPlayer.set('p1', [{
+    id: 'p1:0:opponent:0',
+    attackerSlotIndex: 0,
+    targetSlotIndex: 0,
+    targetSide: 'opponent',
+    selectedAbilityIndex: 0,
+  }]);
+  match.pendingCommitAttacksByPlayer.set('p2', [{
+    id: 'p2:0:opponent:0',
+    attackerSlotIndex: 0,
+    targetSlotIndex: 0,
+    targetSide: 'opponent',
+    selectedAbilityIndex: 0,
+  }]);
+
+  server.applyCommitEffects(match);
+
+  const attackerState = match.cardsByPlayer.get('p1');
+  assert.equal(attackerState.board.length, 0, 'retaliation should remove attackers that reach exactly zero health');
+}
+
 
 
 {

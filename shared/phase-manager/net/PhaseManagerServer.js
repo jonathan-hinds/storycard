@@ -409,7 +409,7 @@ class PhaseManagerServer {
     const nextHealth = hasDamage ? currentHealth - adjustedResolvedValue : currentHealth + adjustedResolvedValue;
     defenderCard.catalogCard.health = nextHealth;
 
-    if (nextHealth < 0) {
+    if (nextHealth <= 0) {
       defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
     }
 
@@ -463,7 +463,7 @@ class PhaseManagerServer {
     const nextHealth = currentHealth - retaliationAppliedDamage;
     attackerCard.catalogCard.health = nextHealth;
 
-    if (nextHealth < 0) {
+    if (nextHealth <= 0) {
       attackerState.board = attackerState.board.filter((card) => card !== attackerCard);
     }
 
