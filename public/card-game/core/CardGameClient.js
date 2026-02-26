@@ -221,8 +221,8 @@ export class CardGameClient {
     this.handArea.rotation.x = -Math.PI / 2;
     this.scene.add(this.handArea);
 
-    const playerBoardSlotMaterial = new THREE.MeshStandardMaterial({ color: 0x7ca0e7, transparent: true, opacity: 0.2, roughness: 0.85, metalness: 0.08 });
-    const opponentBoardSlotMaterial = new THREE.MeshStandardMaterial({ color: 0xd08db1, transparent: true, opacity: 0.17, roughness: 0.9, metalness: 0.08 });
+    const playerBoardSlotMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.2, roughness: 0.85, metalness: 0.08 });
+    const opponentBoardSlotMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.17, roughness: 0.9, metalness: 0.08 });
 
     this.template.boardSlotLayout.forEach((slot, index) => {
       const slotMaterial = slot.side === this.template.playerSide ? playerBoardSlotMaterial.clone() : opponentBoardSlotMaterial.clone();
