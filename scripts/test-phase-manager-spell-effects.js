@@ -1,7 +1,14 @@
 const assert = require('assert');
 const { PhaseManagerServer } = require('../shared/phase-manager');
 
-function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 }) {
+function createSpellMatch({
+  targetHealth = 6,
+  ability = null,
+  rollOutcome = 3,
+  spellType = null,
+  targetType = null,
+  targetSide = 'opponent',
+}) {
   const server = new PhaseManagerServer();
   const playerId = 'p1';
   const opponentId = 'p2';
@@ -30,13 +37,14 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
         color: 0,
         catalogCard: {
           cardKind: 'Spell',
+          type: spellType,
           ability1: ability,
           ability2: null,
         },
       },
       selectedAbilityIndex: 0,
       targetSlotIndex: 0,
-      targetSide: 'opponent',
+      targetSide,
       rollType: 'damage',
       dieSides: 6,
       rollOutcome,
@@ -47,20 +55,21 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
   };
 
   const casterState = {
-    hand: [{ id: spellCardId, color: 0, catalogCard: { cardKind: 'Spell' } }],
+    hand: [{ id: spellCardId, color: 0, catalogCard: { cardKind: 'Spell', type: spellType } }],
     board: [],
     deck: [],
     discard: [],
   };
 
   const defenderCard = {
-    id: 'enemy-board-card',
+    id: 'target-board-card',
     slotIndex: 0,
     attackCommitted: false,
     targetSlotIndex: null,
     targetSide: null,
     selectedAbilityIndex: 0,
     catalogCard: {
+      type: targetType,
       health: targetHealth,
       ability1: null,
       ability2: null,
@@ -69,10 +78,14 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
 
   const opponentState = {
     hand: [],
-    board: [defenderCard],
+    board: targetSide === 'opponent' ? [defenderCard] : [],
     deck: [],
     discard: [],
   };
+
+  if (targetSide === 'player') {
+    casterState.board.push(defenderCard);
+  }
 
   match.cardsByPlayer.set(playerId, casterState);
   match.cardsByPlayer.set(opponentId, opponentState);
@@ -112,7 +125,6 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
   assert.equal(match.activeSpellResolution.resolvedDamage, 5, 'rolled spells should publish resolved damage immediately');
 }
 
-
 {
   const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
     targetHealth: 6,
@@ -150,7 +162,6 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
   assert.equal(match.activeSpellResolution.resolvedDamage, 4, 'spell metadata should reflect lethal damage');
 }
 
-
 {
   const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
     targetHealth: 6,
@@ -169,6 +180,49 @@ function createSpellMatch({ targetHealth = 6, ability = null, rollOutcome = 3 })
   assert.equal(match.activeSpellResolution.effectId, 'retaliation_bonus', 'completed spells should expose retaliation bonus effect metadata');
 }
 
+{
+  const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
+    targetHealth: 10,
+    rollOutcome: 3,
+    spellType: 'Fire',
+    targetType: 'Nature',
+    ability: {
+      effectId: 'damage_enemy',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
 
+  const rollResult = server.submitSpellRoll({ playerId, spellId, rollOutcome: 3, rollData: null });
+  assert.equal(rollResult.statusCode, 200);
+  assert.equal(match.activeSpellResolution.resolvedDamage, 5, 'type-advantaged spell preview damage should be multiplied and rounded up');
+
+  const result = server.completeSpellResolution({ playerId, spellId });
+  assert.equal(result.statusCode, 200);
+  assert.equal(defenderCard.catalogCard.health, 5, 'type-advantaged spell damage should be multiplied and rounded up');
+}
+
+{
+  const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
+    targetHealth: 4,
+    rollOutcome: 3,
+    spellType: 'Nature',
+    targetType: 'Nature',
+    targetSide: 'player',
+    ability: {
+      effectId: 'heal_target',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
+
+  const rollResult = server.submitSpellRoll({ playerId, spellId, rollOutcome: 3, rollData: null });
+  assert.equal(rollResult.statusCode, 200);
+  assert.equal(match.activeSpellResolution.resolvedHealing, 5, 'same-type beneficial spell preview should be multiplied and rounded up');
+
+  const result = server.completeSpellResolution({ playerId, spellId });
+  assert.equal(result.statusCode, 200);
+  assert.equal(defenderCard.catalogCard.health, 9, 'same-type beneficial spell resolution should be multiplied and rounded up');
+}
 
 console.log('phase manager spell effects checks passed');
