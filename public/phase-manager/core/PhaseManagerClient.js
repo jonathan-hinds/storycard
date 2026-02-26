@@ -248,6 +248,17 @@ export class PhaseManagerClient {
     this.upkeepBackgroundImage = image;
   }
 
+  async preloadBackgroundAsset(path) {
+    if (!path || this.upkeepBackgroundCache.has(path)) return;
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to preload upkeep background asset'));
+      img.src = path;
+    });
+    this.upkeepBackgroundCache.set(path, image);
+  }
+
   async handleUpkeepBackgroundChange() {
     const selectedPath = this.elements.upkeepBackgroundSelect?.value || '';
     this.upkeepBackgroundAssetPath = selectedPath;
@@ -311,6 +322,13 @@ export class PhaseManagerClient {
     window.addEventListener('resize', this.handleWindowResize);
     this.syncUpkeepPositionInputs();
     this.syncUpkeepBackgroundOptions();
+    this.preloadBackgroundAsset(DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH)
+      .then(() => {
+        if (this.upkeepDisplay?.value !== null) {
+          this.drawUpkeepDisplay(this.upkeepDisplay.value);
+        }
+      })
+      .catch(() => {});
     this.loadUpkeepBackground(this.upkeepBackgroundAssetPath).catch(() => {
       this.upkeepBackgroundImage = null;
     });
