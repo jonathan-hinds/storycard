@@ -3,7 +3,9 @@ const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
 const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
-const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus', 'taunt'];
+const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus'];
+const ABILITY_BUFFS = ['none', 'taunt'];
+const ABILITY_BUFF_TARGETS = ['none', 'self', 'friendly'];
 const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
 const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense', 'efct'];
 const ABILITY_ROLL_STATS_BY_KIND = Object.freeze({
@@ -47,6 +49,50 @@ async function getCollection() {
 
 async function migrateLegacyAbilities(collection) {
   const now = new Date().toISOString();
+
+  await collection.updateMany(
+    {
+      effectId: 'taunt',
+    },
+    {
+      $set: {
+        effectId: 'none',
+        buffId: 'taunt',
+        buffTarget: 'self',
+        updatedAt: now,
+      },
+    },
+  );
+
+  await collection.updateMany(
+    {
+      $or: [
+        { buffId: { $exists: false } },
+        { buffId: null },
+      ],
+    },
+    {
+      $set: {
+        buffId: 'none',
+        updatedAt: now,
+      },
+    },
+  );
+
+  await collection.updateMany(
+    {
+      $or: [
+        { buffTarget: { $exists: false } },
+        { buffTarget: null },
+      ],
+    },
+    {
+      $set: {
+        buffTarget: 'none',
+        updatedAt: now,
+      },
+    },
+  );
 
   await collection.updateMany(
     {
@@ -139,6 +185,8 @@ function toAbilityRecord(document) {
     abilityKind: document.abilityKind || 'Creature',
     target: document.target || 'none',
     effectId: document.effectId || 'none',
+    buffId: document.buffId || 'none',
+    buffTarget: document.buffTarget || 'none',
     valueSourceType: document.valueSourceType || 'none',
     valueSourceStat: document.valueSourceStat || null,
     valueSourceFixed: Number.isFinite(document.valueSourceFixed) ? document.valueSourceFixed : null,
@@ -155,6 +203,8 @@ function normalizeAbilityInput(input = {}) {
   const abilityKind = typeof input.abilityKind === 'string' ? input.abilityKind.trim() : '';
   const target = typeof input.target === 'string' ? input.target.trim().toLowerCase() : '';
   const effectId = typeof input.effectId === 'string' ? input.effectId.trim().toLowerCase() : 'none';
+  const buffId = typeof input.buffId === 'string' ? input.buffId.trim().toLowerCase() : 'none';
+  const buffTarget = typeof input.buffTarget === 'string' ? input.buffTarget.trim().toLowerCase() : 'none';
   const valueSourceType = typeof input.valueSourceType === 'string' ? input.valueSourceType.trim().toLowerCase() : 'none';
   const valueSourceStat = typeof input.valueSourceStat === 'string' ? input.valueSourceStat.trim().toLowerCase() : null;
   const fixedRaw = input.valueSourceFixed;
@@ -186,6 +236,14 @@ function normalizeAbilityInput(input = {}) {
     throw new Error(`effectId must be one of: ${ABILITY_EFFECTS.join(', ')}`);
   }
 
+  if (!ABILITY_BUFFS.includes(buffId)) {
+    throw new Error(`buffId must be one of: ${ABILITY_BUFFS.join(', ')}`);
+  }
+
+  if (!ABILITY_BUFF_TARGETS.includes(buffTarget)) {
+    throw new Error(`buffTarget must be one of: ${ABILITY_BUFF_TARGETS.join(', ')}`);
+  }
+
   if (!ABILITY_VALUE_SOURCE_TYPES.includes(valueSourceType)) {
     throw new Error(`valueSourceType must be one of: ${ABILITY_VALUE_SOURCE_TYPES.join(', ')}`);
   }
@@ -204,12 +262,15 @@ function normalizeAbilityInput(input = {}) {
     }
   }
 
-  if (effectId === 'taunt') {
+  if (buffId === 'taunt') {
     if (!Number.isInteger(durationTurns)) {
-      throw new Error('durationTurns must be a whole number when effectId is taunt');
+      throw new Error('durationTurns must be a whole number when buffId is taunt');
     }
     if (durationTurns < 1) {
-      throw new Error('durationTurns must be at least 1 when effectId is taunt');
+      throw new Error('durationTurns must be at least 1 when buffId is taunt');
+    }
+    if (buffTarget !== 'self' && buffTarget !== 'friendly') {
+      throw new Error('buffTarget must be self or friendly when buffId is taunt');
     }
   }
 
@@ -220,10 +281,12 @@ function normalizeAbilityInput(input = {}) {
     abilityKind,
     target,
     effectId,
+    buffId,
+    buffTarget,
     valueSourceType,
     valueSourceStat: valueSourceType === 'roll' ? valueSourceStat : null,
     valueSourceFixed: valueSourceType === 'fixed' ? valueSourceFixed : null,
-    durationTurns: effectId === 'taunt' ? durationTurns : null,
+    durationTurns: buffId === 'taunt' ? durationTurns : null,
   };
 }
 
@@ -302,6 +365,8 @@ module.exports = {
   ABILITY_KINDS,
   ABILITY_TARGETS,
   ABILITY_EFFECTS,
+  ABILITY_BUFFS,
+  ABILITY_BUFF_TARGETS,
   ABILITY_VALUE_SOURCE_TYPES,
   ABILITY_ROLL_STATS,
   ABILITY_ROLL_STATS_BY_KIND,

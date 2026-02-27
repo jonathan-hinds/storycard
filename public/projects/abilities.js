@@ -9,6 +9,8 @@ const abilityKindLabel = document.getElementById('ability-kind-label');
 
 const effectSelect = document.getElementById('ability-effect');
 const valueSourceTypeSelect = document.getElementById('ability-value-source-type');
+const buffSelect = document.getElementById('ability-buff');
+const buffTargetSelect = document.getElementById('ability-buff-target');
 const valueSourceStatSelect = document.getElementById('ability-value-source-stat');
 const valueSourceFixedInput = document.getElementById('ability-value-source-fixed');
 const durationTurnsInput = document.getElementById('ability-duration-turns');
@@ -56,7 +58,7 @@ function updateValueSourceVisibility() {
 }
 
 function updateTauntDurationVisibility() {
-  const isTaunt = effectSelect?.value === 'taunt';
+  const isTaunt = buffSelect?.value === 'taunt';
   if (!durationTurnsInput) return;
   durationTurnsInput.hidden = !isTaunt;
   if (durationTurnsInput.previousElementSibling) durationTurnsInput.previousElementSibling.hidden = !isTaunt;
@@ -66,10 +68,14 @@ function updateTauntDurationVisibility() {
 
 
 function validateAbilityInput(abilityInput) {
-  if (abilityInput.effectId !== 'taunt') return null;
+  if (abilityInput.buffId === 'taunt' && abilityInput.buffTarget !== 'self' && abilityInput.buffTarget !== 'friendly') {
+    return 'Taunt buffs must target self or friendly.';
+  }
+
+  if (abilityInput.buffId !== 'taunt') return null;
   const durationTurns = Number(abilityInput.durationTurns);
   if (!Number.isInteger(durationTurns) || durationTurns < 1) {
-    return 'Taunt abilities must include a duration of at least 1 turn.';
+    return 'Taunt buffs must include a duration of at least 1 turn.';
   }
   return null;
 }
@@ -82,6 +88,8 @@ function resetFormToCreateMode() {
   form.elements.target.value = 'none';
   if (effectSelect.options.length) effectSelect.value = effectSelect.options[0].value;
   if (valueSourceTypeSelect.options.length) valueSourceTypeSelect.value = valueSourceTypeSelect.options[0].value;
+  if (buffSelect.options.length) buffSelect.value = buffSelect.options[0].value;
+  if (buffTargetSelect.options.length) buffTargetSelect.value = buffTargetSelect.options[0].value;
   if (valueSourceStatSelect.options.length) valueSourceStatSelect.value = valueSourceStatSelect.options[0].value;
   valueSourceFixedInput.value = '';
   if (durationTurnsInput) durationTurnsInput.value = '';
@@ -122,8 +130,12 @@ function renderAbilities(abilities) {
     const valueSource = ability.valueSourceType === 'roll'
       ? `roll ${ability.valueSourceStat || 'damage'}`
       : (ability.valueSourceType === 'fixed' ? `fixed ${ability.valueSourceFixed ?? 0}` : 'none');
-    const durationText = Number.isInteger(ability.durationTurns) ? `, duration ${ability.durationTurns} turn${ability.durationTurns === 1 ? '' : 's'}` : '';
-    effect.textContent = `Effect: ${toTitle(ability.effectId || 'none')} (${valueSource}${durationText})`;
+    effect.textContent = `Effect: ${toTitle(ability.effectId || 'none')} (${valueSource})`;
+
+    const buff = document.createElement('p');
+    buff.className = 'catalog-card-type';
+    const buffDuration = Number.isInteger(ability.durationTurns) ? `, duration ${ability.durationTurns} turn${ability.durationTurns === 1 ? '' : 's'}` : '';
+    buff.textContent = `Buff: ${toTitle(ability.buffId || 'none')} (${toTitle(ability.buffTarget || 'none')}${buffDuration})`;
 
     const editButton = document.createElement('button');
     editButton.type = 'button';
@@ -136,6 +148,8 @@ function renderAbilities(abilities) {
       form.elements.target.value = ability.target ?? 'none';
       form.elements.effectId.value = ability.effectId ?? 'none';
       form.elements.valueSourceType.value = ability.valueSourceType ?? 'none';
+      form.elements.buffId.value = ability.buffId ?? 'none';
+      form.elements.buffTarget.value = ability.buffTarget ?? 'none';
       form.elements.valueSourceStat.value = ability.valueSourceStat ?? 'damage';
       form.elements.valueSourceFixed.value = Number.isFinite(ability.valueSourceFixed) ? ability.valueSourceFixed : '';
       form.elements.durationTurns.value = Number.isInteger(ability.durationTurns) ? ability.durationTurns : '';
@@ -146,7 +160,7 @@ function renderAbilities(abilities) {
       setStatus(`Editing "${ability.name}".`);
     });
 
-    row.append(heading, description, target, effect, editButton);
+    row.append(heading, description, target, effect, buff, editButton);
     list.append(row);
   });
 
@@ -166,6 +180,8 @@ async function fetchAbilities() {
 
     setOptions(effectSelect, payload.abilityEffects || ['none'], 'none');
     setOptions(valueSourceTypeSelect, payload.abilityValueSourceTypes || ['none'], 'none');
+    setOptions(buffSelect, payload.abilityBuffs || ['none'], 'none');
+    setOptions(buffTargetSelect, payload.abilityBuffTargets || ['none'], 'none');
     setOptions(valueSourceStatSelect, payload.abilityRollStats || ['damage'], 'damage');
     updateValueSourceVisibility();
     updateTauntDurationVisibility();
@@ -249,6 +265,8 @@ saveAbilityButton.addEventListener('click', async () => {
       form.elements.target.value = updatedAbility.target ?? 'none';
       form.elements.effectId.value = updatedAbility.effectId ?? 'none';
       form.elements.valueSourceType.value = updatedAbility.valueSourceType ?? 'none';
+      form.elements.buffId.value = updatedAbility.buffId ?? 'none';
+      form.elements.buffTarget.value = updatedAbility.buffTarget ?? 'none';
       form.elements.valueSourceStat.value = updatedAbility.valueSourceStat ?? 'damage';
       form.elements.valueSourceFixed.value = Number.isFinite(updatedAbility.valueSourceFixed) ? updatedAbility.valueSourceFixed : '';
       form.elements.durationTurns.value = Number.isInteger(updatedAbility.durationTurns) ? updatedAbility.durationTurns : '';
@@ -267,5 +285,5 @@ if (abilityKindLabel) {
 }
 
 valueSourceTypeSelect?.addEventListener('change', updateValueSourceVisibility);
-effectSelect?.addEventListener('change', updateTauntDurationVisibility);
+buffSelect?.addEventListener('change', updateTauntDurationVisibility);
 fetchAbilities();

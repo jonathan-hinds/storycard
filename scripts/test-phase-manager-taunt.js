@@ -26,7 +26,7 @@ const server = new PhaseManagerServer();
   const taunter = createCreature({
     id: 'taunter',
     slotIndex: 1,
-    ability1: { effectId: 'taunt', valueSourceType: 'none', durationTurns: 2 },
+    ability1: { effectId: 'none', buffId: 'taunt', buffTarget: 'self', valueSourceType: 'none', durationTurns: 2 },
     targetSlotIndex: null,
   });
   const ally = createCreature({

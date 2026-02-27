@@ -340,6 +340,45 @@ class PhaseManagerServer {
     return typeof cardType === 'string' ? cardType.trim() : '';
   }
 
+
+  resolveBuffTarget({ match, casterId, attack, buffTarget }) {
+    if (!match || !casterId) return { targetPlayerId: null, targetSlotIndex: null };
+    if (buffTarget === 'self') {
+      return {
+        targetPlayerId: casterId,
+        targetSlotIndex: Number.isInteger(attack?.attackerSlotIndex) ? attack.attackerSlotIndex : null,
+      };
+    }
+    if (buffTarget === 'friendly') {
+      if (attack?.targetSide === 'player' && Number.isInteger(attack?.targetSlotIndex)) {
+        return { targetPlayerId: casterId, targetSlotIndex: attack.targetSlotIndex };
+      }
+      return { targetPlayerId: null, targetSlotIndex: null };
+    }
+    return { targetPlayerId: null, targetSlotIndex: null };
+  }
+
+  applyResolvedAbilityBuff({ match, casterId, attack, buffId, buffTarget, durationTurns }) {
+    if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
+    if (buffId !== 'taunt') return { executed: true, reason: 'no_buff' };
+    const normalizedDuration = Number.isInteger(durationTurns) ? Math.max(0, durationTurns) : 0;
+    if (normalizedDuration < 1) return { executed: false, reason: 'invalid_duration' };
+
+    const { targetPlayerId, targetSlotIndex } = this.resolveBuffTarget({ match, casterId, attack, buffTarget });
+    if (!targetPlayerId || !Number.isInteger(targetSlotIndex)) {
+      return { executed: false, reason: 'target_missing' };
+    }
+
+    const targetState = match.cardsByPlayer.get(targetPlayerId);
+    const targetCard = targetState?.board?.find((card) => card.slotIndex === targetSlotIndex) || null;
+    if (!targetCard) {
+      return { executed: false, reason: 'target_missing' };
+    }
+
+    targetCard.tauntTurnsRemaining = normalizedDuration;
+    return { executed: true, reason: 'taunt_applied' };
+  }
+
   applyTypeAdvantageToValue({ effectId, resolvedValue, sourceType, targetType }) {
     const normalizedResolvedValue = Number.isFinite(resolvedValue)
       ? Math.max(0, Math.floor(resolvedValue))
@@ -386,10 +425,6 @@ class PhaseManagerServer {
 
   applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue, sourceType }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (effectId === 'taunt') {
-      return { executed: true, reason: 'taunt_applied' };
-    }
-
     if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus') {
       return { executed: true, reason: 'no_effect' };
     }
@@ -536,7 +571,9 @@ class PhaseManagerServer {
       resolvedValue,
       resolvedDamage: ability?.effectId === 'damage_enemy' ? resolvedValue : 0,
       resolvedHealing: ability?.effectId === 'heal_target' ? resolvedValue : 0,
-      tauntDurationTurns: Number.isInteger(ability?.durationTurns) ? ability.durationTurns : null,
+      buffId: ability?.buffId || 'none',
+      buffTarget: ability?.buffTarget || 'none',
+      buffDurationTurns: Number.isInteger(ability?.durationTurns) ? ability.durationTurns : null,
     };
   }
 
@@ -582,10 +619,16 @@ class PhaseManagerServer {
       resolvedAttack.resolvedDamage = resolvedAttack.effectId === 'damage_enemy' ? executedResolvedValue : 0;
       resolvedAttack.resolvedHealing = resolvedAttack.effectId === 'heal_target' ? executedResolvedValue : 0;
 
-      if (executionResult.executed !== false && resolvedAttack.effectId === 'taunt') {
-        const tauntDuration = Number.isInteger(resolvedAttack.tauntDurationTurns) ? resolvedAttack.tauntDurationTurns : 0;
-        attackerCard.tauntTurnsRemaining = Math.max(0, tauntDuration);
-      }
+      const buffResult = executionResult.executed === false
+        ? { executed: false, reason: 'effect_failed' }
+        : this.applyResolvedAbilityBuff({
+          match,
+          casterId: attackerId,
+          attack: tauntAdjustedAttack,
+          buffId: resolvedAttack.buffId,
+          buffTarget: resolvedAttack.buffTarget,
+          durationTurns: resolvedAttack.buffDurationTurns,
+        });
 
       const retaliationResult = {
           retaliationDamage: 0,
@@ -626,6 +669,8 @@ class PhaseManagerServer {
 
       commitExecutionByAttackId.set(attack.id, {
           ...executionResult,
+          buffExecuted: buffResult.executed !== false,
+          buffReason: buffResult.reason || null,
           ...retaliationResult,
         });
     }
