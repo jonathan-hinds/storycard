@@ -1,5 +1,6 @@
 import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
 import { CARD_KINDS, getDefaultCardLabelLayout, resolveCardKind } from '/public/card-game/render/cardStyleConfig.js';
+import { normalizeBadgeSlotsLayout } from '/public/card-game/render/badgeSlotsLayout.js';
 import { CardRollerOverlay } from './CardRollerOverlay.js';
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 
@@ -185,9 +186,7 @@ export class PhaseManagerClient {
 
   createInitialBuffBadgeSlotsLayout() {
     const defaultLayout = getDefaultCardLabelLayout(CARD_KINDS.CREATURE);
-    return {
-      ...defaultLayout.badgeSlots,
-    };
+    return normalizeBadgeSlotsLayout(defaultLayout.badgeSlots, defaultLayout.badgeSlots);
   }
 
   syncBuffBadgeLayoutInputs() {
@@ -248,7 +247,7 @@ export class PhaseManagerClient {
   }
 
   handleBuffBadgeLayoutInput() {
-    this.buffBadgeSlotsLayout = {
+    this.buffBadgeSlotsLayout = normalizeBadgeSlotsLayout({
       visible: this.elements.badgeSlotsVisibleInput?.checked !== false,
       count: Math.round(this.getControlValue('badgeSlotsCount', this.buffBadgeSlotsLayout.count)),
       x: this.getControlValue('badgeSlotsX', this.buffBadgeSlotsLayout.x),
@@ -258,7 +257,7 @@ export class PhaseManagerClient {
       size: this.getControlValue('badgeSlotsSize', this.buffBadgeSlotsLayout.size),
       bevel: this.getControlValue('badgeSlotsBevel', this.buffBadgeSlotsLayout.bevel),
       thickness: this.getControlValue('badgeSlotsThickness', this.buffBadgeSlotsLayout.thickness),
-    };
+    }, this.createInitialBuffBadgeSlotsLayout());
     this.syncBuffBadgeLayoutInputs();
     this.applyBuffBadgeLayoutToSceneCards();
   }
