@@ -6,6 +6,29 @@ const BADGE_SLOT_REFERENCE_CARD = Object.freeze({
   thickness: 0.08,
 });
 
+
+function remapGeometryUvToBounds(geometry) {
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  if (!bounds) return;
+
+  const size = new THREE.Vector3();
+  bounds.getSize(size);
+  const rangeX = size.x || 1;
+  const rangeY = size.y || 1;
+
+  const positions = geometry.attributes.position;
+  const uv = new Float32Array(positions.count * 2);
+  for (let index = 0; index < positions.count; index += 1) {
+    const x = positions.getX(index);
+    const y = positions.getY(index);
+    uv[(index * 2)] = (x - bounds.min.x) / rangeX;
+    uv[(index * 2) + 1] = (y - bounds.min.y) / rangeY;
+  }
+
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+}
+
 function createRoundedRectShape(width, height, radius) {
   const halfW = width / 2;
   const halfH = height / 2;
@@ -52,6 +75,7 @@ export function createBadgeSlotGeometry(layout) {
     steps: 1,
   });
   geometry.center();
+  remapGeometryUvToBounds(geometry);
   return geometry;
 }
 
