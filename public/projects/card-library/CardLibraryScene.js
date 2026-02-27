@@ -219,6 +219,7 @@ function normalizeAbilityAnchorLayout(layout, fallback) {
 function normalizeBadgeSlotsLayout(layout, fallback) {
   return {
     visible: typeof layout?.visible === 'boolean' ? layout.visible : fallback.visible,
+    count: Number.isFinite(layout?.count) ? THREE.MathUtils.clamp(Math.round(layout.count), 1, 12) : fallback.count,
     x: Number.isFinite(layout?.x) ? layout.x : fallback.x,
     y: Number.isFinite(layout?.y) ? layout.y : fallback.y,
     z: Number.isFinite(layout?.z) ? layout.z : fallback.z,
@@ -270,24 +271,19 @@ function createBadgeSlotMesh(layout) {
 
 function createBadgeSlotsOverlay(layout) {
   const badgeRoot = new THREE.Group();
-  const gridColumns = 2;
-  const gridRows = 2;
   const spacing = layout.size + layout.gap;
-  const totalWidth = (gridColumns - 1) * spacing;
-  const totalHeight = (gridRows - 1) * spacing;
+  const totalHeight = (layout.count - 1) * spacing;
 
-  for (let rowIndex = 0; rowIndex < gridRows; rowIndex += 1) {
-    for (let columnIndex = 0; columnIndex < gridColumns; columnIndex += 1) {
-      const badgeMesh = createBadgeSlotMesh(layout);
-      badgeMesh.position.set(
-        (-totalWidth / 2) + columnIndex * spacing,
-        (totalHeight / 2) - rowIndex * spacing,
-        0,
-      );
-      badgeMesh.castShadow = true;
-      badgeMesh.receiveShadow = true;
-      badgeRoot.add(badgeMesh);
-    }
+  for (let badgeIndex = 0; badgeIndex < layout.count; badgeIndex += 1) {
+    const badgeMesh = createBadgeSlotMesh(layout);
+    badgeMesh.position.set(
+      0,
+      (totalHeight / 2) - badgeIndex * spacing,
+      0,
+    );
+    badgeMesh.castShadow = true;
+    badgeMesh.receiveShadow = true;
+    badgeRoot.add(badgeMesh);
   }
 
   badgeRoot.position.set(layout.x, layout.y, layout.z);

@@ -52,6 +52,7 @@ const CREATURE_CARD_LABEL_LAYOUT = makeFrozenLayout({
   ability2: { x: 0, y: 0 },
   badgeSlots: {
     visible: true,
+    count: 4,
     x: 0,
     y: 0.45,
     z: 0.07,
@@ -97,6 +98,7 @@ const SPELL_CARD_LABEL_LAYOUT = makeFrozenLayout({
   ability2: { x: 0, y: 0 },
   badgeSlots: {
     visible: false,
+    count: 4,
     x: 0,
     y: 0.45,
     z: 0.07,
