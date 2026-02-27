@@ -89,6 +89,20 @@ function createBadgeSlotGeometry(layout) {
   return geometry;
 }
 
+function normalizeBadgeSlotsLayout(layout) {
+  return {
+    visible: typeof layout?.visible === 'boolean' ? layout.visible : true,
+    count: Number.isFinite(layout?.count) ? THREE.MathUtils.clamp(Math.round(layout.count), 1, 12) : 0,
+    x: Number.isFinite(layout?.x) ? layout.x : 0,
+    y: Number.isFinite(layout?.y) ? layout.y : 0,
+    z: Number.isFinite(layout?.z) ? layout.z : 0,
+    gap: Number.isFinite(layout?.gap) ? Math.max(0, layout.gap) : 0,
+    size: Number.isFinite(layout?.size) ? Math.max(0.04, layout.size) : 0.18,
+    bevel: Number.isFinite(layout?.bevel) ? Math.max(0, layout.bevel) : 0.03,
+    thickness: Number.isFinite(layout?.thickness) ? Math.max(0.005, layout.thickness) : 0.02,
+  };
+}
+
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
     if (!canvas) throw new Error('canvas is required');
@@ -244,8 +258,8 @@ export class CardGameClient {
   setupCardBuffBadges(card) {
     const cardKind = card?.userData?.catalogCard?.cardKind;
     const layout = getDefaultCardLabelLayout(cardKind);
-    const badgeLayout = layout?.badgeSlots;
-    if (!badgeLayout || badgeLayout.count < 1) return;
+    const badgeLayout = normalizeBadgeSlotsLayout(layout?.badgeSlots);
+    if (!badgeLayout.visible || badgeLayout.count < 1) return;
 
     const badgeRoot = new THREE.Group();
     const spacing = badgeLayout.size + badgeLayout.gap;
@@ -286,6 +300,7 @@ export class CardGameClient {
     }
 
     badgeRoot.position.set(badgeLayout.x, badgeLayout.y, badgeLayout.z);
+    badgeRoot.visible = badgeLayout.visible;
     card.userData.tiltPivot.add(badgeRoot);
     card.userData.buffBadgeRoot = badgeRoot;
     card.userData.buffBadges = badges;
