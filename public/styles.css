@@ -474,26 +474,6 @@ button {
   will-change: left, top;
 }
 
-
-.buff-badge-tooltip {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform: translate(-50%, -100%);
-  margin-top: -0.4rem;
-  padding: 0.3rem 0.5rem;
-  background: rgba(0, 0, 0, 0.75);
-  color: #ffffff;
-  border-radius: 0.35rem;
-  font-size: 0.76rem;
-  font-weight: 700;
-  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
-  line-height: 1.1;
-  pointer-events: none;
-  z-index: 2;
-  white-space: nowrap;
-}
-
 .cards-project-layout {
   min-height: calc(100vh - 60px);
   display: grid;

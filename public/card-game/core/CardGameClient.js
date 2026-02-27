@@ -58,7 +58,6 @@ const TYPE_ADVANTAGE_BY_ATTACKER = Object.freeze({
 });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 const BUFF_TAUNT = 'taunt';
-const BUFF_TOOLTIP_OFFSET = new THREE.Vector3(0, 0.18, 0);
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -106,7 +105,6 @@ export class CardGameClient {
     this.deathAnimations = [];
     this.damagePopups = [];
     this.targetEffectivenessBadges = [];
-    this.buffTooltipNode = null;
     this.pointerNdc = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -150,7 +148,6 @@ export class CardGameClient {
       spellRollerSlot: null,
       activeSpellResolutionId: null,
       remoteSpellResolutionPromise: null,
-      hoveredBuffBadge: null,
     };
 
     this.#buildBaseScene();
@@ -238,7 +235,6 @@ export class CardGameClient {
     );
     badges.forEach((badgeMesh) => {
       badgeMesh.visible = false;
-      badgeMesh.userData.cardRoot = card;
     });
     card.userData.tiltPivot.add(badgeRoot);
     card.userData.buffBadgeRoot = badgeRoot;
@@ -263,86 +259,6 @@ export class CardGameClient {
       badgeMesh.userData.buffId = isActive ? buffId : null;
       badgeMesh.visible = isActive;
     });
-
-    if (this.state.hoveredBuffBadge?.card === card) {
-      const hoveredBadge = this.state.hoveredBuffBadge.badge;
-      const isHoveredBadgeActive = hoveredBadge?.visible && hoveredBadge?.userData?.buffId;
-      if (!isHoveredBadgeActive) this.hideBuffTooltip();
-    }
-  }
-
-  formatBuffName(buffId) {
-    if (!buffId || typeof buffId !== 'string') return '';
-    return buffId
-      .split(/[_-\s]+/)
-      .filter(Boolean)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  }
-
-  ensureBuffTooltipNode() {
-    if (this.buffTooltipNode?.isConnected) return this.buffTooltipNode;
-    const host = this.canvas?.parentElement;
-    if (!host) return null;
-    const node = document.createElement('div');
-    node.className = 'buff-badge-tooltip';
-    node.style.display = 'none';
-    host.append(node);
-    this.buffTooltipNode = node;
-    return node;
-  }
-
-  getBuffBadgeWorldPoint(card, badge) {
-    if (!card || !badge) return null;
-    const point = badge.position.clone().add(BUFF_TOOLTIP_OFFSET);
-    return card.localToWorld(point);
-  }
-
-  showBuffTooltip(card, badge) {
-    const buffId = badge?.userData?.buffId;
-    const buffName = this.formatBuffName(buffId);
-    if (!buffId || !buffName) {
-      this.hideBuffTooltip();
-      return;
-    }
-    const node = this.ensureBuffTooltipNode();
-    if (!node) return;
-    node.textContent = buffName;
-    node.style.display = 'block';
-    this.state.hoveredBuffBadge = { card, badge };
-    this.positionBuffTooltip();
-  }
-
-  hideBuffTooltip() {
-    this.state.hoveredBuffBadge = null;
-    if (this.buffTooltipNode) this.buffTooltipNode.style.display = 'none';
-  }
-
-  positionBuffTooltip() {
-    if (!this.buffTooltipNode || this.buffTooltipNode.style.display === 'none') return;
-    const hovered = this.state.hoveredBuffBadge;
-    const card = hovered?.card;
-    const badge = hovered?.badge;
-    if (!card || !badge || this.state.mode !== 'preview' || this.state.activeCard !== card || !badge.visible) {
-      this.hideBuffTooltip();
-      return;
-    }
-    const worldPoint = this.getBuffBadgeWorldPoint(card, badge);
-    const screen = worldToScreen(worldPoint, this.camera, this.renderer);
-    if (!screen) {
-      this.buffTooltipNode.style.display = 'none';
-      return;
-    }
-    this.buffTooltipNode.style.display = 'block';
-    this.buffTooltipNode.style.left = `${screen.x}px`;
-    this.buffTooltipNode.style.top = `${screen.y}px`;
-  }
-
-  getBuffBadgeFromHit(card, hit) {
-    const badges = Array.isArray(card?.userData?.buffBadges) ? card.userData.buffBadges : [];
-    const hitObject = hit?.hitObject;
-    if (!hitObject || !badges.includes(hitObject)) return null;
-    return hitObject.userData?.buffId ? hitObject : null;
   }
 
   #buildBaseScene() {
@@ -468,7 +384,6 @@ export class CardGameClient {
     }
     this.clearAttackTargetHover();
     this.clearTargetEffectivenessBadges();
-    this.hideBuffTooltip();
   }
 
   applySelectionGlow(card) {
@@ -745,7 +660,6 @@ export class CardGameClient {
   }
 
   setCardAsActive(card, mode) {
-    this.hideBuffTooltip();
     this.state.activeCard = card;
     this.state.mode = mode;
     this.state.previewStartedAt = performance.now();
@@ -805,7 +719,6 @@ export class CardGameClient {
     this.state.dropSlotIndex = null;
     this.state.previewTransition.isActive = false;
     this.updateAbilityPanelHighlights(card, { interactive: false, preserveSelectedAbility });
-    this.hideBuffTooltip();
   }
 
 
@@ -1463,7 +1376,6 @@ export class CardGameClient {
   beginPreviewReturn() {
     const card = this.state.activeCard;
     if (!card || this.state.mode !== 'preview') return false;
-    this.hideBuffTooltip();
     this.state.mode = 'preview-return';
     this.state.previewStartedAt = performance.now();
     beginPreviewReturnTransition(this.state, this.state.previewStartedAt);
@@ -1774,20 +1686,7 @@ export class CardGameClient {
       return;
     }
 
-    if (this.state.mode === 'preview') this.hideBuffTooltip();
-
     if (this.state.mode === 'preview' && this.state.activeCard === card) {
-      const buffBadge = this.getBuffBadgeFromHit(card, hit);
-      if (buffBadge) {
-        this.showBuffTooltip(card, buffBadge);
-        this.state.activePointerId = null;
-        this.state.pendingCard = null;
-        this.state.pendingCardCanDrag = false;
-        this.state.pendingCardDidPickup = false;
-        if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
-        return;
-      }
-      this.hideBuffTooltip();
       const abilityIndex = this.getAbilityPanelIndexFromHit(card, hit);
       if (abilityIndex != null) {
         if (!this.canInteractWithCardAbilities(card)) {
@@ -1850,21 +1749,6 @@ export class CardGameClient {
   }
 
   handlePointerMove(event) {
-    if (this.state.mode === 'preview' && this.state.activeCard && this.state.activePointerId == null && event.pointerType === 'mouse') {
-      const hit = this.picker.pickHit(event);
-      const card = hit?.card ?? null;
-      if (card === this.state.activeCard) {
-        const buffBadge = this.getBuffBadgeFromHit(card, hit);
-        if (buffBadge) {
-          this.showBuffTooltip(card, buffBadge);
-        } else {
-          this.hideBuffTooltip();
-        }
-      } else {
-        this.hideBuffTooltip();
-      }
-    }
-
     if (this.state.activePointerId !== event.pointerId) return;
     this.state.lastPointer.x = event.clientX;
     this.state.lastPointer.y = event.clientY;
@@ -2482,7 +2366,6 @@ export class CardGameClient {
     this.applyPlacedCardAmbientSway(time);
     this.positionSpellRollerPanel();
     this.positionTargetEffectivenessBadges();
-    this.positionBuffTooltip();
     this.cards.forEach((card) => this.updateCardBuffBadges(card));
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = requestAnimationFrame(this.animate);
@@ -2504,9 +2387,6 @@ export class CardGameClient {
     this.damagePopups.forEach((popup) => popup.node?.remove());
     this.damagePopups = [];
     this.clearTargetEffectivenessBadges();
-    this.hideBuffTooltip();
-    this.buffTooltipNode?.remove();
-    this.buffTooltipNode = null;
     this.damagePopupLayer?.remove();
     this.damagePopupLayer = null;
     this.cardBackTexture?.dispose?.();

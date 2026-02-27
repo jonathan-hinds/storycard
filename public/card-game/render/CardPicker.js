@@ -30,7 +30,7 @@ export class CardPicker {
     this.raycaster.setFromCamera(this.ndc, this.camera);
 
     const targets = this.cards
-      .flatMap((card) => [card.userData?.face, card.userData?.mesh, ...(card.userData?.buffBadges || [])])
+      .flatMap((card) => [card.userData?.face, card.userData?.mesh])
       .filter((mesh) => mesh && mesh.visible);
 
     const hits = this.raycaster.intersectObjects(targets, false);
