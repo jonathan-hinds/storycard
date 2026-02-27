@@ -86,7 +86,30 @@ class PhaseManagerServer {
     if (!defenderState?.board) return [];
     return defenderState.board
       .filter((card) => Number.isInteger(card?.tauntTurnsRemaining) && card.tauntTurnsRemaining > 0)
-      .sort((a, b) => a.slotIndex - b.slotIndex);
+      .sort((a, b) => {
+        const aHealth = Number(a?.catalogCard?.health);
+        const bHealth = Number(b?.catalogCard?.health);
+        const normalizedAHealth = Number.isFinite(aHealth) ? aHealth : 0;
+        const normalizedBHealth = Number.isFinite(bHealth) ? bHealth : 0;
+        if (normalizedBHealth !== normalizedAHealth) return normalizedBHealth - normalizedAHealth;
+        return a.slotIndex - b.slotIndex;
+      });
+  }
+
+  forceAttacksToTauntTarget(match, attackerId) {
+    if (!match || !attackerId) return;
+    const defenderId = match.players.find((id) => id !== attackerId);
+    if (!defenderId) return;
+    const tauntCards = this.getActiveTauntCardsForDefender(match, defenderId);
+    if (!tauntCards.length) return;
+
+    const forcedTargetSlotIndex = tauntCards[0].slotIndex;
+    const attackerState = match.cardsByPlayer.get(attackerId);
+    for (const card of attackerState?.board || []) {
+      if (card?.targetSide !== 'opponent' || !Number.isInteger(card?.targetSlotIndex)) continue;
+      if (card.targetSlotIndex === forcedTargetSlotIndex) continue;
+      card.targetSlotIndex = forcedTargetSlotIndex;
+    }
   }
 
   resolveAttackTargetForTaunt(match, attackerId, attack) {
@@ -376,6 +399,8 @@ class PhaseManagerServer {
     }
 
     targetCard.tauntTurnsRemaining = normalizedDuration;
+    const opposingPlayerId = match.players.find((id) => id !== targetPlayerId);
+    this.forceAttacksToTauntTarget(match, opposingPlayerId);
     return { executed: true, reason: 'taunt_applied' };
   }
 
@@ -949,7 +974,10 @@ class PhaseManagerServer {
         && Number.isInteger(attackerCard.targetSlotIndex)
         && opponentTauntSlots.size > 0
         && !opponentTauntSlots.has(attackerCard.targetSlotIndex)) {
-        return { error: 'target must be a taunting enemy while taunt is active' };
+        const forcedTauntTarget = this.getActiveTauntCardsForDefender(match, opponentId)[0] || null;
+        if (forcedTauntTarget) {
+          attackerCard.targetSlotIndex = forcedTauntTarget.slotIndex;
+        }
       }
       seenAttackerSlots.add(attack.attackerSlotIndex);
     }

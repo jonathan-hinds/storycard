@@ -91,7 +91,7 @@ const server = new PhaseManagerServer();
     discard: [],
   };
 
-  const invalid = server.validatePhaseTurnPayload({
+  const validated = server.validatePhaseTurnPayload({
     playerId: 'p1',
     hand: [],
     board: [{ id: 'attacker', slotIndex: 1 }],
@@ -99,7 +99,40 @@ const server = new PhaseManagerServer();
     attacks: [{ attackerSlotIndex: 1, targetSlotIndex: 1, targetSide: 'opponent', selectedAbilityIndex: 0 }],
   }, match, 'p1', playerState, 1);
 
-  assert.equal(invalid.error, 'target must be a taunting enemy while taunt is active');
+  assert.equal(validated.error, undefined, 'attacks should not be rejected while taunt is active');
+  assert.equal(validated.board[0].targetSlotIndex, 0, 'invalid non-taunt targets should be force-targeted onto the taunt card');
+}
+
+{
+  const match = {
+    players: ['p1', 'p2'],
+    cardsByPlayer: new Map([
+      ['p1', { board: [] }],
+      ['p2', {
+        board: [
+          { id: 'taunt-high', slotIndex: 0, tauntTurnsRemaining: 2, catalogCard: { health: 9, ability1: null, ability2: null } },
+          { id: 'taunt-low', slotIndex: 1, tauntTurnsRemaining: 2, catalogCard: { health: 3, ability1: null, ability2: null } },
+        ],
+      }],
+    ]),
+  };
+
+  const redirectedToHighest = server.resolveAttackTargetForTaunt(match, 'p1', {
+    attackerSlotIndex: 0,
+    targetSlotIndex: 2,
+    targetSide: 'opponent',
+  });
+
+  assert.equal(redirectedToHighest.targetSlotIndex, 0, 'taunt targeting should prioritize the highest-health taunt card');
+
+  match.cardsByPlayer.get('p2').board = [match.cardsByPlayer.get('p2').board[1]];
+  const redirectedAfterDeath = server.resolveAttackTargetForTaunt(match, 'p1', {
+    attackerSlotIndex: 0,
+    targetSlotIndex: 2,
+    targetSide: 'opponent',
+  });
+
+  assert.equal(redirectedAfterDeath.targetSlotIndex, 1, 'when the highest-health taunt dies, targeting should fall through to remaining taunt cards');
 }
 
 console.log('phase manager taunt checks passed');
