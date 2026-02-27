@@ -352,6 +352,7 @@ export class CardLibraryScene {
           roughness: 0.62,
           metalness: 0.08,
         }),
+        root?.userData?.params,
       );
       root.userData.tiltPivot.add(badgeRoot);
       root.userData.badgeSlots = badgeRoot;
@@ -533,6 +534,7 @@ export class CardLibraryScene {
           roughness: 0.62,
           metalness: 0.08,
         }),
+        { width: cardWidth, height: cardHeight, thickness: CARD_THICKNESS },
       );
       root.userData.tiltPivot.add(badgeRoot);
       root.userData.badgeSlots = badgeRoot;

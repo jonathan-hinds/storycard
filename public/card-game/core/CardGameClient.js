@@ -226,6 +226,7 @@ export class CardGameClient {
         roughness: 0.62,
         metalness: 0.08,
       }),
+      card?.userData?.params,
     );
     badges.forEach((badgeMesh) => {
       badgeMesh.visible = false;
