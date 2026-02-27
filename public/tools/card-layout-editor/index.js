@@ -488,6 +488,26 @@ function buildArtworkSelectControl() {
   return row;
 }
 
+
+function buildCollapsibleGroup(title, { expanded = false } = {}) {
+  const group = document.createElement('details');
+  group.className = 'card tools-group';
+  group.open = expanded;
+
+  const summary = document.createElement('summary');
+  summary.className = 'tools-group-summary';
+
+  const heading = document.createElement('h2');
+  heading.textContent = title;
+  summary.append(heading);
+
+  const content = document.createElement('div');
+  content.className = 'tools-group-content';
+
+  group.append(summary, content);
+  return { group, content };
+}
+
 function buildMeshColorControl() {
   const row = document.createElement('label');
   row.className = 'tools-slider-row';
@@ -513,13 +533,8 @@ function buildMeshColorControl() {
   return row;
 }
 
-const textPreviewGroup = document.createElement('div');
-textPreviewGroup.className = 'card tools-group';
-
-const textPreviewHeading = document.createElement('h2');
-textPreviewHeading.textContent = 'Preview Text';
-textPreviewGroup.append(textPreviewHeading);
-textPreviewGroup.append(
+const { group: textPreviewGroup, content: textPreviewContent } = buildCollapsibleGroup('Preview Text', { expanded: true });
+textPreviewContent.append(
   buildTextInputControl({ cardProp: 'name', label: 'Name Text' }),
   buildTextInputControl({ cardProp: 'type', label: 'Type Text' }),
   buildTextInputControl({ cardProp: 'damage', label: editorCardKind === 'Spell' ? 'Effectiveness Die' : 'Damage Die' }),
@@ -537,12 +552,8 @@ textPreviewGroup.append(
 
 controlsRoot.append(textPreviewGroup);
 
-const artworkGroup = document.createElement('div');
-artworkGroup.className = 'card tools-group';
-const artworkHeading = document.createElement('h2');
-artworkHeading.textContent = 'Artwork';
-artworkGroup.append(artworkHeading);
-artworkGroup.append(
+const { group: artworkGroup, content: artworkContent } = buildCollapsibleGroup('Artwork');
+artworkContent.append(
   buildSlider({ elementKey: 'artwork', prop: 'x', label: 'Left / Right', min: 120, max: 904, step: 1 }),
   buildSlider({ elementKey: 'artwork', prop: 'y', label: 'Up / Down', min: 110, max: 930, step: 1 }),
   buildSlider({ elementKey: 'artwork', prop: 'width', label: 'Width', min: 80, max: 900, step: 1 }),
@@ -550,12 +561,8 @@ artworkGroup.append(
 );
 controlsRoot.append(artworkGroup);
 
-const abilityBannerGroup = document.createElement('div');
-abilityBannerGroup.className = 'card tools-group';
-const abilityBannerHeading = document.createElement('h2');
-abilityBannerHeading.textContent = 'Ability Banner (generic style)';
-abilityBannerGroup.append(abilityBannerHeading);
-abilityBannerGroup.append(
+const { group: abilityBannerGroup, content: abilityBannerContent } = buildCollapsibleGroup('Ability Banner (generic style)');
+abilityBannerContent.append(
   buildSlider({ elementKey: 'abilityBanner', prop: 'x', label: 'Banner Left / Right', min: 120, max: 904, step: 1 }),
   buildSlider({ elementKey: 'abilityBanner', prop: 'y', label: 'Banner Up / Down', min: 110, max: 930, step: 1 }),
   buildSlider({ elementKey: 'abilityBanner', prop: 'size', label: 'Banner Scale', min: 0.4, max: 1.6, step: 0.01 }),
@@ -580,12 +587,8 @@ abilityBannerGroup.append(
 );
 controlsRoot.append(abilityBannerGroup);
 
-const abilityPositionsGroup = document.createElement('div');
-abilityPositionsGroup.className = 'card tools-group';
-const abilityPositionsHeading = document.createElement('h2');
-abilityPositionsHeading.textContent = 'Ability Positions';
-abilityPositionsGroup.append(abilityPositionsHeading);
-abilityPositionsGroup.append(
+const { group: abilityPositionsGroup, content: abilityPositionsContent } = buildCollapsibleGroup('Ability Positions');
+abilityPositionsContent.append(
   buildSlider({ elementKey: 'ability1', prop: 'x', label: 'Ability 1 Offset Left / Right', min: -440, max: 440, step: 1 }),
   buildSlider({ elementKey: 'ability1', prop: 'y', label: 'Ability 1 Offset Up / Down', min: -260, max: 260, step: 1 }),
   buildSlider({ elementKey: 'ability2', prop: 'x', label: 'Ability 2 Offset Left / Right', min: -440, max: 440, step: 1 }),
@@ -594,15 +597,11 @@ abilityPositionsGroup.append(
 controlsRoot.append(abilityPositionsGroup);
 
 if (editorCardKind === CARD_KINDS.CREATURE) {
-  const badgeSlotsGroup = document.createElement('div');
-  badgeSlotsGroup.className = 'card tools-group';
+  const { group: badgeSlotsGroup, content: badgeSlotsContent } = buildCollapsibleGroup('Badge Slots');
 
-  const badgeSlotsHeading = document.createElement('h2');
-  badgeSlotsHeading.textContent = 'Badge Slots';
-  badgeSlotsGroup.append(badgeSlotsHeading);
-
-  badgeSlotsGroup.append(
+  badgeSlotsContent.append(
     buildCheckboxControl({ elementKey: 'badgeSlots', prop: 'visible', label: 'Show Badge Slots' }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'count', label: 'Badge Count', min: 1, max: 12, step: 1 }),
     buildSlider({ elementKey: 'badgeSlots', prop: 'x', label: 'Grid X Position', min: -1, max: 1, step: 0.01 }),
     buildSlider({ elementKey: 'badgeSlots', prop: 'y', label: 'Grid Y Position', min: -1.2, max: 1.2, step: 0.01 }),
     buildSlider({ elementKey: 'badgeSlots', prop: 'z', label: 'Grid Z Position', min: -0.2, max: 0.25, step: 0.005 }),
@@ -616,28 +615,23 @@ if (editorCardKind === CARD_KINDS.CREATURE) {
 }
 
 sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, supportsStatBoxStyle }) => {
-  const group = document.createElement('div');
-  group.className = 'card tools-group';
+  const { group, content } = buildCollapsibleGroup(label);
 
-  const heading = document.createElement('h2');
-  heading.textContent = label;
-  group.append(heading);
-
-  group.append(
+  content.append(
     buildSlider({ elementKey: key, prop: 'x', label: 'Left / Right', min: 120, max: 904, step: 1 }),
     buildSlider({ elementKey: key, prop: 'y', label: 'Up / Down', min: 110, max: 930, step: 1 }),
     buildSlider({ elementKey: key, prop: 'size', label: 'Size', min: minSize, max: maxSize, step: stepSize }),
   );
 
   if (supportsTextStyle) {
-    group.append(
+    content.append(
       buildColorControl({ elementKey: key, label: 'Text Color' }),
       buildAlignmentControl({ elementKey: key, label: 'Text Alignment' }),
     );
   }
 
   if (supportsStatBoxStyle) {
-    group.append(
+    content.append(
       buildSlider({ elementKey: key, prop: 'boxWidth', label: 'Box Width', min: 80, max: 420, step: 1 }),
       buildSlider({ elementKey: key, prop: 'boxHeight', label: 'Box Height', min: 80, max: 420, step: 1 }),
       buildSlider({ elementKey: key, prop: 'boxBevel', label: 'Box Bevel', min: 0, max: 210, step: 1 }),
@@ -648,7 +642,7 @@ sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, s
     );
 
     if (['damage', 'speed', 'defense'].includes(key)) {
-      group.append(
+      content.append(
         buildSlider({ elementKey: key, prop: 'iconWidth', label: 'Die Icon Width', min: 16, max: 260, step: 1 }),
         buildSlider({ elementKey: key, prop: 'iconHeight', label: 'Die Icon Height', min: 16, max: 260, step: 1 }),
         buildSlider({ elementKey: key, prop: 'iconOffsetX', label: 'Die Icon Left / Right', min: -220, max: 220, step: 1 }),

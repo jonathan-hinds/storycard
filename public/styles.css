@@ -634,6 +634,31 @@ button {
   font-size: 1rem;
 }
 
+.tools-group-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.tools-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tools-group-summary h2::before {
+  content: '▸';
+  margin-right: 0.45rem;
+  color: #9ab0d8;
+}
+
+.tools-group[open] .tools-group-summary h2::before {
+  content: '▾';
+}
+
+.tools-group-content {
+  margin-top: 0.65rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
 .tools-slider-row {
   display: grid;
   gap: 0.25rem;
