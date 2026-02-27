@@ -674,8 +674,18 @@ export class CardGameClient {
   }
 
   getAbilityTargetType(ability) {
-    const target = String(ability?.target || '').toLowerCase();
-    return TARGET_TYPES[target] || TARGET_TYPES.none;
+    const effectTarget = String(ability?.target || '').toLowerCase();
+    if (TARGET_TYPES[effectTarget] && effectTarget !== 'none') {
+      return TARGET_TYPES[effectTarget];
+    }
+
+    const buffId = String(ability?.buffId || 'none').toLowerCase();
+    const buffTarget = String(ability?.buffTarget || 'none').toLowerCase();
+    if (buffId !== 'none' && buffTarget === 'friendly') {
+      return TARGET_TYPES.friendly;
+    }
+
+    return TARGET_TYPES.none;
   }
 
   isSpellCard(card) {

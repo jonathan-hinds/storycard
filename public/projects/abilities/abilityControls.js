@@ -17,6 +17,8 @@ export function toAbilityInput(formData, defaultAbilityKind = 'Creature') {
     abilityKind,
     target: formData.get('target') || 'none',
     effectId: formData.get('effectId') || 'none',
+    buffId: formData.get('buffId') || 'none',
+    buffTarget: formData.get('buffTarget') || 'none',
     valueSourceType,
     valueSourceStat: valueSourceType === 'roll' ? (formData.get('valueSourceStat') || null) : null,
     valueSourceFixed: valueSourceType === 'fixed' ? rawFixed : null,

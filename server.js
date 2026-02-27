@@ -19,6 +19,8 @@ const {
   ABILITY_KINDS,
   ABILITY_TARGETS,
   ABILITY_EFFECTS,
+  ABILITY_BUFFS,
+  ABILITY_BUFF_TARGETS,
   ABILITY_VALUE_SOURCE_TYPES,
   ABILITY_ROLL_STATS,
   ABILITY_ROLL_STATS_BY_KIND,
@@ -207,6 +209,8 @@ async function handleApi(req, res, pathname) {
         abilityKinds: ABILITY_KINDS,
         abilityTargets: ABILITY_TARGETS,
         abilityEffects: ABILITY_EFFECTS,
+        abilityBuffs: ABILITY_BUFFS,
+        abilityBuffTargets: ABILITY_BUFF_TARGETS,
         abilityValueSourceTypes: ABILITY_VALUE_SOURCE_TYPES,
         abilityRollStats: abilityKind && ABILITY_ROLL_STATS_BY_KIND[abilityKind] ? ABILITY_ROLL_STATS_BY_KIND[abilityKind] : ABILITY_ROLL_STATS,
       });
@@ -227,6 +231,8 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('abilityKind must be one of')
         || error.message.includes('target must be one of')
         || error.message.includes('effectId must be one of')
+        || error.message.includes('buffId must be one of')
+        || error.message.includes('buffTarget must be one of')
         || error.message.includes('valueSourceType must be one of')
         || error.message.includes('valueSourceStat must be one of')
         || error.message.includes('valueSourceFixed must be');
@@ -247,6 +253,8 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('abilityKind must be one of')
         || error.message.includes('target must be one of')
         || error.message.includes('effectId must be one of')
+        || error.message.includes('buffId must be one of')
+        || error.message.includes('buffTarget must be one of')
         || error.message.includes('valueSourceType must be one of')
         || error.message.includes('valueSourceStat must be one of')
         || error.message.includes('valueSourceFixed must be');

@@ -21,6 +21,8 @@ function normalizeCatalogCardDesign(catalogCard = {}) {
       description,
       target,
       effectId: String(ability.effectId ?? 'none').trim().toLowerCase() || 'none',
+      buffId: String(ability.buffId ?? 'none').trim().toLowerCase() || 'none',
+      buffTarget: String(ability.buffTarget ?? 'none').trim().toLowerCase() || 'none',
       valueSourceType: String(ability.valueSourceType ?? 'none').trim().toLowerCase() || 'none',
       valueSourceStat: ability.valueSourceStat ? String(ability.valueSourceStat).trim().toLowerCase() : null,
       valueSourceFixed: Number.isFinite(ability.valueSourceFixed) ? ability.valueSourceFixed : null,
