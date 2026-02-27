@@ -195,6 +195,11 @@ export class CardGameClient {
     const texture = this.buffIconTextureLoader.load(assetPath, () => {
       this.cards.forEach((card) => this.updateCardBuffBadges(card));
     });
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.repeat.set(1, 1);
+    texture.offset.set(0, 0);
     this.buffIconTextureCache.set(assetPath, texture);
     return texture;
   }
