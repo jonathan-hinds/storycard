@@ -89,17 +89,21 @@ function createBadgeSlotGeometry(layout) {
   return geometry;
 }
 
-function normalizeBadgeSlotsLayout(layout) {
+function normalizeBadgeSlotsLayout(layout, fallback = {}) {
   return {
-    visible: typeof layout?.visible === 'boolean' ? layout.visible : true,
-    count: Number.isFinite(layout?.count) ? THREE.MathUtils.clamp(Math.round(layout.count), 1, 12) : 0,
-    x: Number.isFinite(layout?.x) ? layout.x : 0,
-    y: Number.isFinite(layout?.y) ? layout.y : 0,
-    z: Number.isFinite(layout?.z) ? layout.z : 0,
-    gap: Number.isFinite(layout?.gap) ? Math.max(0, layout.gap) : 0,
-    size: Number.isFinite(layout?.size) ? Math.max(0.04, layout.size) : 0.18,
-    bevel: Number.isFinite(layout?.bevel) ? Math.max(0, layout.bevel) : 0.03,
-    thickness: Number.isFinite(layout?.thickness) ? Math.max(0.005, layout.thickness) : 0.02,
+    visible: typeof layout?.visible === 'boolean' ? layout.visible : (typeof fallback?.visible === 'boolean' ? fallback.visible : true),
+    count: Number.isFinite(layout?.count)
+      ? THREE.MathUtils.clamp(Math.round(layout.count), 1, 12)
+      : (Number.isFinite(fallback?.count) ? THREE.MathUtils.clamp(Math.round(fallback.count), 1, 12) : 0),
+    x: Number.isFinite(layout?.x) ? layout.x : (Number.isFinite(fallback?.x) ? fallback.x : 0),
+    y: Number.isFinite(layout?.y) ? layout.y : (Number.isFinite(fallback?.y) ? fallback.y : 0),
+    z: Number.isFinite(layout?.z) ? layout.z : (Number.isFinite(fallback?.z) ? fallback.z : 0),
+    gap: Number.isFinite(layout?.gap) ? Math.max(0, layout.gap) : (Number.isFinite(fallback?.gap) ? Math.max(0, fallback.gap) : 0),
+    size: Number.isFinite(layout?.size) ? Math.max(0.04, layout.size) : (Number.isFinite(fallback?.size) ? Math.max(0.04, fallback.size) : 0.18),
+    bevel: Number.isFinite(layout?.bevel) ? Math.max(0, layout.bevel) : (Number.isFinite(fallback?.bevel) ? Math.max(0, fallback.bevel) : 0.03),
+    thickness: Number.isFinite(layout?.thickness)
+      ? Math.max(0.005, layout.thickness)
+      : (Number.isFinite(fallback?.thickness) ? Math.max(0.005, fallback.thickness) : 0.02),
   };
 }
 
@@ -257,8 +261,9 @@ export class CardGameClient {
 
   setupCardBuffBadges(card) {
     const cardKind = card?.userData?.catalogCard?.cardKind;
-    const layout = getDefaultCardLabelLayout(cardKind);
-    const badgeLayout = normalizeBadgeSlotsLayout(layout?.badgeSlots);
+    const fallbackLayout = getDefaultCardLabelLayout(cardKind);
+    const catalogLayout = card?.userData?.catalogCard?.cardLabelLayout;
+    const badgeLayout = normalizeBadgeSlotsLayout(catalogLayout?.badgeSlots, fallbackLayout?.badgeSlots);
     if (!badgeLayout.visible || badgeLayout.count < 1) return;
 
     const badgeRoot = new THREE.Group();
