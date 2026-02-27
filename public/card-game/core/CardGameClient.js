@@ -1871,7 +1871,7 @@ export class CardGameClient {
             if (Number.isFinite(nextHealth)) {
               animation.defenderCard.userData.catalogCard.health = nextHealth;
               this.refreshCardFace(animation.defenderCard);
-              if (nextHealth < 0) {
+              if (nextHealth <= 0) {
                 defenderDied = true;
                 this.beginCardDeathAnimation(animation.defenderCard, collisionAxis.clone(), time);
               }
@@ -1900,7 +1900,7 @@ export class CardGameClient {
               const nextAttackerHealth = attackerHealth - retaliationAppliedDamage;
               card.userData.catalogCard.health = nextAttackerHealth;
               this.refreshCardFace(card);
-              if (nextAttackerHealth < 0) {
+              if (nextAttackerHealth <= 0) {
                 this.beginCardDeathAnimation(card, collisionAxis.clone().multiplyScalar(-1), time);
               }
             }
