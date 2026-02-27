@@ -276,7 +276,8 @@ export class CardGameClient {
       const badgeMesh = new THREE.Mesh(
         badgeGeometry.clone(),
         new THREE.MeshStandardMaterial({
-          color: 0x000000,
+          color: 0xffffff,
+          transparent: true,
           roughness: 0.62,
           metalness: 0.08,
         }),
@@ -285,20 +286,6 @@ export class CardGameClient {
       badgeMesh.castShadow = true;
       badgeMesh.receiveShadow = true;
       badgeMesh.visible = false;
-
-      const iconOverlay = new THREE.Mesh(
-        new THREE.PlaneGeometry(badgeLayout.size * 0.92, badgeLayout.size * 0.92),
-        new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          transparent: true,
-          roughness: 0.45,
-          metalness: 0.1,
-        }),
-      );
-      iconOverlay.position.set(0, 0, (badgeLayout.thickness / 2) + 0.002);
-      iconOverlay.visible = false;
-      badgeMesh.add(iconOverlay);
-      badgeMesh.userData.iconOverlay = iconOverlay;
 
       badgeRoot.add(badgeMesh);
       badges.push(badgeMesh);
@@ -320,17 +307,14 @@ export class CardGameClient {
       const buffId = activeBuffs[index] || null;
       const assetPath = buffId ? this.buffIconConfig[buffId] : null;
       const texture = this.getBuffTexture(assetPath);
-      const iconOverlay = badgeMesh.userData.iconOverlay;
-
-      if (iconOverlay?.material) {
-        iconOverlay.material.map = texture || null;
-        iconOverlay.material.needsUpdate = true;
+      if (badgeMesh.material) {
+        badgeMesh.material.map = texture || null;
+        badgeMesh.material.needsUpdate = true;
       }
 
       const isActive = Boolean(buffId && texture);
       badgeMesh.userData.buffId = isActive ? buffId : null;
       badgeMesh.visible = isActive;
-      if (iconOverlay) iconOverlay.visible = isActive;
     });
   }
 
