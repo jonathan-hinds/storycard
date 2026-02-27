@@ -5,7 +5,8 @@ import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 const PLAYER_SIDE = 'player';
 const OPPONENT_SIDE = 'opponent';
 const BOARD_SLOTS_PER_SIDE = 3;
-const UPKEEP_TEXT_CANVAS_SIZE = { width: 1024, height: 256 };
+const UPKEEP_PANEL_CANVAS_SIZE = { width: 2368, height: 200 };
+const READY_PANEL_CANVAS_SIZE = { width: 1024, height: 256 };
 const DEFAULT_UPKEEP_PANEL_SIZE = { width: 3.55, height: 0.3 };
 const DEFAULT_UPKEEP_POSITION = { x: 0.775, y: 0.07, z: -5.49 };
 const DEFAULT_UPKEEP_TEXT_POSITION = { x: -0.29, y: -0.05 };
@@ -382,10 +383,10 @@ export class PhaseManagerClient {
     this.teardownReadyButtonDisplay();
   }
 
-  createUpkeepTexture() {
+  createDisplayTexture(size) {
     const canvas = document.createElement('canvas');
-    canvas.width = UPKEEP_TEXT_CANVAS_SIZE.width;
-    canvas.height = UPKEEP_TEXT_CANVAS_SIZE.height;
+    canvas.width = size.width;
+    canvas.height = size.height;
     const texture = new THREE.CanvasTexture(canvas);
     texture.generateMipmaps = false;
     texture.needsUpdate = true;
@@ -402,7 +403,7 @@ export class PhaseManagerClient {
       this.client.scene.add(this.client.camera);
     }
 
-    const { canvas: panelCanvas, texture: panelTexture } = this.createUpkeepTexture();
+    const { canvas: panelCanvas, texture: panelTexture } = this.createDisplayTexture(UPKEEP_PANEL_CANVAS_SIZE);
     const panelMaterial = new THREE.MeshBasicMaterial({
       map: panelTexture,
       transparent: true,
@@ -413,7 +414,7 @@ export class PhaseManagerClient {
     panelMesh.renderOrder = 1000;
     this.client.camera.add(panelMesh);
 
-    const { canvas: textCanvas, texture: textTexture } = this.createUpkeepTexture();
+    const { canvas: textCanvas, texture: textTexture } = this.createDisplayTexture(UPKEEP_PANEL_CANVAS_SIZE);
     const textMaterial = new THREE.MeshBasicMaterial({
       map: textTexture,
       transparent: true,
@@ -542,7 +543,7 @@ export class PhaseManagerClient {
       this.client.scene.add(this.client.camera);
     }
 
-    const { canvas: panelCanvas, texture: panelTexture } = this.createUpkeepTexture();
+    const { canvas: panelCanvas, texture: panelTexture } = this.createDisplayTexture(READY_PANEL_CANVAS_SIZE);
     const panelMaterial = new THREE.MeshBasicMaterial({
       map: panelTexture,
       transparent: true,
@@ -553,7 +554,7 @@ export class PhaseManagerClient {
     panelMesh.renderOrder = 1002;
     this.client.camera.add(panelMesh);
 
-    const { canvas: textCanvas, texture: textTexture } = this.createUpkeepTexture();
+    const { canvas: textCanvas, texture: textTexture } = this.createDisplayTexture(READY_PANEL_CANVAS_SIZE);
     const textMaterial = new THREE.MeshBasicMaterial({
       map: textTexture,
       transparent: true,
