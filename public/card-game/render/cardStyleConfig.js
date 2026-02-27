@@ -50,6 +50,16 @@ const CREATURE_CARD_LABEL_LAYOUT = makeFrozenLayout({
   },
   ability1: { x: 0, y: 138 },
   ability2: { x: 0, y: 0 },
+  badgeSlots: {
+    visible: true,
+    x: 0,
+    y: 0.45,
+    z: 0.07,
+    gap: 0.16,
+    size: 0.18,
+    bevel: 0.03,
+    thickness: 0.02,
+  },
 });
 
 const SPELL_CARD_LABEL_LAYOUT = makeFrozenLayout({
@@ -85,6 +95,16 @@ const SPELL_CARD_LABEL_LAYOUT = makeFrozenLayout({
   },
   ability1: { x: 0, y: 138 },
   ability2: { x: 0, y: 0 },
+  badgeSlots: {
+    visible: false,
+    x: 0,
+    y: 0.45,
+    z: 0.07,
+    gap: 0.16,
+    size: 0.18,
+    bevel: 0.03,
+    thickness: 0.02,
+  },
 });
 
 export const DEFAULT_CARD_LABEL_LAYOUTS = Object.freeze({

@@ -249,6 +249,30 @@ function buildCustomAlignmentControl({ elementKey, prop, label }) {
   return row;
 }
 
+function buildCheckboxControl({ elementKey, prop, label }) {
+  const row = document.createElement('label');
+  row.className = 'tools-slider-row';
+
+  const valueLabel = document.createElement('span');
+  valueLabel.className = 'tools-slider-value';
+  valueLabel.textContent = label;
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = Boolean(editorState[elementKey][prop]);
+
+  const syncValue = () => {
+    editorState[elementKey][prop] = input.checked;
+    scene.setCardLabelLayout(editorState, editorCardKind);
+  };
+
+  input.addEventListener('change', syncValue);
+  syncValue();
+
+  row.append(valueLabel, input);
+  return row;
+}
+
 function buildTextInputControl({ cardProp, label }) {
   const row = document.createElement('label');
   row.className = 'tools-slider-row';
@@ -568,6 +592,28 @@ abilityPositionsGroup.append(
   buildSlider({ elementKey: 'ability2', prop: 'y', label: 'Ability 2 Offset Up / Down', min: -260, max: 260, step: 1 }),
 );
 controlsRoot.append(abilityPositionsGroup);
+
+if (editorCardKind === CARD_KINDS.CREATURE) {
+  const badgeSlotsGroup = document.createElement('div');
+  badgeSlotsGroup.className = 'card tools-group';
+
+  const badgeSlotsHeading = document.createElement('h2');
+  badgeSlotsHeading.textContent = 'Badge Slots';
+  badgeSlotsGroup.append(badgeSlotsHeading);
+
+  badgeSlotsGroup.append(
+    buildCheckboxControl({ elementKey: 'badgeSlots', prop: 'visible', label: 'Show Badge Slots' }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'x', label: 'Grid X Position', min: -1, max: 1, step: 0.01 }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'y', label: 'Grid Y Position', min: -1.2, max: 1.2, step: 0.01 }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'z', label: 'Grid Z Position', min: -0.2, max: 0.25, step: 0.005 }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'gap', label: 'Grid Gap', min: 0, max: 0.5, step: 0.005 }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'size', label: 'Slot Size', min: 0.04, max: 0.5, step: 0.005 }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'bevel', label: 'Slot Bevel', min: 0, max: 0.15, step: 0.005 }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'thickness', label: 'Slot Thickness', min: 0.005, max: 0.08, step: 0.001 }),
+  );
+
+  controlsRoot.append(badgeSlotsGroup);
+}
 
 sections.forEach(({ key, label, minSize, maxSize, stepSize, supportsTextStyle, supportsStatBoxStyle }) => {
   const group = document.createElement('div');
