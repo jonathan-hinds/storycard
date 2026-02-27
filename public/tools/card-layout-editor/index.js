@@ -606,7 +606,7 @@ if (editorCardKind === CARD_KINDS.CREATURE) {
     buildSlider({ elementKey: 'badgeSlots', prop: 'y', label: 'Grid Y Position', min: -1.2, max: 1.2, step: 0.01 }),
     buildSlider({ elementKey: 'badgeSlots', prop: 'z', label: 'Grid Z Position', min: -0.2, max: 0.25, step: 0.005 }),
     buildSlider({ elementKey: 'badgeSlots', prop: 'gap', label: 'Grid Gap', min: 0, max: 0.5, step: 0.005 }),
-    buildSlider({ elementKey: 'badgeSlots', prop: 'size', label: 'Slot Size', min: 0.04, max: 0.5, step: 0.005 }),
+    buildSlider({ elementKey: 'badgeSlots', prop: 'size', label: 'Slot Size', min: 0.04, max: 1.5, step: 0.005 }),
     buildSlider({ elementKey: 'badgeSlots', prop: 'bevel', label: 'Slot Bevel', min: 0, max: 0.15, step: 0.005 }),
     buildSlider({ elementKey: 'badgeSlots', prop: 'thickness', label: 'Slot Thickness', min: 0.005, max: 0.08, step: 0.001 }),
   );
