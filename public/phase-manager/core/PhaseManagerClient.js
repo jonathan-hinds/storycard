@@ -834,6 +834,31 @@ export class PhaseManagerClient {
     };
   }
 
+  syncCardBuffStateFromMatch(currentMatch) {
+    if (!this.client || !currentMatch?.players) return;
+
+    const buffStateByCardId = new Map();
+    [PLAYER_SIDE, OPPONENT_SIDE].forEach((side) => {
+      const boardCards = Array.isArray(currentMatch.players?.[side]?.board)
+        ? currentMatch.players[side].board
+        : [];
+      boardCards.forEach((card) => {
+        if (!card?.id) return;
+        buffStateByCardId.set(card.id, {
+          tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
+        });
+      });
+    });
+
+    this.client.cards.forEach((sceneCard) => {
+      if (!sceneCard?.userData) return;
+      const state = buffStateByCardId.get(sceneCard.userData.cardId);
+      sceneCard.userData.tauntTurnsRemaining = state?.tauntTurnsRemaining ?? 0;
+      sceneCard.userData.activeBuffIds = [];
+      this.client.updateCardBuffBadges(sceneCard);
+    });
+  }
+
   syncPlayerStateFromClient() {
     if (!this.client || !this.match) return { hand: [], board: [], discard: [], attacks: [] };
 
@@ -1283,11 +1308,13 @@ export class PhaseManagerClient {
         if (shouldRefreshScene) {
           this.renderMatch();
         } else {
+          this.syncCardBuffStateFromMatch(this.match);
           this.setReadyLockState();
           this.updateSummaryPanels();
           this.triggerRemoteSpellPlayback();
         }
       } else {
+        this.syncCardBuffStateFromMatch(this.match);
         this.setReadyLockState();
         this.updateSummaryPanels();
         this.triggerRemoteSpellPlayback();
