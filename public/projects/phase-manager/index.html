@@ -63,6 +63,77 @@
           <p id="phase-manager-opponent-summary" class="debug-pill">Opponent: waiting for matchmaking</p>
           <p id="phase-manager-status" class="debug-pill">Loading…</p>
 
+          <div class="phase-manager-upkeep-controls">
+            <h3>Buff Badge Slots (Global Creature Layout)</h3>
+            <p class="phase-manager-upkeep-note">
+              These controls mirror the Creature Card Layout Editor badge slot sliders and apply to every creature card live.
+            </p>
+
+            <label class="phase-manager-upkeep-field-row" for="phase-manager-badge-slots-visible">
+              <span>Show Slots</span>
+              <input id="phase-manager-badge-slots-visible" type="checkbox" />
+            </label>
+
+            <label class="phase-manager-upkeep-slider-row" for="phase-manager-badge-slots-count-range">
+              <span>Badge Count</span>
+              <output id="phase-manager-badge-slots-count-value"></output>
+              <input id="phase-manager-badge-slots-count-range" type="range" min="1" max="12" step="1" />
+              <input id="phase-manager-badge-slots-count-number" type="number" min="1" max="12" step="1" />
+            </label>
+
+            <label class="phase-manager-upkeep-slider-row" for="phase-manager-badge-slots-x-range">
+              <span>Grid X Position</span>
+              <output id="phase-manager-badge-slots-x-value"></output>
+              <input id="phase-manager-badge-slots-x-range" type="range" min="-1" max="1" step="0.01" />
+              <input id="phase-manager-badge-slots-x-number" type="number" min="-1" max="1" step="0.01" />
+            </label>
+
+            <label class="phase-manager-upkeep-slider-row" for="phase-manager-badge-slots-y-range">
+              <span>Grid Y Position</span>
+              <output id="phase-manager-badge-slots-y-value"></output>
+              <input id="phase-manager-badge-slots-y-range" type="range" min="-1.2" max="1.2" step="0.01" />
+              <input id="phase-manager-badge-slots-y-number" type="number" min="-1.2" max="1.2" step="0.01" />
+            </label>
+
+            <label class="phase-manager-upkeep-slider-row" for="phase-manager-badge-slots-z-range">
+              <span>Grid Z Position</span>
+              <output id="phase-manager-badge-slots-z-value"></output>
+              <input id="phase-manager-badge-slots-z-range" type="range" min="-0.2" max="0.25" step="0.005" />
+              <input id="phase-manager-badge-slots-z-number" type="number" min="-0.2" max="0.25" step="0.005" />
+            </label>
+
+            <label class="phase-manager-upkeep-slider-row" for="phase-manager-badge-slots-gap-range">
+              <span>Grid Gap</span>
+              <output id="phase-manager-badge-slots-gap-value"></output>
+              <input id="phase-manager-badge-slots-gap-range" type="range" min="0" max="0.5" step="0.005" />
+              <input id="phase-manager-badge-slots-gap-number" type="number" min="0" max="0.5" step="0.005" />
+            </label>
+
+            <label class="phase-manager-upkeep-slider-row" for="phase-manager-badge-slots-size-range">
+              <span>Slot Size</span>
+              <output id="phase-manager-badge-slots-size-value"></output>
+              <input id="phase-manager-badge-slots-size-range" type="range" min="0.04" max="1.5" step="0.005" />
+              <input id="phase-manager-badge-slots-size-number" type="number" min="0.04" max="1.5" step="0.005" />
+            </label>
+
+            <label class="phase-manager-upkeep-slider-row" for="phase-manager-badge-slots-bevel-range">
+              <span>Slot Bevel</span>
+              <output id="phase-manager-badge-slots-bevel-value"></output>
+              <input id="phase-manager-badge-slots-bevel-range" type="range" min="0" max="0.15" step="0.005" />
+              <input id="phase-manager-badge-slots-bevel-number" type="number" min="0" max="0.15" step="0.005" />
+            </label>
+
+            <label class="phase-manager-upkeep-slider-row" for="phase-manager-badge-slots-thickness-range">
+              <span>Slot Thickness</span>
+              <output id="phase-manager-badge-slots-thickness-value"></output>
+              <input id="phase-manager-badge-slots-thickness-range" type="range" min="0.005" max="0.08" step="0.001" />
+              <input id="phase-manager-badge-slots-thickness-number" type="number" min="0.005" max="0.08" step="0.001" />
+            </label>
+
+            <button id="phase-manager-layout-export" type="button" class="secondary-action">Copy Layout JSON</button>
+            <output id="phase-manager-layout-export-output"></output>
+          </div>
+
         </div>
 
       </section>

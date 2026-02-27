@@ -1,4 +1,5 @@
 import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
+import { CARD_KINDS, getDefaultCardLabelLayout, resolveCardKind } from '/public/card-game/render/cardStyleConfig.js';
 import { CardRollerOverlay } from './CardRollerOverlay.js';
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 
@@ -77,6 +78,7 @@ export class PhaseManagerClient {
     this.playedRemoteSpellResolutionIds = new Set();
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
+    this.buffBadgeSlotsLayout = this.createInitialBuffBadgeSlotsLayout();
 
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
     this.readyUp = this.readyUp.bind(this);
@@ -88,6 +90,7 @@ export class PhaseManagerClient {
     this.handleReadyBackgroundChange = this.handleReadyBackgroundChange.bind(this);
     this.handleUpkeepBackgroundChange = this.handleUpkeepBackgroundChange.bind(this);
     this.exportLayout = this.exportLayout.bind(this);
+    this.handleBuffBadgeLayoutInput = this.handleBuffBadgeLayoutInput.bind(this);
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.handleCanvasPointerUp = this.handleCanvasPointerUp.bind(this);
   }
@@ -96,6 +99,7 @@ export class PhaseManagerClient {
     this.positionUpkeepDisplay();
     this.positionReadyButtonDisplay();
     this.syncUpkeepPositionInputs();
+    this.syncBuffBadgeLayoutInputs();
     window.requestAnimationFrame(() => {
       this.positionUpkeepDisplay();
       this.positionReadyButtonDisplay();
@@ -177,6 +181,86 @@ export class PhaseManagerClient {
 
   getControlValue(prefix, fallback) {
     return this.parseUpkeepPositionValue(this.elements[`${prefix}Input`]?.value, fallback);
+  }
+
+  createInitialBuffBadgeSlotsLayout() {
+    const defaultLayout = getDefaultCardLabelLayout(CARD_KINDS.CREATURE);
+    return {
+      ...defaultLayout.badgeSlots,
+    };
+  }
+
+  syncBuffBadgeLayoutInputs() {
+    if (this.elements.badgeSlotsVisibleInput) {
+      this.elements.badgeSlotsVisibleInput.checked = this.buffBadgeSlotsLayout.visible !== false;
+    }
+    this.syncControlPair('badgeSlotsCount', this.buffBadgeSlotsLayout.count, 0);
+    this.syncControlPair('badgeSlotsX', this.buffBadgeSlotsLayout.x, 2);
+    this.syncControlPair('badgeSlotsY', this.buffBadgeSlotsLayout.y, 2);
+    this.syncControlPair('badgeSlotsZ', this.buffBadgeSlotsLayout.z, 3);
+    this.syncControlPair('badgeSlotsGap', this.buffBadgeSlotsLayout.gap, 3);
+    this.syncControlPair('badgeSlotsSize', this.buffBadgeSlotsLayout.size, 3);
+    this.syncControlPair('badgeSlotsBevel', this.buffBadgeSlotsLayout.bevel, 3);
+    this.syncControlPair('badgeSlotsThickness', this.buffBadgeSlotsLayout.thickness, 3);
+  }
+
+  withBuffBadgeLayout(catalogCard) {
+    if (!catalogCard) return null;
+    if (resolveCardKind(catalogCard.cardKind) !== CARD_KINDS.CREATURE) return catalogCard;
+    return {
+      ...catalogCard,
+      cardLabelLayout: {
+        ...(catalogCard.cardLabelLayout || {}),
+        badgeSlots: {
+          ...this.buffBadgeSlotsLayout,
+        },
+      },
+    };
+  }
+
+  clearCardBuffBadgeMeshes(card) {
+    const badgeRoot = card?.userData?.buffBadgeRoot;
+    if (!badgeRoot) return;
+    badgeRoot.parent?.remove(badgeRoot);
+    badgeRoot.traverse((node) => {
+      if (!node?.isMesh) return;
+      node.geometry?.dispose?.();
+      if (Array.isArray(node.material)) {
+        node.material.forEach((material) => material?.dispose?.());
+      } else {
+        node.material?.dispose?.();
+      }
+    });
+    card.userData.buffBadgeRoot = null;
+    card.userData.buffBadges = [];
+  }
+
+  applyBuffBadgeLayoutToSceneCards() {
+    if (!this.client) return;
+    this.client.cards.forEach((card) => {
+      if (!card?.userData?.catalogCard) return;
+      if (resolveCardKind(card.userData.catalogCard.cardKind) !== CARD_KINDS.CREATURE) return;
+      card.userData.catalogCard = this.withBuffBadgeLayout(card.userData.catalogCard);
+      this.clearCardBuffBadgeMeshes(card);
+      this.client.setupCardBuffBadges(card);
+      this.client.updateCardBuffBadges(card);
+    });
+  }
+
+  handleBuffBadgeLayoutInput() {
+    this.buffBadgeSlotsLayout = {
+      visible: this.elements.badgeSlotsVisibleInput?.checked !== false,
+      count: Math.round(this.getControlValue('badgeSlotsCount', this.buffBadgeSlotsLayout.count)),
+      x: this.getControlValue('badgeSlotsX', this.buffBadgeSlotsLayout.x),
+      y: this.getControlValue('badgeSlotsY', this.buffBadgeSlotsLayout.y),
+      z: this.getControlValue('badgeSlotsZ', this.buffBadgeSlotsLayout.z),
+      gap: this.getControlValue('badgeSlotsGap', this.buffBadgeSlotsLayout.gap),
+      size: this.getControlValue('badgeSlotsSize', this.buffBadgeSlotsLayout.size),
+      bevel: this.getControlValue('badgeSlotsBevel', this.buffBadgeSlotsLayout.bevel),
+      thickness: this.getControlValue('badgeSlotsThickness', this.buffBadgeSlotsLayout.thickness),
+    };
+    this.syncBuffBadgeLayoutInputs();
+    this.applyBuffBadgeLayoutToSceneCards();
   }
 
   handleReadyPositionInput() {
@@ -295,7 +379,10 @@ export class PhaseManagerClient {
         textPosition: this.upkeepCounterTextPosition,
         textScale: this.upkeepCounterTextScale,
       },
-    });
+      creatureCardLayout: {
+        badgeSlots: this.buffBadgeSlotsLayout,
+      },
+    }, null, 2);
     if (layoutExportOutputEl) layoutExportOutputEl.textContent = serialized;
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(serialized).catch(() => {});
   }
@@ -344,11 +431,25 @@ export class PhaseManagerClient {
     this.bindMirroredInputs(this.elements.upkeepTextYInput, this.elements.upkeepTextYNumberInput, this.handleUpkeepPanelStyleInput);
     this.bindMirroredInputs(this.elements.upkeepTextSizeInput, this.elements.upkeepTextSizeNumberInput, this.handleUpkeepPanelStyleInput);
 
+    this.bindMirroredInputs(this.elements.badgeSlotsCountInput, this.elements.badgeSlotsCountNumberInput, this.handleBuffBadgeLayoutInput);
+    this.bindMirroredInputs(this.elements.badgeSlotsXInput, this.elements.badgeSlotsXNumberInput, this.handleBuffBadgeLayoutInput);
+    this.bindMirroredInputs(this.elements.badgeSlotsYInput, this.elements.badgeSlotsYNumberInput, this.handleBuffBadgeLayoutInput);
+    this.bindMirroredInputs(this.elements.badgeSlotsZInput, this.elements.badgeSlotsZNumberInput, this.handleBuffBadgeLayoutInput);
+    this.bindMirroredInputs(this.elements.badgeSlotsGapInput, this.elements.badgeSlotsGapNumberInput, this.handleBuffBadgeLayoutInput);
+    this.bindMirroredInputs(this.elements.badgeSlotsSizeInput, this.elements.badgeSlotsSizeNumberInput, this.handleBuffBadgeLayoutInput);
+    this.bindMirroredInputs(this.elements.badgeSlotsBevelInput, this.elements.badgeSlotsBevelNumberInput, this.handleBuffBadgeLayoutInput);
+    this.bindMirroredInputs(this.elements.badgeSlotsThicknessInput, this.elements.badgeSlotsThicknessNumberInput, this.handleBuffBadgeLayoutInput);
+    if (this.elements.badgeSlotsVisibleInput) {
+      this.elements.badgeSlotsVisibleInput.addEventListener('change', this.handleBuffBadgeLayoutInput);
+      this.boundControlListeners.push(() => this.elements.badgeSlotsVisibleInput.removeEventListener('change', this.handleBuffBadgeLayoutInput));
+    }
+
     readyBackgroundSelect?.addEventListener('change', this.handleReadyBackgroundChange);
     upkeepBackgroundSelect?.addEventListener('change', this.handleUpkeepBackgroundChange);
     layoutExportBtn?.addEventListener('click', this.exportLayout);
     window.addEventListener('resize', this.handleWindowResize);
     this.syncUpkeepPositionInputs();
+    this.syncBuffBadgeLayoutInputs();
     this.syncUpkeepBackgroundOptions();
     this.loadBackgroundAsset(DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH).then((img) => { this.upkeepCounterBackgroundImage = img; }).catch(() => {});
     this.loadBackgroundAsset(DEFAULT_READY_BUTTON_BACKGROUND_ASSET_PATH).then((img) => { this.readyButtonBackgroundImage = img; }).catch(() => {});
@@ -761,7 +862,7 @@ export class PhaseManagerClient {
         attackCommitted: false,
         targetSlotIndex: null,
         tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
-        catalogCard: card.catalogCard || null,
+        catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
 
@@ -786,7 +887,7 @@ export class PhaseManagerClient {
         targetSlotIndex,
         targetSide: card.targetSide || null,
         tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
-        catalogCard: card.catalogCard || null,
+        catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
 
@@ -798,7 +899,7 @@ export class PhaseManagerClient {
         zone: CARD_ZONE_TYPES.HAND,
         dealOrder: animatedDrawCardIds.has(card.id) ? handIndex : null,
         shouldDealAnimate: animatedDrawCardIds.has(card.id),
-        catalogCard: card.catalogCard || null,
+        catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
 
@@ -809,7 +910,7 @@ export class PhaseManagerClient {
         owner: PLAYER_SIDE,
         zone: CARD_ZONE_TYPES.DISCARD,
         slotIndex: null,
-        catalogCard: card.catalogCard || null,
+        catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
 
@@ -820,7 +921,7 @@ export class PhaseManagerClient {
         owner: OPPONENT_SIDE,
         zone: CARD_ZONE_TYPES.DISCARD,
         slotIndex: null,
-        catalogCard: card.catalogCard || null,
+        catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
 
