@@ -760,6 +760,7 @@ export class PhaseManagerClient {
         canAttack: false,
         attackCommitted: false,
         targetSlotIndex: null,
+        tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
         catalogCard: card.catalogCard || null,
       });
     });
@@ -784,6 +785,7 @@ export class PhaseManagerClient {
           : null,
         targetSlotIndex,
         targetSide: card.targetSide || null,
+        tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
         catalogCard: card.catalogCard || null,
       });
     });
