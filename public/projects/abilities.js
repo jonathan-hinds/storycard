@@ -11,6 +11,7 @@ const effectSelect = document.getElementById('ability-effect');
 const valueSourceTypeSelect = document.getElementById('ability-value-source-type');
 const valueSourceStatSelect = document.getElementById('ability-value-source-stat');
 const valueSourceFixedInput = document.getElementById('ability-value-source-fixed');
+const durationTurnsInput = document.getElementById('ability-duration-turns');
 
 const configuredAbilityKind = document.body?.dataset.abilityKind === 'spell' ? 'Spell' : 'Creature';
 
@@ -54,6 +55,25 @@ function updateValueSourceVisibility() {
   valueSourceFixedInput.previousElementSibling.hidden = !showFixed;
 }
 
+function updateTauntDurationVisibility() {
+  const isTaunt = effectSelect?.value === 'taunt';
+  if (!durationTurnsInput) return;
+  durationTurnsInput.hidden = !isTaunt;
+  if (durationTurnsInput.previousElementSibling) durationTurnsInput.previousElementSibling.hidden = !isTaunt;
+  durationTurnsInput.required = isTaunt;
+  if (!isTaunt) durationTurnsInput.value = '';
+}
+
+
+function validateAbilityInput(abilityInput) {
+  if (abilityInput.effectId !== 'taunt') return null;
+  const durationTurns = Number(abilityInput.durationTurns);
+  if (!Number.isInteger(durationTurns) || durationTurns < 1) {
+    return 'Taunt abilities must include a duration of at least 1 turn.';
+  }
+  return null;
+}
+
 function resetFormToCreateMode() {
   selectedAbilityId = null;
   saveAbilityButton.disabled = true;
@@ -64,7 +84,9 @@ function resetFormToCreateMode() {
   if (valueSourceTypeSelect.options.length) valueSourceTypeSelect.value = valueSourceTypeSelect.options[0].value;
   if (valueSourceStatSelect.options.length) valueSourceStatSelect.value = valueSourceStatSelect.options[0].value;
   valueSourceFixedInput.value = '';
+  if (durationTurnsInput) durationTurnsInput.value = '';
   updateValueSourceVisibility();
+  updateTauntDurationVisibility();
 }
 
 function renderAbilities(abilities) {
@@ -100,7 +122,8 @@ function renderAbilities(abilities) {
     const valueSource = ability.valueSourceType === 'roll'
       ? `roll ${ability.valueSourceStat || 'damage'}`
       : (ability.valueSourceType === 'fixed' ? `fixed ${ability.valueSourceFixed ?? 0}` : 'none');
-    effect.textContent = `Effect: ${toTitle(ability.effectId || 'none')} (${valueSource})`;
+    const durationText = Number.isInteger(ability.durationTurns) ? `, duration ${ability.durationTurns} turn${ability.durationTurns === 1 ? '' : 's'}` : '';
+    effect.textContent = `Effect: ${toTitle(ability.effectId || 'none')} (${valueSource}${durationText})`;
 
     const editButton = document.createElement('button');
     editButton.type = 'button';
@@ -115,9 +138,11 @@ function renderAbilities(abilities) {
       form.elements.valueSourceType.value = ability.valueSourceType ?? 'none';
       form.elements.valueSourceStat.value = ability.valueSourceStat ?? 'damage';
       form.elements.valueSourceFixed.value = Number.isFinite(ability.valueSourceFixed) ? ability.valueSourceFixed : '';
+      form.elements.durationTurns.value = Number.isInteger(ability.durationTurns) ? ability.durationTurns : '';
       abilityKindInput.value = ability.abilityKind ?? configuredAbilityKind;
       saveAbilityButton.disabled = false;
       updateValueSourceVisibility();
+      updateTauntDurationVisibility();
       setStatus(`Editing "${ability.name}".`);
     });
 
@@ -143,6 +168,7 @@ async function fetchAbilities() {
     setOptions(valueSourceTypeSelect, payload.abilityValueSourceTypes || ['none'], 'none');
     setOptions(valueSourceStatSelect, payload.abilityRollStats || ['damage'], 'damage');
     updateValueSourceVisibility();
+    updateTauntDurationVisibility();
 
     renderAbilities(Array.isArray(payload.abilities) ? payload.abilities : []);
     setStatus(`Loaded ${payload.abilities.length} ${configuredAbilityKind.toLowerCase()} abilit${payload.abilities.length === 1 ? 'y' : 'ies'}.`);
@@ -156,6 +182,11 @@ form.addEventListener('submit', async (event) => {
 
   const formData = new FormData(form);
   const abilityInput = toAbilityInput(formData, configuredAbilityKind);
+  const validationError = validateAbilityInput(abilityInput);
+  if (validationError) {
+    setStatus(validationError, true);
+    return;
+  }
 
   setStatus('Saving ability...');
 
@@ -187,6 +218,11 @@ saveAbilityButton.addEventListener('click', async () => {
 
   const formData = new FormData(form);
   const abilityInput = toAbilityInput(formData, configuredAbilityKind);
+  const validationError = validateAbilityInput(abilityInput);
+  if (validationError) {
+    setStatus(validationError, true);
+    return;
+  }
 
   setStatus('Updating ability...');
 
@@ -215,8 +251,10 @@ saveAbilityButton.addEventListener('click', async () => {
       form.elements.valueSourceType.value = updatedAbility.valueSourceType ?? 'none';
       form.elements.valueSourceStat.value = updatedAbility.valueSourceStat ?? 'damage';
       form.elements.valueSourceFixed.value = Number.isFinite(updatedAbility.valueSourceFixed) ? updatedAbility.valueSourceFixed : '';
+      form.elements.durationTurns.value = Number.isInteger(updatedAbility.durationTurns) ? updatedAbility.durationTurns : '';
       abilityKindInput.value = updatedAbility.abilityKind ?? configuredAbilityKind;
       updateValueSourceVisibility();
+      updateTauntDurationVisibility();
     }
   } catch (error) {
     setStatus(error.message, true);
@@ -229,4 +267,5 @@ if (abilityKindLabel) {
 }
 
 valueSourceTypeSelect?.addEventListener('change', updateValueSourceVisibility);
+effectSelect?.addEventListener('change', updateTauntDurationVisibility);
 fetchAbilities();

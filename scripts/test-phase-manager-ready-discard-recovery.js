@@ -28,7 +28,7 @@ const validated = server.validatePhaseTurnPayload({
   board: [{ id: 'creature-b', color: creatureB.color, slotIndex: 1 }],
   discard: [],
   attacks: [],
-}, playerState, 2);
+}, { players: ['p1', 'p2'], cardsByPlayer: new Map() }, 'p1', playerState, 2);
 
 assert.ok(!validated.error, 'payload that omits a consumed card should not fail validation');
 assert.equal(validated.hand.length, 1);
@@ -41,7 +41,7 @@ const unknownCardResult = server.validatePhaseTurnPayload({
   board: [{ id: 'creature-b', color: creatureB.color, slotIndex: 1 }],
   discard: [],
   attacks: [],
-}, playerState, 2);
+}, { players: ['p1', 'p2'], cardsByPlayer: new Map() }, 'p1', playerState, 2);
 
 assert.equal(unknownCardResult.error, 'unknown card submitted: hacker-card');
 
