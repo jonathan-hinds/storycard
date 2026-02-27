@@ -105,6 +105,7 @@ export class CardGameClient {
     this.deathAnimations = [];
     this.damagePopups = [];
     this.targetEffectivenessBadges = [];
+    this.activeBuffTooltip = null;
     this.pointerNdc = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -259,6 +260,84 @@ export class CardGameClient {
       badgeMesh.userData.buffId = isActive ? buffId : null;
       badgeMesh.visible = isActive;
     });
+
+    const tooltipCard = this.activeBuffTooltip?.card;
+    const tooltipBadge = this.activeBuffTooltip?.badgeMesh;
+    if (tooltipCard === card && (!tooltipBadge || !tooltipBadge.visible || !tooltipBadge.userData?.buffId)) {
+      this.clearBuffTooltip();
+    }
+  }
+
+  formatBuffLabel(buffId) {
+    const normalized = typeof buffId === 'string' ? buffId.trim() : '';
+    if (!normalized) return '';
+    return normalized
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  getBuffBadgeHit(event, card) {
+    const badges = Array.isArray(card?.userData?.buffBadges)
+      ? card.userData.buffBadges.filter((badgeMesh) => badgeMesh?.visible && badgeMesh.userData?.buffId)
+      : [];
+    if (!badges.length) return null;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.pointerNdc.set(x, y);
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+
+    const hits = this.raycaster.intersectObjects(badges, false);
+    if (!hits.length) return null;
+    const badgeMesh = hits[0].object;
+    const buffId = badgeMesh?.userData?.buffId;
+    if (!buffId) return null;
+    return { badgeMesh, buffId };
+  }
+
+  showBuffTooltip({ card, badgeMesh, buffId }) {
+    if (!this.damagePopupLayer || !card || !badgeMesh || !buffId) return;
+    const label = this.formatBuffLabel(buffId);
+    if (!label) return;
+
+    let tooltipNode = this.activeBuffTooltip?.node;
+    if (!tooltipNode) {
+      tooltipNode = document.createElement('div');
+      tooltipNode.className = 'buff-tooltip-badge-label';
+      this.damagePopupLayer.append(tooltipNode);
+    }
+    tooltipNode.textContent = label;
+
+    this.activeBuffTooltip = {
+      node: tooltipNode,
+      card,
+      badgeMesh,
+      buffId,
+    };
+    this.positionActiveBuffTooltip();
+  }
+
+  clearBuffTooltip() {
+    this.activeBuffTooltip?.node?.remove();
+    this.activeBuffTooltip = null;
+  }
+
+  positionActiveBuffTooltip() {
+    const activeTooltip = this.activeBuffTooltip;
+    if (!activeTooltip?.node || !activeTooltip?.badgeMesh) return;
+    const worldPoint = activeTooltip.badgeMesh.getWorldPosition(new THREE.Vector3());
+    worldPoint.y += 0.13;
+    const screen = this.getScreenPositionForWorldPoint(worldPoint);
+    if (!screen) {
+      activeTooltip.node.style.display = 'none';
+      return;
+    }
+    activeTooltip.node.style.display = 'block';
+    activeTooltip.node.style.left = `${screen.x}px`;
+    activeTooltip.node.style.top = `${screen.y}px`;
   }
 
   #buildBaseScene() {
@@ -1661,10 +1740,24 @@ export class CardGameClient {
     this.state.pendingCardCanDrag = false;
     this.state.pendingCardDidPickup = false;
 
+    if (this.state.mode === 'preview' && this.state.activeCard) {
+      const buffBadgeHit = this.getBuffBadgeHit(event, this.state.activeCard);
+      if (buffBadgeHit) {
+        this.showBuffTooltip({ card: this.state.activeCard, ...buffBadgeHit });
+        this.state.activePointerId = null;
+        this.state.pendingCard = null;
+        this.state.pendingCardCanDrag = false;
+        this.state.pendingCardDidPickup = false;
+        if (this.canvasContainer.hasPointerCapture(event.pointerId)) this.canvasContainer.releasePointerCapture(event.pointerId);
+        return;
+      }
+    }
+
     const hit = this.picker.pickHit(event);
     const card = hit?.card ?? null;
     if (!card) {
       if (this.state.mode === 'preview' && this.beginPreviewReturn()) {
+        this.clearBuffTooltip();
         this.clearHighlights();
       }
       this.state.activePointerId = null;
@@ -1749,6 +1842,15 @@ export class CardGameClient {
   }
 
   handlePointerMove(event) {
+    if (this.state.mode === 'preview' && this.state.previewViewportVariant === 'desktop' && this.state.activeCard) {
+      const buffBadgeHit = this.getBuffBadgeHit(event, this.state.activeCard);
+      if (buffBadgeHit) {
+        this.showBuffTooltip({ card: this.state.activeCard, ...buffBadgeHit });
+      } else {
+        this.clearBuffTooltip();
+      }
+    }
+
     if (this.state.activePointerId !== event.pointerId) return;
     this.state.lastPointer.x = event.clientX;
     this.state.lastPointer.y = event.clientY;
@@ -1799,6 +1901,7 @@ export class CardGameClient {
       this.setStatus(`Placed ${card.userData.cardId} into board slot ${slot.index + 1}.`);
     } else if (card) {
       if (this.state.mode === 'preview' && this.beginPreviewReturn()) {
+        this.clearBuffTooltip();
         this.clearHighlights();
         this.state.activePointerId = null;
         this.state.pendingCard = null;
@@ -1829,6 +1932,7 @@ export class CardGameClient {
     }
 
     this.clearHighlights();
+    this.clearBuffTooltip();
     this.clearActiveCard({ restore: true });
     this.relayoutBoardAndHand();
 
@@ -2366,6 +2470,7 @@ export class CardGameClient {
     this.applyPlacedCardAmbientSway(time);
     this.positionSpellRollerPanel();
     this.positionTargetEffectivenessBadges();
+    this.positionActiveBuffTooltip();
     this.cards.forEach((card) => this.updateCardBuffBadges(card));
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = requestAnimationFrame(this.animate);
@@ -2387,6 +2492,7 @@ export class CardGameClient {
     this.damagePopups.forEach((popup) => popup.node?.remove());
     this.damagePopups = [];
     this.clearTargetEffectivenessBadges();
+    this.clearBuffTooltip();
     this.damagePopupLayer?.remove();
     this.damagePopupLayer = null;
     this.cardBackTexture?.dispose?.();
