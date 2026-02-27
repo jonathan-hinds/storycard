@@ -24,6 +24,7 @@ function normalizeCatalogCardDesign(catalogCard = {}) {
       valueSourceType: String(ability.valueSourceType ?? 'none').trim().toLowerCase() || 'none',
       valueSourceStat: ability.valueSourceStat ? String(ability.valueSourceStat).trim().toLowerCase() : null,
       valueSourceFixed: Number.isFinite(ability.valueSourceFixed) ? ability.valueSourceFixed : null,
+      durationTurns: Number.isInteger(ability.durationTurns) ? ability.durationTurns : null,
     };
   };
 

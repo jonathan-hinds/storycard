@@ -3,7 +3,7 @@ const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
 const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
-const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus'];
+const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus', 'taunt'];
 const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
 const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense', 'efct'];
 const ABILITY_ROLL_STATS_BY_KIND = Object.freeze({
@@ -142,6 +142,7 @@ function toAbilityRecord(document) {
     valueSourceType: document.valueSourceType || 'none',
     valueSourceStat: document.valueSourceStat || null,
     valueSourceFixed: Number.isFinite(document.valueSourceFixed) ? document.valueSourceFixed : null,
+    durationTurns: Number.isInteger(document.durationTurns) ? document.durationTurns : null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
   };
@@ -158,6 +159,8 @@ function normalizeAbilityInput(input = {}) {
   const valueSourceStat = typeof input.valueSourceStat === 'string' ? input.valueSourceStat.trim().toLowerCase() : null;
   const fixedRaw = input.valueSourceFixed;
   const valueSourceFixed = fixedRaw === '' || fixedRaw == null ? null : Number(fixedRaw);
+  const durationRaw = input.durationTurns;
+  const durationTurns = durationRaw === '' || durationRaw == null ? null : Number(durationRaw);
 
   if (!name) {
     throw new Error('name is required');
@@ -201,6 +204,15 @@ function normalizeAbilityInput(input = {}) {
     }
   }
 
+  if (effectId === 'taunt') {
+    if (!Number.isInteger(durationTurns)) {
+      throw new Error('durationTurns must be a whole number when effectId is taunt');
+    }
+    if (durationTurns < 1) {
+      throw new Error('durationTurns must be at least 1 when effectId is taunt');
+    }
+  }
+
   return {
     name,
     cost,
@@ -211,6 +223,7 @@ function normalizeAbilityInput(input = {}) {
     valueSourceType,
     valueSourceStat: valueSourceType === 'roll' ? valueSourceStat : null,
     valueSourceFixed: valueSourceType === 'fixed' ? valueSourceFixed : null,
+    durationTurns: effectId === 'taunt' ? durationTurns : null,
   };
 }
 

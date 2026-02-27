@@ -143,7 +143,7 @@ const server = new PhaseManagerServer();
       targetSide: 'player',
       selectedAbilityIndex: 0,
     }],
-  }, playerState, 1);
+  }, { players: ['p1', 'p2'], cardsByPlayer: new Map() }, 'p1', playerState, 1);
 
   assert.ok(!validated.error, 'friendly targets should allow absolute board slot indexes');
   assert.equal(validated.board[0].targetSlotIndex, 0, 'friendly absolute target slot should normalize to local side index');

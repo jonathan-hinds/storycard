@@ -717,6 +717,11 @@ export class CardGameClient {
     this.setStatus(`Select a ${targetType} target for ${card.userData.cardId}.`);
   }
 
+
+
+  getActiveTauntTargets(cards = []) {
+    return cards.filter((card) => Number.isInteger(card?.userData?.tauntTurnsRemaining) && card.userData.tauntTurnsRemaining > 0);
+  }
   getCardsForTargetType(targetType, sourceCard) {
     if (!sourceCard) return [];
     const sourceIsSpellInHand = this.isSpellCard(sourceCard) && sourceCard.userData.zone === CARD_ZONE_TYPES.HAND;
@@ -725,7 +730,9 @@ export class CardGameClient {
       return this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner === sourceCard.userData.owner);
     }
     if (targetType === TARGET_TYPES.enemy) {
-      return this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner !== sourceCard.userData.owner);
+      const enemyCards = this.cards.filter((card) => card.userData.zone === CARD_ZONE_TYPES.BOARD && card.userData.owner !== sourceCard.userData.owner);
+      const tauntCards = this.getActiveTauntTargets(enemyCards);
+      return tauntCards.length ? tauntCards : enemyCards;
     }
     return [];
   }
@@ -1513,6 +1520,7 @@ export class CardGameClient {
         : null;
       card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
       card.userData.targetSide = cfg.targetSide || null;
+      card.userData.tauntTurnsRemaining = Number.isInteger(cfg.tauntTurnsRemaining) ? cfg.tauntTurnsRemaining : 0;
       card.userData.catalogCard = cfg.catalogCard ?? null;
       card.userData.statDisplayOverrides = null;
       card.userData.isAttackHover = false;

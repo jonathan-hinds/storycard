@@ -80,6 +80,35 @@ class PhaseManagerServer {
     return null;
   }
 
+
+  getActiveTauntCardsForDefender(match, defenderId) {
+    const defenderState = match?.cardsByPlayer?.get(defenderId);
+    if (!defenderState?.board) return [];
+    return defenderState.board
+      .filter((card) => Number.isInteger(card?.tauntTurnsRemaining) && card.tauntTurnsRemaining > 0)
+      .sort((a, b) => a.slotIndex - b.slotIndex);
+  }
+
+  resolveAttackTargetForTaunt(match, attackerId, attack) {
+    if (!attack || attack.targetSide !== 'opponent' || !Number.isInteger(attack.targetSlotIndex)) {
+      return attack;
+    }
+    const defenderId = match.players.find((id) => id !== attackerId);
+    if (!defenderId) return attack;
+    const tauntCards = this.getActiveTauntCardsForDefender(match, defenderId);
+    if (!tauntCards.length) return attack;
+    const selectedIsTaunt = tauntCards.some((card) => card.slotIndex === attack.targetSlotIndex);
+    if (selectedIsTaunt) return attack;
+    return {
+      ...attack,
+      originalTargetSlotIndex: attack.targetSlotIndex,
+      originalTargetSide: attack.targetSide,
+      targetSlotIndex: tauntCards[0].slotIndex,
+      targetSide: 'opponent',
+      redirectedByTaunt: true,
+    };
+  }
+
   buildDeckFromCatalog(playerId, catalogCards = []) {
     if (!Array.isArray(catalogCards) || catalogCards.length === 0) {
       return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => ({
@@ -104,6 +133,7 @@ class PhaseManagerServer {
         targetSlotIndex: null,
         targetSide: null,
         selectedAbilityIndex: 0,
+        tauntTurnsRemaining: 0,
       }));
     }
 
@@ -119,6 +149,7 @@ class PhaseManagerServer {
         targetSlotIndex: null,
         targetSide: null,
         selectedAbilityIndex: 0,
+        tauntTurnsRemaining: 0,
       };
     });
   }
@@ -264,6 +295,7 @@ class PhaseManagerServer {
         targetSlotIndex: null,
         targetSide: null,
         selectedAbilityIndex: 0,
+        tauntTurnsRemaining: Math.max(0, (Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0) - 1),
       }));
     });
     this.applyDecisionPhaseStartDraw(match);
@@ -354,6 +386,10 @@ class PhaseManagerServer {
 
   applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue, sourceType }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
+    if (effectId === 'taunt') {
+      return { executed: true, reason: 'taunt_applied' };
+    }
+
     if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus') {
       return { executed: true, reason: 'no_effect' };
     }
@@ -500,6 +536,7 @@ class PhaseManagerServer {
       resolvedValue,
       resolvedDamage: ability?.effectId === 'damage_enemy' ? resolvedValue : 0,
       resolvedHealing: ability?.effectId === 'heal_target' ? resolvedValue : 0,
+      tauntDurationTurns: Number.isInteger(ability?.durationTurns) ? ability.durationTurns : null,
     };
   }
 
@@ -509,11 +546,17 @@ class PhaseManagerServer {
     const orderedCommitAttacks = this.getOrderedCommitAttacks(match);
 
     for (const { attackerId, attack } of orderedCommitAttacks) {
-      const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, attack);
+      const tauntAdjustedAttack = this.resolveAttackTargetForTaunt(match, attackerId, attack);
+      if (tauntAdjustedAttack?.redirectedByTaunt) {
+        attack.targetSlotIndex = tauntAdjustedAttack.targetSlotIndex;
+        attack.targetSide = tauntAdjustedAttack.targetSide;
+      }
+      const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, tauntAdjustedAttack);
       resolvedAttacksBySlotKey.set(`${attackerId}:${attack.attackerSlotIndex}`, resolvedAttack);
     }
 
     for (const { attackerId, attack } of orderedCommitAttacks) {
+      const tauntAdjustedAttack = this.resolveAttackTargetForTaunt(match, attackerId, attack);
       const attackerState = match.cardsByPlayer.get(attackerId);
       const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
       if (!attackerCard?.catalogCard) {
@@ -522,12 +565,12 @@ class PhaseManagerServer {
       }
 
       const resolvedAttack = resolvedAttacksBySlotKey.get(`${attackerId}:${attack.attackerSlotIndex}`)
-        || this.resolveCommitAttackStep(match, attackerId, attack);
+        || this.resolveCommitAttackStep(match, attackerId, tauntAdjustedAttack);
       const executionResult = this.applyResolvedAbilityEffect({
           match,
           casterId: attackerId,
-          targetSide: attack.targetSide,
-          targetSlotIndex: attack.targetSlotIndex,
+          targetSide: tauntAdjustedAttack.targetSide,
+          targetSlotIndex: tauntAdjustedAttack.targetSlotIndex,
           effectId: resolvedAttack.effectId,
           resolvedValue: resolvedAttack.baseResolvedValue,
           sourceType: attackerCard?.catalogCard?.type,
@@ -539,6 +582,11 @@ class PhaseManagerServer {
       resolvedAttack.resolvedDamage = resolvedAttack.effectId === 'damage_enemy' ? executedResolvedValue : 0;
       resolvedAttack.resolvedHealing = resolvedAttack.effectId === 'heal_target' ? executedResolvedValue : 0;
 
+      if (executionResult.executed !== false && resolvedAttack.effectId === 'taunt') {
+        const tauntDuration = Number.isInteger(resolvedAttack.tauntDurationTurns) ? resolvedAttack.tauntDurationTurns : 0;
+        attackerCard.tauntTurnsRemaining = Math.max(0, tauntDuration);
+      }
+
       const retaliationResult = {
           retaliationDamage: 0,
           retaliationBlockedByDefense: 0,
@@ -549,13 +597,13 @@ class PhaseManagerServer {
 
       const isEnemyDamageAttack = executionResult.executed !== false
           && resolvedAttack.effectId === 'damage_enemy'
-          && attack.targetSide === 'opponent'
-          && Number.isInteger(attack.targetSlotIndex);
+          && tauntAdjustedAttack.targetSide === 'opponent'
+          && Number.isInteger(tauntAdjustedAttack.targetSlotIndex);
 
       if (isEnemyDamageAttack) {
           const defenderId = match.players.find((id) => id !== attackerId);
           const defenderState = defenderId ? match.cardsByPlayer.get(defenderId) : null;
-          const defenderCard = defenderState?.board?.find((card) => card.slotIndex === attack.targetSlotIndex) || null;
+          const defenderCard = defenderState?.board?.find((card) => card.slotIndex === tauntAdjustedAttack.targetSlotIndex) || null;
           const defenderResolvedAttack = defenderId
             ? resolvedAttacksBySlotKey.get(`${defenderId}:${attack.targetSlotIndex}`)
             : null;
@@ -753,7 +801,7 @@ class PhaseManagerServer {
     this.resolveCommitPhase(match);
   }
 
-  validatePhaseTurnPayload(payload, playerState, currentTurnNumber) {
+  validatePhaseTurnPayload(payload, match, playerId, playerState, currentTurnNumber) {
     const hand = Array.isArray(payload.hand) ? payload.hand : [];
     const board = Array.isArray(payload.board) ? payload.board : [];
     const discard = Array.isArray(payload.discard) ? payload.discard : [];
@@ -810,10 +858,13 @@ class PhaseManagerServer {
         targetSlotIndex: null,
         targetSide: null,
         selectedAbilityIndex: 0,
+        tauntTurnsRemaining: Number.isInteger(knownCard?.tauntTurnsRemaining) ? knownCard.tauntTurnsRemaining : 0,
       });
     }
 
     const attacks = Array.isArray(payload.attacks) ? payload.attacks : [];
+    const opponentId = match.players.find((id) => id !== playerId) || null;
+    const opponentTauntSlots = new Set(this.getActiveTauntCardsForDefender(match, opponentId).map((card) => card.slotIndex));
     const seenAttackerSlots = new Set();
     for (const attack of attacks) {
       if (!Number.isInteger(attack.attackerSlotIndex)) {
@@ -849,6 +900,12 @@ class PhaseManagerServer {
       attackerCard.targetSlotIndex = normalizedTargetSlotIndex;
       attackerCard.targetSide = attack.targetSide || null;
       attackerCard.selectedAbilityIndex = Number.isInteger(attack.selectedAbilityIndex) ? attack.selectedAbilityIndex : 0;
+      if (attack.targetSide === 'opponent'
+        && Number.isInteger(attackerCard.targetSlotIndex)
+        && opponentTauntSlots.size > 0
+        && !opponentTauntSlots.has(attackerCard.targetSlotIndex)) {
+        return { error: 'target must be a taunting enemy while taunt is active' };
+      }
       seenAttackerSlots.add(attack.attackerSlotIndex);
     }
 
@@ -991,7 +1048,7 @@ class PhaseManagerServer {
       return { error: 'player state not found in active match', statusCode: 409 };
     }
 
-    const validated = this.validatePhaseTurnPayload(payload, playerState, match.turnNumber);
+    const validated = this.validatePhaseTurnPayload(payload, match, playerId, playerState, match.turnNumber);
     if (validated.error) {
       return { error: validated.error, statusCode: 400 };
     }
@@ -1033,7 +1090,7 @@ class PhaseManagerServer {
       return { error: 'player state not found in active match', statusCode: 409 };
     }
 
-    const validated = this.validatePhaseTurnPayload(payload, playerState, match.turnNumber);
+    const validated = this.validatePhaseTurnPayload(payload, match, playerId, playerState, match.turnNumber);
     if (validated.error) {
       return { error: validated.error, statusCode: 400 };
     }
@@ -1072,6 +1129,16 @@ class PhaseManagerServer {
       return { error: 'spell card is not available in player hand', statusCode: 400 };
     }
 
+    const normalizedTargetSlotIndex = this.normalizeBoardTargetSlotIndex(targetSlotIndex, targetSide);
+    const normalizedTargetSide = targetSide === 'player' || targetSide === 'opponent' ? targetSide : null;
+    if (normalizedTargetSide === 'opponent' && Number.isInteger(normalizedTargetSlotIndex)) {
+      const opponentId = match.players.find((id) => id !== playerId);
+      const tauntSlots = new Set(this.getActiveTauntCardsForDefender(match, opponentId).map((card) => card.slotIndex));
+      if (tauntSlots.size > 0 && !tauntSlots.has(normalizedTargetSlotIndex)) {
+        return { error: 'target must be a taunting enemy while taunt is active', statusCode: 400 };
+      }
+    }
+
     const parsedDieSides = Number.parseInt(dieSides, 10);
     const spellId = `spell-${randomUUID().slice(0, 8)}`;
     match.activeSpellResolution = {
@@ -1084,8 +1151,8 @@ class PhaseManagerServer {
         catalogCard: handCard.catalogCard || null,
       },
       selectedAbilityIndex: Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0,
-      targetSlotIndex: this.normalizeBoardTargetSlotIndex(targetSlotIndex, targetSide),
-      targetSide: targetSide === 'player' || targetSide === 'opponent' ? targetSide : null,
+      targetSlotIndex: normalizedTargetSlotIndex,
+      targetSide: normalizedTargetSide,
       rollType: typeof rollType === 'string' && rollType ? rollType : 'damage',
       dieSides: Number.isFinite(parsedDieSides) ? Math.max(2, parsedDieSides) : 6,
       rollOutcome: null,
