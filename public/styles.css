@@ -474,6 +474,23 @@ button {
   will-change: left, top;
 }
 
+.buff-tooltip-badge-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.35rem;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  font-size: clamp(0.68rem, 1.65vw, 0.92rem);
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .cards-project-layout {
   min-height: calc(100vh - 60px);
   display: grid;
