@@ -500,6 +500,11 @@ button {
   color: #f4a8a8;
 }
 
+.buff-icon-row {
+  display: grid;
+  gap: 0.4rem;
+}
+
 .cards-list-wrap {
   padding: 0;
   display: grid;

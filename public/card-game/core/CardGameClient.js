@@ -56,6 +56,7 @@ const TYPE_ADVANTAGE_BY_ATTACKER = Object.freeze({
   Water: 'Fire',
 });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
+const BUFF_TAUNT = 'taunt';
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -85,6 +86,9 @@ export class CardGameClient {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x000000);
     this.cardBackTexture = new THREE.TextureLoader().load(CARD_BACK_TEXTURE_URL);
+    this.buffIconTextureLoader = new THREE.TextureLoader();
+    this.buffIconTextureCache = new Map();
+    this.buffIconConfig = {};
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
     this.camera.position.set(0, 8.2, 4.8);
@@ -169,6 +173,92 @@ export class CardGameClient {
     this.resetDemo();
     this.animationFrame = requestAnimationFrame(this.animate);
     this.loadCardState();
+    this.loadBuffIconConfig();
+  }
+
+  async loadBuffIconConfig() {
+    try {
+      const response = await fetch('/api/projects/buff-icons');
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to load buff icon config');
+      this.buffIconConfig = payload.buffIcons || {};
+      this.cards.forEach((card) => this.updateCardBuffBadges(card));
+    } catch (error) {
+      this.buffIconConfig = {};
+    }
+  }
+
+  getBuffTexture(assetPath) {
+    if (!assetPath) return null;
+    if (this.buffIconTextureCache.has(assetPath)) return this.buffIconTextureCache.get(assetPath);
+    const texture = this.buffIconTextureLoader.load(assetPath, () => {
+      this.cards.forEach((card) => this.updateCardBuffBadges(card));
+    });
+    this.buffIconTextureCache.set(assetPath, texture);
+    return texture;
+  }
+
+  getActiveBuffIdsForCard(card) {
+    const activeBuffs = [];
+    const configured = Array.isArray(card?.userData?.activeBuffIds)
+      ? card.userData.activeBuffIds.filter((buffId) => typeof buffId === 'string' && buffId !== 'none')
+      : [];
+    activeBuffs.push(...configured);
+    if (Number.isInteger(card?.userData?.tauntTurnsRemaining) && card.userData.tauntTurnsRemaining > 0 && !activeBuffs.includes(BUFF_TAUNT)) {
+      activeBuffs.push(BUFF_TAUNT);
+    }
+    return activeBuffs;
+  }
+
+  setupCardBuffBadges(card) {
+    const cardKind = card?.userData?.catalogCard?.cardKind;
+    const layout = getDefaultCardLabelLayout(cardKind);
+    const badgeLayout = layout?.badgeSlots;
+    if (!badgeLayout || badgeLayout.count < 1) return;
+
+    const badgeRoot = new THREE.Group();
+    const spacing = badgeLayout.size + badgeLayout.gap;
+    const totalHeight = (badgeLayout.count - 1) * spacing;
+    const badges = [];
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1,
+      roughness: 0.5,
+      metalness: 0.08,
+    });
+
+    for (let badgeIndex = 0; badgeIndex < badgeLayout.count; badgeIndex += 1) {
+      const badgeMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(badgeLayout.size, badgeLayout.size),
+        material.clone(),
+      );
+      badgeMesh.position.set(0, (totalHeight / 2) - badgeIndex * spacing, 0);
+      badgeMesh.visible = false;
+      badgeRoot.add(badgeMesh);
+      badges.push(badgeMesh);
+    }
+
+    badgeRoot.position.set(badgeLayout.x, badgeLayout.y, badgeLayout.z);
+    card.userData.tiltPivot.add(badgeRoot);
+    card.userData.buffBadgeRoot = badgeRoot;
+    card.userData.buffBadges = badges;
+  }
+
+  updateCardBuffBadges(card) {
+    const badges = Array.isArray(card?.userData?.buffBadges) ? card.userData.buffBadges : [];
+    if (!badges.length) return;
+
+    const activeBuffs = this.getActiveBuffIdsForCard(card);
+    badges.forEach((badgeMesh, index) => {
+      const buffId = activeBuffs[index] || null;
+      const assetPath = buffId ? this.buffIconConfig[buffId] : null;
+      const texture = this.getBuffTexture(assetPath);
+
+      badgeMesh.material.map = texture || null;
+      badgeMesh.material.needsUpdate = true;
+      badgeMesh.visible = Boolean(buffId && texture);
+    });
   }
 
   #buildBaseScene() {
@@ -1545,6 +1635,8 @@ export class CardGameClient {
         }
       }
       this.scene.add(card);
+      this.setupCardBuffBadges(card);
+      this.updateCardBuffBadges(card);
       this.cards.push(card);
     }
 
@@ -2274,6 +2366,7 @@ export class CardGameClient {
     this.applyPlacedCardAmbientSway(time);
     this.positionSpellRollerPanel();
     this.positionTargetEffectivenessBadges();
+    this.cards.forEach((card) => this.updateCardBuffBadges(card));
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = requestAnimationFrame(this.animate);
   }

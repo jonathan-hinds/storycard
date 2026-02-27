@@ -53,13 +53,13 @@ const CREATURE_CARD_LABEL_LAYOUT = makeFrozenLayout({
   badgeSlots: {
     visible: true,
     count: 4,
-    x: 0,
-    y: 0.45,
-    z: 0.07,
-    gap: 0.16,
-    size: 0.18,
-    bevel: 0.03,
-    thickness: 0.02,
+    x: 1,
+    y: 0.49,
+    z: 0.25,
+    gap: 0.055,
+    size: 0.655,
+    bevel: 0.15,
+    thickness: 0.08,
   },
 });
 

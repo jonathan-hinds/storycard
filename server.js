@@ -28,6 +28,10 @@ const {
   createAbility: createCatalogAbility,
   updateAbility: updateCatalogAbility,
 } = require('./shared/abilities-catalog/mongoStore');
+const {
+  listBuffIcons,
+  updateBuffIcons,
+} = require('./shared/buff-icons/store');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -216,6 +220,31 @@ async function handleApi(req, res, pathname) {
       });
     } catch (error) {
       sendJson(res, 500, { error: 'Unable to load abilities from database' });
+    }
+    return true;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/projects/buff-icons') {
+    try {
+      const buffIcons = await listBuffIcons();
+      sendJson(res, 200, {
+        buffIcons,
+        buffIds: ABILITY_BUFFS.filter((buffId) => buffId !== 'none'),
+      });
+    } catch (error) {
+      sendJson(res, 500, { error: 'Unable to load buff icon config' });
+    }
+    return true;
+  }
+
+  if (req.method === 'PUT' && pathname === '/api/projects/buff-icons') {
+    try {
+      const body = await readRequestJson(req);
+      const buffIcons = await updateBuffIcons(body.buffIcons || {});
+      sendJson(res, 200, { buffIcons });
+    } catch (error) {
+      const isValidationError = error.message.includes('assetPath must');
+      sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to update buff icon config' });
     }
     return true;
   }

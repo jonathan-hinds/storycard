@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Storycard Sandbox</title>
+    <title>Buff Icon Manager</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="home">
+  <body data-page="buff-icons-project">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -24,32 +24,22 @@
               <li><a href="/public/projects/phase-manager/index.html">Phase Manager</a></li>
             </ul>
           </li>
-          <li class="menu-item">
-            <button class="menu-trigger" type="button">Tools</button>
-            <ul class="flyout">
-              <li><a href="/public/tools/card-layout-editor/index.html">Creature Card Layout Editor</a></li>
-              <li><a href="/public/tools/spell-card-layout-editor/index.html">Spell Card Layout Editor</a></li>
-              <li><a href="/public/tools/dice-uv-editor/index.html">Dice UV Editor</a></li>
-            </ul>
-          </li>
-          <li class="menu-item">
-            <button class="menu-trigger" type="button">API Docs</button>
-            <ul class="flyout">
-              <li><a href="/public/api-docs/dice.html">Dice</a></li>
-              <li><a href="/public/api-docs/cards.html">Cards</a></li>
-            </ul>
-          </li>
         </ul>
 
         <a class="home-btn" href="/">Home</a>
       </nav>
     </header>
 
-    <main class="landing">
-      <h1>Welcome to your game tools sandbox</h1>
-      <p>
-        Use the navigation above to open modules under <strong>Projects</strong> or browse placeholder API docs.
-      </p>
+    <main class="cards-project-layout">
+      <section class="cards-panel">
+        <h1>Buff Icon Manager</h1>
+        <p>Assign texture assets to buffs. These icons are shown in battle badge slots while buffs are active.</p>
+
+        <form id="buff-icon-form" class="card" novalidate></form>
+        <p id="buff-icon-status" class="cards-status" aria-live="polite"></p>
+      </section>
     </main>
+
+    <script type="module" src="/public/projects/buff-icons.js"></script>
   </body>
 </html>
