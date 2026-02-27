@@ -58,6 +58,37 @@ const TYPE_ADVANTAGE_BY_ATTACKER = Object.freeze({
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 const BUFF_TAUNT = 'taunt';
 
+function createRoundedRectShape(width, height, radius) {
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const r = Math.min(radius, halfW, halfH);
+  const shape = new THREE.Shape();
+
+  shape.moveTo(-halfW + r, -halfH);
+  shape.lineTo(halfW - r, -halfH);
+  shape.quadraticCurveTo(halfW, -halfH, halfW, -halfH + r);
+  shape.lineTo(halfW, halfH - r);
+  shape.quadraticCurveTo(halfW, halfH, halfW - r, halfH);
+  shape.lineTo(-halfW + r, halfH);
+  shape.quadraticCurveTo(-halfW, halfH, -halfW, halfH - r);
+  shape.lineTo(-halfW, -halfH + r);
+  shape.quadraticCurveTo(-halfW, -halfH, -halfW + r, -halfH);
+
+  return shape;
+}
+
+function createBadgeSlotGeometry(layout) {
+  const roundedShape = createRoundedRectShape(layout.size, layout.size, layout.bevel);
+  const geometry = new THREE.ExtrudeGeometry(roundedShape, {
+    depth: layout.thickness,
+    bevelEnabled: false,
+    curveSegments: 8,
+    steps: 1,
+  });
+  geometry.center();
+  return geometry;
+}
+
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
     if (!canvas) throw new Error('canvas is required');
@@ -220,21 +251,36 @@ export class CardGameClient {
     const spacing = badgeLayout.size + badgeLayout.gap;
     const totalHeight = (badgeLayout.count - 1) * spacing;
     const badges = [];
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 1,
-      roughness: 0.5,
-      metalness: 0.08,
-    });
+    const badgeGeometry = createBadgeSlotGeometry(badgeLayout);
 
     for (let badgeIndex = 0; badgeIndex < badgeLayout.count; badgeIndex += 1) {
       const badgeMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(badgeLayout.size, badgeLayout.size),
-        material.clone(),
+        badgeGeometry.clone(),
+        new THREE.MeshStandardMaterial({
+          color: 0x000000,
+          roughness: 0.62,
+          metalness: 0.08,
+        }),
       );
       badgeMesh.position.set(0, (totalHeight / 2) - badgeIndex * spacing, 0);
+      badgeMesh.castShadow = true;
+      badgeMesh.receiveShadow = true;
       badgeMesh.visible = false;
+
+      const iconOverlay = new THREE.Mesh(
+        new THREE.PlaneGeometry(badgeLayout.size * 0.92, badgeLayout.size * 0.92),
+        new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          transparent: true,
+          roughness: 0.45,
+          metalness: 0.1,
+        }),
+      );
+      iconOverlay.position.set(0, 0, (badgeLayout.thickness / 2) + 0.002);
+      iconOverlay.visible = false;
+      badgeMesh.add(iconOverlay);
+      badgeMesh.userData.iconOverlay = iconOverlay;
+
       badgeRoot.add(badgeMesh);
       badges.push(badgeMesh);
     }
@@ -254,10 +300,17 @@ export class CardGameClient {
       const buffId = activeBuffs[index] || null;
       const assetPath = buffId ? this.buffIconConfig[buffId] : null;
       const texture = this.getBuffTexture(assetPath);
+      const iconOverlay = badgeMesh.userData.iconOverlay;
 
-      badgeMesh.material.map = texture || null;
-      badgeMesh.material.needsUpdate = true;
-      badgeMesh.visible = Boolean(buffId && texture);
+      if (iconOverlay?.material) {
+        iconOverlay.material.map = texture || null;
+        iconOverlay.material.needsUpdate = true;
+      }
+
+      const isActive = Boolean(buffId && texture);
+      badgeMesh.userData.buffId = isActive ? buffId : null;
+      badgeMesh.visible = isActive;
+      if (iconOverlay) iconOverlay.visible = isActive;
     });
   }
 
