@@ -1,5 +1,11 @@
 import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 
+const BADGE_SLOT_REFERENCE_CARD = Object.freeze({
+  width: 3.06,
+  height: 4.25,
+  thickness: 0.08,
+});
+
 function createRoundedRectShape(width, height, radius) {
   const halfW = width / 2;
   const halfH = height / 2;
@@ -49,14 +55,46 @@ export function createBadgeSlotGeometry(layout) {
   return geometry;
 }
 
-export function createBadgeSlotsGroup(layout, createMaterial) {
+export function resolveBadgeSlotsCardLayout(layout, cardMetrics = {}) {
+  const referenceWidth = Number.isFinite(cardMetrics.referenceWidth)
+    ? Math.max(cardMetrics.referenceWidth, 0.001)
+    : BADGE_SLOT_REFERENCE_CARD.width;
+  const referenceHeight = Number.isFinite(cardMetrics.referenceHeight)
+    ? Math.max(cardMetrics.referenceHeight, 0.001)
+    : BADGE_SLOT_REFERENCE_CARD.height;
+  const referenceThickness = Number.isFinite(cardMetrics.referenceThickness)
+    ? Math.max(cardMetrics.referenceThickness, 0.001)
+    : BADGE_SLOT_REFERENCE_CARD.thickness;
+  const cardWidth = Number.isFinite(cardMetrics.width) ? Math.max(cardMetrics.width, 0.001) : referenceWidth;
+  const cardHeight = Number.isFinite(cardMetrics.height) ? Math.max(cardMetrics.height, 0.001) : referenceHeight;
+  const cardThickness = Number.isFinite(cardMetrics.thickness) ? Math.max(cardMetrics.thickness, 0.001) : referenceThickness;
+
+  const widthScale = cardWidth / referenceWidth;
+  const heightScale = cardHeight / referenceHeight;
+  const depthScale = cardThickness / referenceThickness;
+  const planarScale = Math.min(widthScale, heightScale);
+
+  return {
+    ...layout,
+    x: layout.x * widthScale,
+    y: layout.y * heightScale,
+    z: layout.z * depthScale,
+    gap: layout.gap * planarScale,
+    size: layout.size * planarScale,
+    bevel: layout.bevel * planarScale,
+    thickness: layout.thickness * depthScale,
+  };
+}
+
+export function createBadgeSlotsGroup(layout, createMaterial, cardMetrics = {}) {
+  const cardLayout = resolveBadgeSlotsCardLayout(layout, cardMetrics);
   const badgeRoot = new THREE.Group();
-  const spacing = layout.size + layout.gap;
-  const totalHeight = (layout.count - 1) * spacing;
-  const badgeGeometry = createBadgeSlotGeometry(layout);
+  const spacing = cardLayout.size + cardLayout.gap;
+  const totalHeight = (cardLayout.count - 1) * spacing;
+  const badgeGeometry = createBadgeSlotGeometry(cardLayout);
   const badges = [];
 
-  for (let badgeIndex = 0; badgeIndex < layout.count; badgeIndex += 1) {
+  for (let badgeIndex = 0; badgeIndex < cardLayout.count; badgeIndex += 1) {
     const badgeMesh = new THREE.Mesh(badgeGeometry.clone(), createMaterial());
     badgeMesh.position.set(0, (totalHeight / 2) - badgeIndex * spacing, 0);
     badgeMesh.castShadow = true;
@@ -65,8 +103,8 @@ export function createBadgeSlotsGroup(layout, createMaterial) {
     badges.push(badgeMesh);
   }
 
-  badgeRoot.position.set(layout.x, layout.y, layout.z);
-  badgeRoot.visible = layout.visible;
+  badgeRoot.position.set(cardLayout.x, cardLayout.y, cardLayout.z);
+  badgeRoot.visible = cardLayout.visible;
 
   return { badgeRoot, badges };
 }
