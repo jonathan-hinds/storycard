@@ -44,8 +44,14 @@ const SPELL_ATTACK_DELAY_AFTER_IMPACT_MS = 2000;
 const SPELL_DEATH_SETTLE_WAIT_MS = 700;
 const COMBAT_NUMBER_DURATION_MS = 5000;
 const COMBAT_NUMBER_DRIFT_DISTANCE = 86;
+const COMBAT_NUMBER_RETALIATION_DRIFT_DISTANCE = 122;
+const COMBAT_NUMBER_DIRECTIONAL_BIAS = 0.9;
+const COMBAT_NUMBER_RANDOM_BIAS = 0.2;
+const COMBAT_NUMBER_RETALIATION_DIRECTIONAL_BIAS = 1.6;
+const COMBAT_NUMBER_RETALIATION_RANDOM_BIAS = 0.05;
 const COMBAT_NUMBER_VARIANTS = Object.freeze({
   damage: 'damage',
+  retaliation: 'retaliation',
   beneficial: 'beneficial',
 });
 const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
@@ -604,12 +610,22 @@ export class CardGameClient {
     return new THREE.Vector3(slot.x, 0.22, slot.z);
   }
 
-  spawnCombatNumberPopup({ amount, worldPoint, driftTowardWorldPoint = null, time = performance.now(), prefix = '', variant = COMBAT_NUMBER_VARIANTS.damage }) {
+  spawnCombatNumberPopup({
+    amount,
+    worldPoint,
+    driftTowardWorldPoint = null,
+    time = performance.now(),
+    prefix = '',
+    variant = COMBAT_NUMBER_VARIANTS.damage,
+    driftDistanceScale = 1,
+    directionalBias = COMBAT_NUMBER_DIRECTIONAL_BIAS,
+    randomBias = COMBAT_NUMBER_RANDOM_BIAS,
+  }) {
     if (!this.damagePopupLayer || !Number.isFinite(amount) || amount <= 0 || !worldPoint) return;
     const start = this.getScreenPositionForWorldPoint(worldPoint);
     if (!start) return;
 
-    const driftDistance = COMBAT_NUMBER_DRIFT_DISTANCE * (0.7 + Math.random() * 0.4);
+    const driftDistance = COMBAT_NUMBER_DRIFT_DISTANCE * driftDistanceScale * (0.7 + Math.random() * 0.4);
     const randomAngle = Math.random() * Math.PI * 2;
     const randomDrift = new THREE.Vector2(Math.cos(randomAngle), Math.sin(randomAngle));
     const directedTarget = driftTowardWorldPoint ? this.getScreenPositionForWorldPoint(driftTowardWorldPoint) : null;
@@ -618,7 +634,7 @@ export class CardGameClient {
       : null;
     const hasDirectionalDrift = directionalDrift && directionalDrift.lengthSq() > 1;
     const driftVector = hasDirectionalDrift
-      ? directionalDrift.normalize().multiplyScalar(0.9).addScaledVector(randomDrift, 0.2).normalize().multiplyScalar(driftDistance)
+      ? directionalDrift.normalize().multiplyScalar(directionalBias).addScaledVector(randomDrift, randomBias).normalize().multiplyScalar(driftDistance)
       : randomDrift.multiplyScalar(driftDistance);
     const driftX = driftVector.x;
     const driftY = driftVector.y - 28;
@@ -638,6 +654,7 @@ export class CardGameClient {
       startY: start.y,
       driftX,
       driftY,
+      variant,
     });
   }
 
@@ -652,6 +669,20 @@ export class CardGameClient {
     });
   }
 
+  spawnRetaliationPopup({ amount, worldPoint, driftTowardWorldPoint = null, time = performance.now() }) {
+    this.spawnCombatNumberPopup({
+      amount,
+      worldPoint,
+      driftTowardWorldPoint,
+      time,
+      prefix: '-',
+      variant: COMBAT_NUMBER_VARIANTS.retaliation,
+      driftDistanceScale: COMBAT_NUMBER_RETALIATION_DRIFT_DISTANCE / COMBAT_NUMBER_DRIFT_DISTANCE,
+      directionalBias: COMBAT_NUMBER_RETALIATION_DIRECTIONAL_BIAS,
+      randomBias: COMBAT_NUMBER_RETALIATION_RANDOM_BIAS,
+    });
+  }
+
   spawnBeneficialPopup({ amount, worldPoint, time = performance.now() }) {
     this.spawnCombatNumberPopup({ amount, worldPoint, time, prefix: '+', variant: COMBAT_NUMBER_VARIANTS.beneficial });
   }
@@ -662,7 +693,9 @@ export class CardGameClient {
     for (const popup of this.damagePopups) {
       const elapsed = time - popup.startAtMs;
       const progress = THREE.MathUtils.clamp(elapsed / popup.durationMs, 0, 1);
-      const eased = THREE.MathUtils.smootherstep(progress, 0, 1);
+      const eased = popup.variant === COMBAT_NUMBER_VARIANTS.retaliation
+        ? (1 - ((1 - progress) ** 4))
+        : THREE.MathUtils.smootherstep(progress, 0, 1);
       const x = popup.startX + popup.driftX * eased;
       const y = popup.startY + popup.driftY * eased;
       popup.node.style.left = `${x}px`;
@@ -2158,7 +2191,7 @@ export class CardGameClient {
             this.refreshCardFace(animation.defenderCard);
           }
           if (Number.isFinite(animation.retaliationDamage) && animation.retaliationDamage > 0) {
-            this.spawnDamagePopup({
+            this.spawnRetaliationPopup({
               amount: animation.retaliationDamage,
               worldPoint: card.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
               driftTowardWorldPoint: this.getCardSlotAnchorPoint(card),
