@@ -1445,6 +1445,13 @@ export class CardGameClient {
       return;
     }
 
+    if (Number.isInteger(card?.userData?.silenceTurnsRemaining) && card.userData.silenceTurnsRemaining > 0) {
+      this.state.pendingAbilitySelection = null;
+      card.userData.selectedAbilityIndex = null;
+      this.clearHighlights();
+      return;
+    }
+
     card.userData.attackCommitted = true;
     card.userData.committedAbilityIndex = Number.isInteger(card.userData.selectedAbilityIndex)
       ? card.userData.selectedAbilityIndex
@@ -1575,6 +1582,7 @@ export class CardGameClient {
     if (card.userData.owner !== this.template.playerSide) return false;
     if (card.userData.canAttack !== true) return false;
     if (card.userData.attackCommitted === true) return false;
+    if (Number.isInteger(card.userData.silenceTurnsRemaining) && card.userData.silenceTurnsRemaining > 0) return false;
     return true;
   }
 
