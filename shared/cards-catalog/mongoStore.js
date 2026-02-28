@@ -1,6 +1,7 @@
 const CARD_TYPES = ['Nature', 'Fire', 'Water', 'Arcane'];
 const CARD_KINDS = ['Creature', 'Spell'];
 const CARD_STAT_DICE = ['D6', 'D8', 'D12', 'D20'];
+const SPELL_EFFECTIVENESS_NONE_VALUE = 'NONE';
 const { listAbilitiesByIds } = require('../abilities-catalog/mongoStore');
 
 const DEFAULT_MONGO_URI = 'mongodb+srv://jonathandhd:Bluecow3@cluster0.fwdtteo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
@@ -208,6 +209,19 @@ function normalizeDieValue(value, fieldName) {
   return normalized;
 }
 
+function normalizeSpellEffectiveness(value) {
+  const normalized = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (!normalized || normalized === SPELL_EFFECTIVENESS_NONE_VALUE) {
+    return null;
+  }
+
+  if (!CARD_STAT_DICE.includes(normalized)) {
+    throw new Error(`damage must be one of: ${CARD_STAT_DICE.join(', ')}, ${SPELL_EFFECTIVENESS_NONE_VALUE}`);
+  }
+
+  return normalized;
+}
+
 
 function normalizeArtworkImagePath(value) {
   if (value == null || value === '') return null;
@@ -246,7 +260,9 @@ function validateCardInput(input = {}) {
 
   const validatedInput = {
     name,
-    damage: normalizeDieValue(input.damage, 'damage'),
+    damage: cardKind === 'Spell'
+      ? normalizeSpellEffectiveness(input.damage)
+      : normalizeDieValue(input.damage, 'damage'),
     type,
     cardKind,
     artworkImagePath: normalizeArtworkImagePath(input.artworkImagePath),
