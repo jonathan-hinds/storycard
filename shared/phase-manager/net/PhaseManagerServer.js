@@ -157,6 +157,7 @@ class PhaseManagerServer {
         targetSide: null,
         selectedAbilityIndex: 0,
         tauntTurnsRemaining: 0,
+        silenceTurnsRemaining: 0,
       }));
     }
 
@@ -173,6 +174,7 @@ class PhaseManagerServer {
         targetSide: null,
         selectedAbilityIndex: 0,
         tauntTurnsRemaining: 0,
+        silenceTurnsRemaining: 0,
       };
     });
   }
@@ -319,6 +321,7 @@ class PhaseManagerServer {
         targetSide: null,
         selectedAbilityIndex: 0,
         tauntTurnsRemaining: Math.max(0, (Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0) - 1),
+        silenceTurnsRemaining: Math.max(0, (Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0) - 1),
       }));
     });
     this.applyDecisionPhaseStartDraw(match);
@@ -378,12 +381,19 @@ class PhaseManagerServer {
       }
       return { targetPlayerId: null, targetSlotIndex: null };
     }
+    if (buffTarget === 'enemy') {
+      if (attack?.targetSide === 'opponent' && Number.isInteger(attack?.targetSlotIndex)) {
+        const enemyPlayerId = match.players.find((id) => id !== casterId) || null;
+        return { targetPlayerId: enemyPlayerId, targetSlotIndex: attack.targetSlotIndex };
+      }
+      return { targetPlayerId: null, targetSlotIndex: null };
+    }
     return { targetPlayerId: null, targetSlotIndex: null };
   }
 
   applyResolvedAbilityBuff({ match, casterId, attack, buffId, buffTarget, durationTurns }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (buffId !== 'taunt') return { executed: true, reason: 'no_buff' };
+    if (buffId !== 'taunt' && buffId !== 'silence') return { executed: true, reason: 'no_buff' };
     const normalizedDuration = Number.isInteger(durationTurns) ? Math.max(0, durationTurns) : 0;
     if (normalizedDuration < 1) return { executed: false, reason: 'invalid_duration' };
 
@@ -398,10 +408,19 @@ class PhaseManagerServer {
       return { executed: false, reason: 'target_missing' };
     }
 
-    targetCard.tauntTurnsRemaining = normalizedDuration;
-    const opposingPlayerId = match.players.find((id) => id !== targetPlayerId);
-    this.forceAttacksToTauntTarget(match, opposingPlayerId);
-    return { executed: true, reason: 'taunt_applied' };
+    if (buffId === 'taunt') {
+      targetCard.tauntTurnsRemaining = normalizedDuration;
+      const opposingPlayerId = match.players.find((id) => id !== targetPlayerId);
+      this.forceAttacksToTauntTarget(match, opposingPlayerId);
+      return { executed: true, reason: 'taunt_applied' };
+    }
+
+    if (buffId === 'silence') {
+      targetCard.silenceTurnsRemaining = normalizedDuration;
+      return { executed: true, reason: 'silence_applied' };
+    }
+
+    return { executed: true, reason: 'no_buff' };
   }
 
   applyTypeAdvantageToValue({ effectId, resolvedValue, sourceType, targetType }) {
@@ -623,6 +642,21 @@ class PhaseManagerServer {
       const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
       if (!attackerCard?.catalogCard) {
       commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'attacker_missing' });
+        continue;
+      }
+
+      if (Number.isInteger(attackerCard.silenceTurnsRemaining) && attackerCard.silenceTurnsRemaining > 0) {
+        commitExecutionByAttackId.set(attack.id, {
+          executed: false,
+          reason: 'silenced',
+          buffExecuted: true,
+          buffReason: null,
+          retaliationDamage: 0,
+          retaliationBlockedByDefense: 0,
+          retaliationAppliedDamage: 0,
+          attackDefense: 0,
+          defenseRemaining: 0,
+        });
         continue;
       }
 
@@ -929,6 +963,7 @@ class PhaseManagerServer {
         targetSide: null,
         selectedAbilityIndex: 0,
         tauntTurnsRemaining: Number.isInteger(knownCard?.tauntTurnsRemaining) ? knownCard.tauntTurnsRemaining : 0,
+        silenceTurnsRemaining: Number.isInteger(knownCard?.silenceTurnsRemaining) ? knownCard.silenceTurnsRemaining : 0,
       });
     }
 
@@ -1352,6 +1387,19 @@ class PhaseManagerServer {
     active.resolvedValue = resolvedValue;
     active.resolvedDamage = effectId === 'damage_enemy' && executionResult.executed !== false ? resolvedValue : 0;
     active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false ? resolvedValue : 0;
+
+    this.applyResolvedAbilityBuff({
+      match,
+      casterId: playerId,
+      attack: {
+        attackerSlotIndex: null,
+        targetSlotIndex: active.targetSlotIndex,
+        targetSide: active.targetSide,
+      },
+      buffId: spellAbility?.buffId || 'none',
+      buffTarget: spellAbility?.buffTarget || 'none',
+      durationTurns: Number.isInteger(spellAbility?.durationTurns) ? spellAbility.durationTurns : null,
+    });
 
     active.completedAt = Date.now();
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };

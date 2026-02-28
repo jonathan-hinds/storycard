@@ -4,8 +4,8 @@ const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
 const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus'];
-const ABILITY_BUFFS = ['none', 'taunt'];
-const ABILITY_BUFF_TARGETS = ['none', 'self', 'friendly'];
+const ABILITY_BUFFS = ['none', 'taunt', 'silence'];
+const ABILITY_BUFF_TARGETS = ['none', 'self', 'friendly', 'enemy'];
 const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
 const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense', 'efct'];
 const ABILITY_ROLL_STATS_BY_KIND = Object.freeze({
@@ -274,6 +274,30 @@ function normalizeAbilityInput(input = {}) {
     }
   }
 
+  if (buffId === 'silence') {
+    if (!Number.isInteger(durationTurns)) {
+      throw new Error('durationTurns must be a whole number when buffId is silence');
+    }
+    if (durationTurns < 1) {
+      throw new Error('durationTurns must be at least 1 when buffId is silence');
+    }
+    if (buffTarget !== 'enemy') {
+      throw new Error('buffTarget must be enemy when buffId is silence');
+    }
+  }
+
+  if (buffId !== 'none') {
+    if (target === 'enemy') {
+      if (buffId !== 'silence' || buffTarget !== 'enemy') {
+        throw new Error('enemy-targeting abilities may only use enemy-targeting debuffs');
+      }
+    } else if (target === 'self' || target === 'friendly') {
+      if (buffId !== 'taunt' || (buffTarget !== 'self' && buffTarget !== 'friendly')) {
+        throw new Error('self/friendly-targeting abilities may only use self/friendly buffs');
+      }
+    }
+  }
+
   return {
     name,
     cost,
@@ -286,7 +310,7 @@ function normalizeAbilityInput(input = {}) {
     valueSourceType,
     valueSourceStat: valueSourceType === 'roll' ? valueSourceStat : null,
     valueSourceFixed: valueSourceType === 'fixed' ? valueSourceFixed : null,
-    durationTurns: buffId === 'taunt' ? durationTurns : null,
+    durationTurns: buffId === 'taunt' || buffId === 'silence' ? durationTurns : null,
   };
 }
 

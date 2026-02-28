@@ -19,6 +19,10 @@ const configuredAbilityKind = document.body?.dataset.abilityKind === 'spell' ? '
 
 let selectedAbilityId = null;
 let abilitiesCache = [];
+let abilityOptionCatalog = {
+  buffs: ['none'],
+  buffTargets: ['none'],
+};
 
 function setStatus(message, isError = false) {
   status.textContent = message;
@@ -46,6 +50,34 @@ function setOptions(selectEl, values = [], fallbackValue = null) {
   }
 }
 
+function getAllowedBuffIdsForTarget(target = 'none') {
+  if (target === 'enemy') return ['none', 'silence'];
+  if (target === 'self' || target === 'friendly') return ['none', 'taunt'];
+  return ['none'];
+}
+
+function getAllowedBuffTargetsForBuff(buffId = 'none') {
+  if (buffId === 'taunt') return ['self', 'friendly'];
+  if (buffId === 'silence') return ['enemy'];
+  return ['none'];
+}
+
+function syncBuffOptionsForTarget({ preferredBuffId = null, preferredBuffTarget = null } = {}) {
+  const target = form?.elements?.target?.value || 'none';
+  const allowedBuffIds = getAllowedBuffIdsForTarget(target)
+    .filter((buffId) => abilityOptionCatalog.buffs.includes(buffId));
+  const nextBuffIds = allowedBuffIds.length ? allowedBuffIds : ['none'];
+  const selectedBuffId = preferredBuffId || buffSelect?.value || 'none';
+  setOptions(buffSelect, nextBuffIds, selectedBuffId);
+
+  const buffId = buffSelect?.value || 'none';
+  const allowedBuffTargets = getAllowedBuffTargetsForBuff(buffId)
+    .filter((buffTarget) => abilityOptionCatalog.buffTargets.includes(buffTarget));
+  const nextBuffTargets = allowedBuffTargets.length ? allowedBuffTargets : ['none'];
+  const selectedBuffTarget = preferredBuffTarget || buffTargetSelect?.value || 'none';
+  setOptions(buffTargetSelect, nextBuffTargets, selectedBuffTarget);
+}
+
 function updateValueSourceVisibility() {
   const valueSourceType = valueSourceTypeSelect?.value || 'none';
   const showRoll = valueSourceType === 'roll';
@@ -57,25 +89,35 @@ function updateValueSourceVisibility() {
   valueSourceFixedInput.previousElementSibling.hidden = !showFixed;
 }
 
-function updateTauntDurationVisibility() {
-  const isTaunt = buffSelect?.value === 'taunt';
+function updateDurationVisibility() {
+  const needsDuration = buffSelect?.value === 'taunt' || buffSelect?.value === 'silence';
   if (!durationTurnsInput) return;
-  durationTurnsInput.hidden = !isTaunt;
-  if (durationTurnsInput.previousElementSibling) durationTurnsInput.previousElementSibling.hidden = !isTaunt;
-  durationTurnsInput.required = isTaunt;
-  if (!isTaunt) durationTurnsInput.value = '';
+  durationTurnsInput.hidden = !needsDuration;
+  if (durationTurnsInput.previousElementSibling) durationTurnsInput.previousElementSibling.hidden = !needsDuration;
+  durationTurnsInput.required = needsDuration;
+  if (!needsDuration) durationTurnsInput.value = '';
 }
 
-
 function validateAbilityInput(abilityInput) {
+  if (abilityInput.target === 'enemy' && abilityInput.buffId !== 'none' && abilityInput.buffId !== 'silence') {
+    return 'Enemy-targeting abilities may only use enemy debuffs.';
+  }
+  if ((abilityInput.target === 'self' || abilityInput.target === 'friendly') && abilityInput.buffId !== 'none' && abilityInput.buffId !== 'taunt') {
+    return 'Self/friendly-targeting abilities may only use buffs.';
+  }
+
   if (abilityInput.buffId === 'taunt' && abilityInput.buffTarget !== 'self' && abilityInput.buffTarget !== 'friendly') {
     return 'Taunt buffs must target self or friendly.';
   }
 
-  if (abilityInput.buffId !== 'taunt') return null;
+  if (abilityInput.buffId === 'silence' && abilityInput.buffTarget !== 'enemy') {
+    return 'Silence debuffs must target enemy.';
+  }
+
+  if (abilityInput.buffId !== 'taunt' && abilityInput.buffId !== 'silence') return null;
   const durationTurns = Number(abilityInput.durationTurns);
   if (!Number.isInteger(durationTurns) || durationTurns < 1) {
-    return 'Taunt buffs must include a duration of at least 1 turn.';
+    return 'Taunt and silence effects must include a duration of at least 1 turn.';
   }
   return null;
 }
@@ -88,13 +130,12 @@ function resetFormToCreateMode() {
   form.elements.target.value = 'none';
   if (effectSelect.options.length) effectSelect.value = effectSelect.options[0].value;
   if (valueSourceTypeSelect.options.length) valueSourceTypeSelect.value = valueSourceTypeSelect.options[0].value;
-  if (buffSelect.options.length) buffSelect.value = buffSelect.options[0].value;
-  if (buffTargetSelect.options.length) buffTargetSelect.value = buffTargetSelect.options[0].value;
+  syncBuffOptionsForTarget({ preferredBuffId: 'none', preferredBuffTarget: 'none' });
   if (valueSourceStatSelect.options.length) valueSourceStatSelect.value = valueSourceStatSelect.options[0].value;
   valueSourceFixedInput.value = '';
   if (durationTurnsInput) durationTurnsInput.value = '';
   updateValueSourceVisibility();
-  updateTauntDurationVisibility();
+  updateDurationVisibility();
 }
 
 function renderAbilities(abilities) {
@@ -148,15 +189,17 @@ function renderAbilities(abilities) {
       form.elements.target.value = ability.target ?? 'none';
       form.elements.effectId.value = ability.effectId ?? 'none';
       form.elements.valueSourceType.value = ability.valueSourceType ?? 'none';
-      form.elements.buffId.value = ability.buffId ?? 'none';
-      form.elements.buffTarget.value = ability.buffTarget ?? 'none';
+      syncBuffOptionsForTarget({
+        preferredBuffId: ability.buffId ?? 'none',
+        preferredBuffTarget: ability.buffTarget ?? 'none',
+      });
       form.elements.valueSourceStat.value = ability.valueSourceStat ?? 'damage';
       form.elements.valueSourceFixed.value = Number.isFinite(ability.valueSourceFixed) ? ability.valueSourceFixed : '';
       form.elements.durationTurns.value = Number.isInteger(ability.durationTurns) ? ability.durationTurns : '';
       abilityKindInput.value = ability.abilityKind ?? configuredAbilityKind;
       saveAbilityButton.disabled = false;
       updateValueSourceVisibility();
-      updateTauntDurationVisibility();
+      updateDurationVisibility();
       setStatus(`Editing "${ability.name}".`);
     });
 
@@ -178,13 +221,17 @@ async function fetchAbilities() {
       throw new Error(payload.error || 'Failed to load abilities');
     }
 
+    abilityOptionCatalog = {
+      buffs: payload.abilityBuffs || ['none'],
+      buffTargets: payload.abilityBuffTargets || ['none'],
+    };
+
     setOptions(effectSelect, payload.abilityEffects || ['none'], 'none');
     setOptions(valueSourceTypeSelect, payload.abilityValueSourceTypes || ['none'], 'none');
-    setOptions(buffSelect, payload.abilityBuffs || ['none'], 'none');
-    setOptions(buffTargetSelect, payload.abilityBuffTargets || ['none'], 'none');
+    syncBuffOptionsForTarget({ preferredBuffId: 'none', preferredBuffTarget: 'none' });
     setOptions(valueSourceStatSelect, payload.abilityRollStats || ['damage'], 'damage');
     updateValueSourceVisibility();
-    updateTauntDurationVisibility();
+    updateDurationVisibility();
 
     renderAbilities(Array.isArray(payload.abilities) ? payload.abilities : []);
     setStatus(`Loaded ${payload.abilities.length} ${configuredAbilityKind.toLowerCase()} abilit${payload.abilities.length === 1 ? 'y' : 'ies'}.`);
@@ -265,14 +312,16 @@ saveAbilityButton.addEventListener('click', async () => {
       form.elements.target.value = updatedAbility.target ?? 'none';
       form.elements.effectId.value = updatedAbility.effectId ?? 'none';
       form.elements.valueSourceType.value = updatedAbility.valueSourceType ?? 'none';
-      form.elements.buffId.value = updatedAbility.buffId ?? 'none';
-      form.elements.buffTarget.value = updatedAbility.buffTarget ?? 'none';
+      syncBuffOptionsForTarget({
+        preferredBuffId: updatedAbility.buffId ?? 'none',
+        preferredBuffTarget: updatedAbility.buffTarget ?? 'none',
+      });
       form.elements.valueSourceStat.value = updatedAbility.valueSourceStat ?? 'damage';
       form.elements.valueSourceFixed.value = Number.isFinite(updatedAbility.valueSourceFixed) ? updatedAbility.valueSourceFixed : '';
       form.elements.durationTurns.value = Number.isInteger(updatedAbility.durationTurns) ? updatedAbility.durationTurns : '';
       abilityKindInput.value = updatedAbility.abilityKind ?? configuredAbilityKind;
       updateValueSourceVisibility();
-      updateTauntDurationVisibility();
+      updateDurationVisibility();
     }
   } catch (error) {
     setStatus(error.message, true);
@@ -284,6 +333,13 @@ if (abilityKindLabel) {
   abilityKindLabel.textContent = `${configuredAbilityKind} Ability Kind`;
 }
 
+form?.elements?.target?.addEventListener('change', () => {
+  syncBuffOptionsForTarget();
+  updateDurationVisibility();
+});
 valueSourceTypeSelect?.addEventListener('change', updateValueSourceVisibility);
-buffSelect?.addEventListener('change', updateTauntDurationVisibility);
+buffSelect?.addEventListener('change', () => {
+  syncBuffOptionsForTarget();
+  updateDurationVisibility();
+});
 fetchAbilities();

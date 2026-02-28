@@ -58,6 +58,7 @@ const TYPE_ADVANTAGE_BY_ATTACKER = Object.freeze({
 });
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 const BUFF_TAUNT = 'taunt';
+const BUFF_SILENCE = 'silence';
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -213,6 +214,9 @@ export class CardGameClient {
     activeBuffs.push(...configured);
     if (Number.isInteger(card?.userData?.tauntTurnsRemaining) && card.userData.tauntTurnsRemaining > 0 && !activeBuffs.includes(BUFF_TAUNT)) {
       activeBuffs.push(BUFF_TAUNT);
+    }
+    if (Number.isInteger(card?.userData?.silenceTurnsRemaining) && card.userData.silenceTurnsRemaining > 0 && !activeBuffs.includes(BUFF_SILENCE)) {
+      activeBuffs.push(BUFF_SILENCE);
     }
     return activeBuffs;
   }
@@ -1700,6 +1704,7 @@ export class CardGameClient {
       card.userData.targetSlotIndex = Number.isInteger(cfg.targetSlotIndex) ? cfg.targetSlotIndex : null;
       card.userData.targetSide = cfg.targetSide || null;
       card.userData.tauntTurnsRemaining = Number.isInteger(cfg.tauntTurnsRemaining) ? cfg.tauntTurnsRemaining : 0;
+      card.userData.silenceTurnsRemaining = Number.isInteger(cfg.silenceTurnsRemaining) ? cfg.silenceTurnsRemaining : 0;
       card.userData.catalogCard = cfg.catalogCard ?? null;
       card.userData.statDisplayOverrides = null;
       card.userData.isAttackHover = false;

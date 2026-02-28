@@ -243,3 +243,80 @@ function createSpellMatch({
 }
 
 console.log('phase manager spell effects checks passed');
+
+{
+  const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
+    targetHealth: 6,
+    rollOutcome: 3,
+    ability: {
+      effectId: 'none',
+      buffId: 'silence',
+      buffTarget: 'enemy',
+      valueSourceType: 'none',
+      durationTurns: 2,
+    },
+  });
+
+  defenderCard.attackCommitted = true;
+  defenderCard.targetSide = 'opponent';
+  defenderCard.targetSlotIndex = 0;
+  defenderCard.selectedAbilityIndex = 0;
+  defenderCard.catalogCard.ability1 = {
+    effectId: 'damage_enemy',
+    valueSourceType: 'fixed',
+    valueSourceFixed: 4,
+  };
+
+  match.pendingCommitAttacksByPlayer.set(playerId, []);
+  match.pendingCommitAttacksByPlayer.set('p2', [
+    {
+      id: 'p2:0:opponent:0',
+      attackerSlotIndex: 0,
+      targetSlotIndex: 0,
+      targetSide: 'opponent',
+      selectedAbilityIndex: 0,
+    },
+  ]);
+  match.commitRollsByAttackId = new Map([
+    ['p2:0:opponent:0:speed', { roll: { outcome: 2 }, submittedAt: 1 }],
+  ]);
+
+  const result = server.completeSpellResolution({ playerId, spellId });
+  assert.equal(result.statusCode, 200);
+  assert.equal(defenderCard.silenceTurnsRemaining, 2, 'silence spell should apply the configured debuff duration to the target');
+
+  server.applyCommitEffects(match);
+  const execution = match.commitExecutionByAttackId.get('p2:0:opponent:0');
+  assert.equal(execution?.reason, 'silenced', 'silenced cards should fail their committed attack in the same decision phase');
+}
+
+{
+  const server = new PhaseManagerServer();
+  const match = {
+    players: ['p1', 'p2'],
+    turnNumber: 1,
+    upkeep: 1,
+    phase: 2,
+    phaseStartedAt: Date.now(),
+    phaseEndsAt: null,
+    readyPlayers: new Set(['p1', 'p2']),
+    cardsByPlayer: new Map([
+      ['p1', { board: [], deck: [], hand: [], discard: [] }],
+      ['p2', {
+        board: [{ id: 'silenced-creature', slotIndex: 0, silenceTurnsRemaining: 2, tauntTurnsRemaining: 0, catalogCard: { health: 8 } }],
+        deck: [],
+        hand: [],
+        discard: [],
+      }],
+    ]),
+    lastDrawnCardsByPlayer: new Map(),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+    commitAnimationCompletedPlayers: new Set(),
+    activeSpellResolution: null,
+  };
+
+  server.advanceMatchToDecisionPhase(match);
+  assert.equal(match.cardsByPlayer.get('p2').board[0].silenceTurnsRemaining, 1, 'silence debuff duration should decrement at the start of the next decision phase');
+}
