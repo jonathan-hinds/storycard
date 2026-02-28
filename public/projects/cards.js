@@ -54,6 +54,7 @@ const PREVIEW_CLOSENESS_BY_VIEWPORT = Object.freeze({
   desktop: 28,
   mobile: 100,
 });
+const SPELL_EFFECTIVENESS_NONE_VALUE = 'NONE';
 
 let cardLibraryScene;
 let selectedCardId = null;
@@ -75,6 +76,7 @@ function normalizeCardForForm(card) {
   if (cardKind === 'Spell') {
     return {
       ...card,
+      damage: card?.damage ?? SPELL_EFFECTIVENESS_NONE_VALUE,
       health: '',
       speed: '',
       defense: '',
@@ -87,6 +89,27 @@ function normalizeCardForForm(card) {
     speed: card?.speed ?? '',
     defense: card?.defense ?? '',
   };
+}
+
+function syncDamageOptions(cardKind) {
+  const isSpell = cardKind === 'Spell';
+  if (!damageSelect) return;
+  const hasNoneOption = Array.from(damageSelect.options).some((option) => option.value === SPELL_EFFECTIVENESS_NONE_VALUE);
+
+  if (isSpell && !hasNoneOption) {
+    const noneOption = document.createElement('option');
+    noneOption.value = SPELL_EFFECTIVENESS_NONE_VALUE;
+    noneOption.textContent = 'None';
+    damageSelect.append(noneOption);
+  }
+
+  if (!isSpell && hasNoneOption) {
+    const noneOption = Array.from(damageSelect.options).find((option) => option.value === SPELL_EFFECTIVENESS_NONE_VALUE);
+    noneOption?.remove();
+    if (damageSelect.value === SPELL_EFFECTIVENESS_NONE_VALUE) {
+      damageSelect.selectedIndex = 0;
+    }
+  }
 }
 
 function buildCardInput(formData) {
@@ -300,11 +323,15 @@ function resetFormToCreateMode() {
 async function syncCardKindUI(cardKind) {
   const isSpell = cardKind === 'Spell';
   if (damageLabel) damageLabel.textContent = isSpell ? 'Effectiveness (EFCT)' : 'Damage';
+  syncDamageOptions(cardKind);
   setFieldVisibility(healthLabel, healthInput, !isSpell);
   setFieldVisibility(speedLabel, speedSelect, !isSpell);
   setFieldVisibility(defenseLabel, defenseSelect, !isSpell);
 
   if (isSpell) {
+    if (!form.elements.damage.value) {
+      form.elements.damage.value = SPELL_EFFECTIVENESS_NONE_VALUE;
+    }
     form.elements.health.value = '';
     form.elements.speed.value = '';
     form.elements.defense.value = '';
