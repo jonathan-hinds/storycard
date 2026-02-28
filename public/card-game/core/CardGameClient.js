@@ -888,12 +888,13 @@ export class CardGameClient {
     this.state.pendingAbilitySelection = {
       sourceCardId: card.userData.cardId,
       sourceSlotIndex: card.userData.slotIndex,
+      selectedAbilityIndex: index,
       targetType,
       ability,
     };
     this.beginPreviewReturn();
     if (targetType === TARGET_TYPES.none) {
-      this.commitAbilitySelection({ card, targetSlotIndex: null, targetSide: null });
+      this.commitAbilitySelection({ card, selectedAbilityIndex: index, targetSlotIndex: null, targetSide: null });
       return;
     }
     this.highlightValidTargetsForPendingAbility();
@@ -1433,9 +1434,12 @@ export class CardGameClient {
     return true;
   }
 
-  async commitAbilitySelection({ card, targetSlotIndex, targetSide, targetCard = null }) {
-    const selectedAbility = Number.isInteger(card.userData.selectedAbilityIndex)
-      ? (card.userData.selectedAbilityIndex === 0 ? card.userData.catalogCard?.ability1 : card.userData.catalogCard?.ability2)
+  async commitAbilitySelection({ card, selectedAbilityIndex = null, targetSlotIndex, targetSide, targetCard = null }) {
+    const abilityIndex = Number.isInteger(selectedAbilityIndex)
+      ? selectedAbilityIndex
+      : (Number.isInteger(card.userData.selectedAbilityIndex) ? card.userData.selectedAbilityIndex : 0);
+    const selectedAbility = Number.isInteger(abilityIndex)
+      ? (abilityIndex === 0 ? card.userData.catalogCard?.ability1 : card.userData.catalogCard?.ability2)
       : card.userData.catalogCard?.ability1;
 
     if (this.isSpellCard(card) && card.userData.zone === CARD_ZONE_TYPES.HAND) {
@@ -1453,9 +1457,8 @@ export class CardGameClient {
     }
 
     card.userData.attackCommitted = true;
-    card.userData.committedAbilityIndex = Number.isInteger(card.userData.selectedAbilityIndex)
-      ? card.userData.selectedAbilityIndex
-      : 0;
+    card.userData.selectedAbilityIndex = abilityIndex;
+    card.userData.committedAbilityIndex = abilityIndex;
     card.userData.targetSlotIndex = Number.isInteger(targetSlotIndex) ? targetSlotIndex : null;
     card.userData.targetSide = targetSide || null;
     await this.notifyCardStateCommitted(card);
@@ -1833,6 +1836,7 @@ export class CardGameClient {
       }
       await this.commitAbilitySelection({
         card: sourceCard,
+        selectedAbilityIndex: Number.isInteger(pending.selectedAbilityIndex) ? pending.selectedAbilityIndex : null,
         targetSlotIndex: card.userData.slotIndex,
         targetSide: card.userData.owner,
         targetCard: card,
