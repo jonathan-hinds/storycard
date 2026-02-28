@@ -1251,6 +1251,7 @@ class PhaseManagerServer {
     }
 
     const parsedDieSides = Number.parseInt(dieSides, 10);
+    const spellAbility = this.getAttackAbilityForCard(handCard, Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0);
     const spellId = `spell-${randomUUID().slice(0, 8)}`;
     match.activeSpellResolution = {
       id: spellId,
@@ -1266,6 +1267,7 @@ class PhaseManagerServer {
       targetSide: normalizedTargetSide,
       rollType: typeof rollType === 'string' && rollType ? rollType : 'damage',
       dieSides: Number.isFinite(parsedDieSides) ? Math.max(2, parsedDieSides) : 6,
+      requiresRoll: spellAbility?.valueSourceType === 'roll',
       rollOutcome: null,
       rollData: null,
       effectId: 'none',
