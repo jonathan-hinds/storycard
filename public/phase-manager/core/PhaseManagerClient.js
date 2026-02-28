@@ -861,6 +861,7 @@ export class PhaseManagerClient {
         attackCommitted: false,
         targetSlotIndex: null,
         tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
+        silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -886,6 +887,7 @@ export class PhaseManagerClient {
         targetSlotIndex,
         targetSide: card.targetSide || null,
         tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
+        silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -946,6 +948,7 @@ export class PhaseManagerClient {
         if (!card?.id) return;
         buffStateByCardId.set(card.id, {
           tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
+          silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
         });
       });
     });
@@ -954,6 +957,7 @@ export class PhaseManagerClient {
       if (!sceneCard?.userData) return;
       const state = buffStateByCardId.get(sceneCard.userData.cardId);
       sceneCard.userData.tauntTurnsRemaining = state?.tauntTurnsRemaining ?? 0;
+      sceneCard.userData.silenceTurnsRemaining = state?.silenceTurnsRemaining ?? 0;
       sceneCard.userData.activeBuffIds = [];
       this.client.updateCardBuffBadges(sceneCard);
     });
