@@ -938,6 +938,10 @@ export class PhaseManagerClient {
 
   syncCardBuffStateFromMatch(currentMatch) {
     if (!this.client || !currentMatch?.players) return;
+    const commitAnimationKey = `${currentMatch.id}:${currentMatch.turnNumber}:${currentMatch.phase}`;
+    const commitAnimationPending = currentMatch.phase === 2
+      && this.lastAnimatedCommitKey !== commitAnimationKey;
+    if (commitAnimationPending) return;
 
     const buffStateByCardId = new Map();
     [PLAYER_SIDE, OPPONENT_SIDE].forEach((side) => {

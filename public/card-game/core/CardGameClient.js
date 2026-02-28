@@ -2007,6 +2007,9 @@ export class CardGameClient {
         retaliationDamage: Number.isFinite(step?.retaliationDamage) ? step.retaliationDamage : 0,
         retaliationAppliedDamage: Number.isFinite(step?.retaliationAppliedDamage) ? step.retaliationAppliedDamage : 0,
         defenseRemaining: Number.isFinite(step?.defenseRemaining) ? step.defenseRemaining : null,
+        buffId: typeof step?.buffId === 'string' ? step.buffId : 'none',
+        buffTarget: typeof step?.buffTarget === 'string' ? step.buffTarget : 'none',
+        buffDurationTurns: Number.isInteger(step?.buffDurationTurns) ? step.buffDurationTurns : 0,
         didHit: false,
         initialized: false,
       });
@@ -2134,6 +2137,25 @@ export class CardGameClient {
 
             if (Number.isFinite(animation.defenseRemaining) && card?.userData?.cardId) {
               this.setCardStatDisplayOverride(card.userData.cardId, 'defense', Math.max(0, Math.floor(animation.defenseRemaining)));
+            }
+          }
+
+          const buffDuration = Number.isInteger(animation.buffDurationTurns)
+            ? Math.max(0, animation.buffDurationTurns)
+            : 0;
+          const shouldApplyBuff = buffDuration > 0 && (animation.buffId === BUFF_TAUNT || animation.buffId === BUFF_SILENCE);
+          if (shouldApplyBuff) {
+            const buffRecipient = animation.buffTarget === 'self'
+              ? card
+              : (animation.buffTarget === 'friendly' || animation.buffTarget === 'enemy' ? animation.defenderCard : null);
+            if (buffRecipient?.userData) {
+              if (animation.buffId === BUFF_TAUNT) {
+                buffRecipient.userData.tauntTurnsRemaining = buffDuration;
+              }
+              if (animation.buffId === BUFF_SILENCE) {
+                buffRecipient.userData.silenceTurnsRemaining = buffDuration;
+              }
+              this.updateCardBuffBadges(buffRecipient);
             }
           }
 
