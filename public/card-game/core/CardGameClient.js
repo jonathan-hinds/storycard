@@ -65,6 +65,8 @@ const TYPE_ADVANTAGE_BY_ATTACKER = Object.freeze({
 const CARD_BACK_TEXTURE_URL = '/public/assets/CardBack.png';
 const BUFF_TAUNT = 'taunt';
 const BUFF_SILENCE = 'silence';
+const BUFF_POISON = 'poison';
+const BUFF_FIRE = 'fire';
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -223,6 +225,12 @@ export class CardGameClient {
     }
     if (Number.isInteger(card?.userData?.silenceTurnsRemaining) && card.userData.silenceTurnsRemaining > 0 && !activeBuffs.includes(BUFF_SILENCE)) {
       activeBuffs.push(BUFF_SILENCE);
+    }
+    if (Number.isInteger(card?.userData?.poisonTurnsRemaining) && card.userData.poisonTurnsRemaining > 0 && !activeBuffs.includes(BUFF_POISON)) {
+      activeBuffs.push(BUFF_POISON);
+    }
+    if (Number.isInteger(card?.userData?.fireTurnsRemaining) && card.userData.fireTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FIRE)) {
+      activeBuffs.push(BUFF_FIRE);
     }
     return activeBuffs;
   }
@@ -1787,6 +1795,8 @@ export class CardGameClient {
       card.userData.targetSide = cfg.targetSide || null;
       card.userData.tauntTurnsRemaining = Number.isInteger(cfg.tauntTurnsRemaining) ? cfg.tauntTurnsRemaining : 0;
       card.userData.silenceTurnsRemaining = Number.isInteger(cfg.silenceTurnsRemaining) ? cfg.silenceTurnsRemaining : 0;
+      card.userData.poisonTurnsRemaining = Number.isInteger(cfg.poisonTurnsRemaining) ? cfg.poisonTurnsRemaining : 0;
+      card.userData.fireTurnsRemaining = Number.isInteger(cfg.fireTurnsRemaining) ? cfg.fireTurnsRemaining : 0;
       card.userData.catalogCard = cfg.catalogCard ?? null;
       card.userData.statDisplayOverrides = null;
       card.userData.isAttackHover = false;
@@ -2219,7 +2229,8 @@ export class CardGameClient {
           const buffDuration = Number.isInteger(animation.buffDurationTurns)
             ? Math.max(0, animation.buffDurationTurns)
             : 0;
-          const shouldApplyBuff = buffDuration > 0 && (animation.buffId === BUFF_TAUNT || animation.buffId === BUFF_SILENCE);
+          const shouldApplyBuff = buffDuration > 0
+            && (animation.buffId === BUFF_TAUNT || animation.buffId === BUFF_SILENCE || animation.buffId === BUFF_POISON || animation.buffId === BUFF_FIRE);
           if (shouldApplyBuff) {
             const buffRecipient = animation.buffTarget === 'self'
               ? card
@@ -2230,6 +2241,12 @@ export class CardGameClient {
               }
               if (animation.buffId === BUFF_SILENCE) {
                 buffRecipient.userData.silenceTurnsRemaining = buffDuration;
+              }
+              if (animation.buffId === BUFF_POISON) {
+                buffRecipient.userData.poisonTurnsRemaining = buffDuration;
+              }
+              if (animation.buffId === BUFF_FIRE) {
+                buffRecipient.userData.fireTurnsRemaining = buffDuration;
               }
               this.updateCardBuffBadges(buffRecipient);
             }
