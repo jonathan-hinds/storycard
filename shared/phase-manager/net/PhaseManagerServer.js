@@ -158,6 +158,8 @@ class PhaseManagerServer {
         selectedAbilityIndex: 0,
         tauntTurnsRemaining: 0,
         silenceTurnsRemaining: 0,
+        poisonTurnsRemaining: 0,
+        fireTurnsRemaining: 0,
       }));
     }
 
@@ -175,6 +177,8 @@ class PhaseManagerServer {
         selectedAbilityIndex: 0,
         tauntTurnsRemaining: 0,
         silenceTurnsRemaining: 0,
+        poisonTurnsRemaining: 0,
+        fireTurnsRemaining: 0,
       };
     });
   }
@@ -267,6 +271,10 @@ class PhaseManagerServer {
         phaseStartedAt: match.phaseStartedAt,
         activeSpellResolution,
         commitAllRolledAt: match.commitAllRolledAt || null,
+        dotDamageEvents: (Array.isArray(match.lastDotDamageEvents) ? match.lastDotDamageEvents : []).map((event) => ({
+          ...event,
+          side: event.playerId === playerId ? 'player' : 'opponent',
+        })),
         commitAttacks,
         commitRolls: Array.from(match.commitRollsByAttackId?.values() || []).map((rollEntry) => ({
           ...rollEntry,
@@ -284,6 +292,52 @@ class PhaseManagerServer {
     const drawnCard = playerState.deck.shift();
     playerState.hand.push(drawnCard);
     return [drawnCard.id];
+  }
+
+  applyDamageOverTimeAtPhaseChange(match) {
+    if (!match?.cardsByPlayer) return [];
+    const events = [];
+
+    match.players.forEach((playerId) => {
+      const playerState = match.cardsByPlayer.get(playerId);
+      if (!playerState?.board?.length) return;
+
+      playerState.board.forEach((card) => {
+        const poisonTurns = Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0;
+        const fireTurns = Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0;
+        const appliedDebuffs = [];
+        let totalDamage = 0;
+
+        if (poisonTurns > 0) {
+          appliedDebuffs.push('poison');
+          totalDamage += 1;
+        }
+        if (fireTurns > 0) {
+          appliedDebuffs.push('fire');
+          totalDamage += 1;
+        }
+
+        card.poisonTurnsRemaining = Math.max(0, poisonTurns - 1);
+        card.fireTurnsRemaining = Math.max(0, fireTurns - 1);
+
+        if (totalDamage < 1) return;
+
+        const currentHealth = Number(card?.catalogCard?.health);
+        if (!Number.isFinite(currentHealth)) return;
+        const nextHealth = currentHealth - totalDamage;
+        card.catalogCard.health = nextHealth;
+        events.push({
+          playerId,
+          cardId: card.id,
+          slotIndex: Number.isInteger(card.slotIndex) ? card.slotIndex : null,
+          damage: totalDamage,
+          appliedDebuffs,
+          resultingHealth: nextHealth,
+        });
+      });
+    });
+
+    return events;
   }
 
   applyDecisionPhaseStartDraw(match) {
@@ -310,6 +364,7 @@ class PhaseManagerServer {
     match.commitExecutionByAttackId = new Map();
     match.commitAnimationCompletedPlayers = new Set();
     match.activeSpellResolution = null;
+    match.lastDotDamageEvents = this.applyDamageOverTimeAtPhaseChange(match);
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
       if (!playerState) return;
@@ -322,6 +377,8 @@ class PhaseManagerServer {
         selectedAbilityIndex: 0,
         tauntTurnsRemaining: Math.max(0, (Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0) - 1),
         silenceTurnsRemaining: Math.max(0, (Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0) - 1),
+        poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
+        fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
       }));
     });
     this.applyDecisionPhaseStartDraw(match);
@@ -393,7 +450,9 @@ class PhaseManagerServer {
 
   applyResolvedAbilityBuff({ match, casterId, attack, buffId, buffTarget, durationTurns }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (buffId !== 'taunt' && buffId !== 'silence') return { executed: true, reason: 'no_buff' };
+    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire') {
+      return { executed: true, reason: 'no_buff' };
+    }
     const normalizedDuration = Number.isInteger(durationTurns) ? Math.max(0, durationTurns) : 0;
     if (normalizedDuration < 1) return { executed: false, reason: 'invalid_duration' };
 
@@ -418,6 +477,16 @@ class PhaseManagerServer {
     if (buffId === 'silence') {
       targetCard.silenceTurnsRemaining = normalizedDuration;
       return { executed: true, reason: 'silence_applied' };
+    }
+
+    if (buffId === 'poison') {
+      targetCard.poisonTurnsRemaining = normalizedDuration;
+      return { executed: true, reason: 'poison_applied' };
+    }
+
+    if (buffId === 'fire') {
+      targetCard.fireTurnsRemaining = normalizedDuration;
+      return { executed: true, reason: 'fire_applied' };
     }
 
     return { executed: true, reason: 'no_buff' };
@@ -964,6 +1033,8 @@ class PhaseManagerServer {
         selectedAbilityIndex: 0,
         tauntTurnsRemaining: Number.isInteger(knownCard?.tauntTurnsRemaining) ? knownCard.tauntTurnsRemaining : 0,
         silenceTurnsRemaining: Number.isInteger(knownCard?.silenceTurnsRemaining) ? knownCard.silenceTurnsRemaining : 0,
+        poisonTurnsRemaining: Number.isInteger(knownCard?.poisonTurnsRemaining) ? knownCard.poisonTurnsRemaining : 0,
+        fireTurnsRemaining: Number.isInteger(knownCard?.fireTurnsRemaining) ? knownCard.fireTurnsRemaining : 0,
       });
     }
 
@@ -1110,6 +1181,7 @@ class PhaseManagerServer {
         commitCompletedPlayers: new Set(),
         commitAnimationCompletedPlayers: new Set(),
         commitAllRolledAt: null,
+        lastDotDamageEvents: [],
         activeSpellResolution: null,
         createdAt: Date.now(),
       };
