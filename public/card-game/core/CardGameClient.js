@@ -218,7 +218,54 @@ export class CardGameClient {
     if (Number.isInteger(card?.userData?.silenceTurnsRemaining) && card.userData.silenceTurnsRemaining > 0 && !activeBuffs.includes(BUFF_SILENCE)) {
       activeBuffs.push(BUFF_SILENCE);
     }
-    return activeBuffs;
+    const hiddenBuffIds = Array.isArray(card?.userData?.hiddenBuffIds)
+      ? card.userData.hiddenBuffIds
+      : [];
+    if (!hiddenBuffIds.length) return activeBuffs;
+    return activeBuffs.filter((buffId) => !hiddenBuffIds.includes(buffId));
+  }
+
+  hideBuffBadgeUntilImpact(card, buffId) {
+    if (!card?.userData || typeof buffId !== 'string' || !buffId || buffId === 'none') return;
+    const activeBuffs = this.getActiveBuffIdsForCard(card);
+    if (activeBuffs.includes(buffId)) return;
+    const existing = Array.isArray(card.userData.hiddenBuffIds) ? card.userData.hiddenBuffIds : [];
+    if (!existing.includes(buffId)) {
+      card.userData.hiddenBuffIds = [...existing, buffId];
+      this.updateCardBuffBadges(card);
+    }
+  }
+
+  revealBuffBadgeAfterImpact(card, buffId) {
+    if (!card?.userData || typeof buffId !== 'string' || !buffId || buffId === 'none') return;
+    if (!Array.isArray(card.userData.hiddenBuffIds) || !card.userData.hiddenBuffIds.includes(buffId)) return;
+    card.userData.hiddenBuffIds = card.userData.hiddenBuffIds.filter((id) => id !== buffId);
+    this.updateCardBuffBadges(card);
+  }
+
+  getPendingBuffApplicationsForAnimationStep(step) {
+    const buffId = typeof step?.buffId === 'string' ? step.buffId.trim().toLowerCase() : 'none';
+    const buffTarget = typeof step?.buffTarget === 'string' ? step.buffTarget.trim().toLowerCase() : 'none';
+    const buffExecuted = step?.buffExecuted !== false;
+    if (!buffExecuted || buffId === 'none') return [];
+
+    if (buffTarget === 'self') {
+      return [{ role: 'attacker', buffId }];
+    }
+    if (buffTarget === 'friendly' || buffTarget === 'enemy') {
+      return [{ role: 'defender', buffId }];
+    }
+    return [];
+  }
+
+  applyPendingBuffVisibilityForAnimationStep(animation) {
+    if (!animation?.pendingBuffApplications?.length) return;
+    const resolved = this.resolveCombatAnimationSlots(animation);
+    if (!resolved?.attackerSlot?.card || !resolved?.defenderSlot?.card) return;
+    for (const pending of animation.pendingBuffApplications) {
+      const targetCard = pending.role === 'attacker' ? resolved.attackerSlot.card : resolved.defenderSlot.card;
+      this.hideBuffBadgeUntilImpact(targetCard, pending.buffId);
+    }
   }
 
   setupCardBuffBadges(card) {
@@ -1995,7 +2042,7 @@ export class CardGameClient {
 
     const now = performance.now();
     attackPlan.forEach((step, index) => {
-      this.combatAnimations.push({
+      const animation = {
         attackerSlotIndex: step?.attackerSlotIndex,
         targetSlotIndex: step?.targetSlotIndex,
         attackerSide: step?.attackerSide === 'opponent' ? 'opponent' : 'player',
@@ -2007,9 +2054,12 @@ export class CardGameClient {
         retaliationDamage: Number.isFinite(step?.retaliationDamage) ? step.retaliationDamage : 0,
         retaliationAppliedDamage: Number.isFinite(step?.retaliationAppliedDamage) ? step.retaliationAppliedDamage : 0,
         defenseRemaining: Number.isFinite(step?.defenseRemaining) ? step.defenseRemaining : null,
+        pendingBuffApplications: this.getPendingBuffApplicationsForAnimationStep(step),
         didHit: false,
         initialized: false,
-      });
+      };
+      this.combatAnimations.push(animation);
+      this.applyPendingBuffVisibilityForAnimationStep(animation);
     });
 
     const latest = this.combatAnimations.reduce((max, item) => Math.max(max, item.startAtMs + item.durationMs), now);
@@ -2134,6 +2184,13 @@ export class CardGameClient {
 
             if (Number.isFinite(animation.defenseRemaining) && card?.userData?.cardId) {
               this.setCardStatDisplayOverride(card.userData.cardId, 'defense', Math.max(0, Math.floor(animation.defenseRemaining)));
+            }
+          }
+
+          if (animation.pendingBuffApplications?.length) {
+            for (const pending of animation.pendingBuffApplications) {
+              const targetCard = pending.role === 'attacker' ? card : animation.defenderCard;
+              this.revealBuffBadgeAfterImpact(targetCard, pending.buffId);
             }
           }
 
