@@ -998,6 +998,9 @@ class PhaseManagerServer {
       if (!attackerCard) {
         return { error: `no attacker card found in slot ${attack.attackerSlotIndex}` };
       }
+      if (Number.isInteger(attackerCard.silenceTurnsRemaining) && attackerCard.silenceTurnsRemaining > 0) {
+        return { error: `card in slot ${attack.attackerSlotIndex} is silenced and cannot use abilities` };
+      }
       if (!Number.isInteger(attackerCard.summonedTurn) || attackerCard.summonedTurn >= currentTurnNumber) {
         return { error: `card in slot ${attack.attackerSlotIndex} has summoning sickness` };
       }
