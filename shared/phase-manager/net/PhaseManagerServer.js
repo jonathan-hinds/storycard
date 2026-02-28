@@ -188,10 +188,30 @@ class PhaseManagerServer {
       return null;
     }
 
-    const serializeBoard = (boardCards) => boardCards.map((card) => ({
-      ...card,
-      canAttack: Number.isInteger(card.summonedTurn) && card.summonedTurn < match.turnNumber,
-    }));
+    const shouldHidePendingCommitBuffs = match.phase === 2
+      && Number.isFinite(match.commitAllRolledAt)
+      && match.commitAnimationCompletedPlayers.size < match.players.length;
+    const pendingBuffByCardKey = new Map();
+    if (shouldHidePendingCommitBuffs) {
+      for (const pendingBuff of Array.isArray(match.pendingCommitBuffs) ? match.pendingCommitBuffs : []) {
+        pendingBuffByCardKey.set(`${pendingBuff.targetPlayerId}:${pendingBuff.targetSlotIndex}`, pendingBuff);
+      }
+    }
+
+    const serializeBoard = (boardCards, ownerId) => boardCards.map((card) => {
+      const serializedCard = {
+        ...card,
+        canAttack: Number.isInteger(card.summonedTurn) && card.summonedTurn < match.turnNumber,
+      };
+
+      const pendingBuff = pendingBuffByCardKey.get(`${ownerId}:${card.slotIndex}`);
+      if (pendingBuff) {
+        serializedCard.tauntTurnsRemaining = pendingBuff.previousTauntTurnsRemaining;
+        serializedCard.silenceTurnsRemaining = pendingBuff.previousSilenceTurnsRemaining;
+      }
+
+      return serializedCard;
+    });
 
     const commitAttacks = [];
     for (const { attackerId, attack } of this.getOrderedCommitAttacks(match)) {
@@ -253,12 +273,12 @@ class PhaseManagerServer {
       players: {
         player: {
           hand: [...playerState.hand],
-          board: serializeBoard(playerState.board),
+          board: serializeBoard(playerState.board, playerId),
           deckCount: playerState.deck.length,
         },
         opponent: {
           hand: [...opponentState.hand],
-          board: serializeBoard(opponentState.board),
+          board: serializeBoard(opponentState.board, opponentId),
           deckCount: opponentState.deck.length,
         },
       },
@@ -309,6 +329,7 @@ class PhaseManagerServer {
     match.commitRollsByAttackId = new Map();
     match.commitExecutionByAttackId = new Map();
     match.commitAnimationCompletedPlayers = new Set();
+    match.pendingCommitBuffs = [];
     match.activeSpellResolution = null;
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
@@ -421,6 +442,56 @@ class PhaseManagerServer {
     }
 
     return { executed: true, reason: 'no_buff' };
+  }
+
+  resolvePendingAbilityBuff({ match, casterId, attack, buffId, buffTarget, durationTurns }) {
+    if (!match || !casterId) return { executed: false, reason: 'caster_missing', pendingBuff: null };
+    if (buffId !== 'taunt' && buffId !== 'silence') return { executed: true, reason: 'no_buff', pendingBuff: null };
+    const normalizedDuration = Number.isInteger(durationTurns) ? Math.max(0, durationTurns) : 0;
+    if (normalizedDuration < 1) return { executed: false, reason: 'invalid_duration', pendingBuff: null };
+
+    const { targetPlayerId, targetSlotIndex } = this.resolveBuffTarget({ match, casterId, attack, buffTarget });
+    if (!targetPlayerId || !Number.isInteger(targetSlotIndex)) {
+      return { executed: false, reason: 'target_missing', pendingBuff: null };
+    }
+
+    const targetState = match.cardsByPlayer.get(targetPlayerId);
+    const targetCard = targetState?.board?.find((card) => card.slotIndex === targetSlotIndex) || null;
+    if (!targetCard) {
+      return { executed: false, reason: 'target_missing', pendingBuff: null };
+    }
+
+    return {
+      executed: true,
+      reason: null,
+      pendingBuff: {
+        buffId,
+        durationTurns: normalizedDuration,
+        targetPlayerId,
+        targetSlotIndex,
+        previousTauntTurnsRemaining: Number.isInteger(targetCard.tauntTurnsRemaining) ? targetCard.tauntTurnsRemaining : 0,
+        previousSilenceTurnsRemaining: Number.isInteger(targetCard.silenceTurnsRemaining) ? targetCard.silenceTurnsRemaining : 0,
+      },
+    };
+  }
+
+  applyPendingCommitBuffs(match) {
+    const pendingBuffs = Array.isArray(match?.pendingCommitBuffs) ? match.pendingCommitBuffs : [];
+    for (const pendingBuff of pendingBuffs) {
+      const targetState = match.cardsByPlayer.get(pendingBuff.targetPlayerId);
+      const targetCard = targetState?.board?.find((card) => card.slotIndex === pendingBuff.targetSlotIndex) || null;
+      if (!targetCard) continue;
+
+      if (pendingBuff.buffId === 'taunt') {
+        targetCard.tauntTurnsRemaining = pendingBuff.durationTurns;
+        continue;
+      }
+
+      if (pendingBuff.buffId === 'silence') {
+        targetCard.silenceTurnsRemaining = pendingBuff.durationTurns;
+      }
+    }
+    match.pendingCommitBuffs = [];
   }
 
   applyTypeAdvantageToValue({ effectId, resolvedValue, sourceType, targetType }) {
@@ -624,6 +695,7 @@ class PhaseManagerServer {
   applyCommitEffects(match) {
     const commitExecutionByAttackId = new Map();
     const resolvedAttacksBySlotKey = new Map();
+    const pendingCommitBuffs = [];
     const orderedCommitAttacks = this.getOrderedCommitAttacks(match);
 
     for (const { attackerId, attack } of orderedCommitAttacks) {
@@ -678,6 +750,17 @@ class PhaseManagerServer {
       resolvedAttack.resolvedDamage = resolvedAttack.effectId === 'damage_enemy' ? executedResolvedValue : 0;
       resolvedAttack.resolvedHealing = resolvedAttack.effectId === 'heal_target' ? executedResolvedValue : 0;
 
+      const pendingBuffResult = executionResult.executed === false
+        ? { executed: false, reason: 'effect_failed', pendingBuff: null }
+        : this.resolvePendingAbilityBuff({
+          match,
+          casterId: attackerId,
+          attack: tauntAdjustedAttack,
+          buffId: resolvedAttack.buffId,
+          buffTarget: resolvedAttack.buffTarget,
+          durationTurns: resolvedAttack.buffDurationTurns,
+        });
+
       const buffResult = executionResult.executed === false
         ? { executed: false, reason: 'effect_failed' }
         : this.applyResolvedAbilityBuff({
@@ -688,6 +771,10 @@ class PhaseManagerServer {
           buffTarget: resolvedAttack.buffTarget,
           durationTurns: resolvedAttack.buffDurationTurns,
         });
+
+      if (buffResult.executed !== false && pendingBuffResult.pendingBuff) {
+        pendingCommitBuffs.push(pendingBuffResult.pendingBuff);
+      }
 
       const retaliationResult = {
           retaliationDamage: 0,
@@ -735,6 +822,7 @@ class PhaseManagerServer {
     }
 
     match.commitExecutionByAttackId = commitExecutionByAttackId;
+    match.pendingCommitBuffs = pendingCommitBuffs;
   }
 
   getOrderedCommitAttacks(match) {
@@ -792,6 +880,7 @@ class PhaseManagerServer {
     match.commitExecutionByAttackId = new Map();
     match.commitCompletedPlayers = new Set();
     match.commitAnimationCompletedPlayers = new Set();
+    match.pendingCommitBuffs = [];
     match.commitAllRolledAt = null;
     match.phaseEndsAt = null;
   }
@@ -845,6 +934,7 @@ class PhaseManagerServer {
     match.commitAnimationCompletedPlayers.add(playerId);
     if (match.commitAnimationCompletedPlayers.size === match.players.length) {
       this.advanceMatchToDecisionPhase(match);
+      this.applyPendingCommitBuffs(match);
     }
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
@@ -1109,6 +1199,7 @@ class PhaseManagerServer {
         commitExecutionByAttackId: new Map(),
         commitCompletedPlayers: new Set(),
         commitAnimationCompletedPlayers: new Set(),
+        pendingCommitBuffs: [],
         commitAllRolledAt: null,
         activeSpellResolution: null,
         createdAt: Date.now(),
