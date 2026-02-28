@@ -51,14 +51,14 @@ function setOptions(selectEl, values = [], fallbackValue = null) {
 }
 
 function getAllowedBuffIdsForTarget(target = 'none') {
-  if (target === 'enemy') return ['none', 'silence'];
+  if (target === 'enemy') return ['none', 'silence', 'poison', 'fire'];
   if (target === 'self' || target === 'friendly') return ['none', 'taunt'];
   return ['none'];
 }
 
 function getAllowedBuffTargetsForBuff(buffId = 'none') {
   if (buffId === 'taunt') return ['self', 'friendly'];
-  if (buffId === 'silence') return ['enemy'];
+  if (buffId === 'silence' || buffId === 'poison' || buffId === 'fire') return ['enemy'];
   return ['none'];
 }
 
@@ -90,7 +90,10 @@ function updateValueSourceVisibility() {
 }
 
 function updateDurationVisibility() {
-  const needsDuration = buffSelect?.value === 'taunt' || buffSelect?.value === 'silence';
+  const needsDuration = buffSelect?.value === 'taunt'
+    || buffSelect?.value === 'silence'
+    || buffSelect?.value === 'poison'
+    || buffSelect?.value === 'fire';
   if (!durationTurnsInput) return;
   durationTurnsInput.hidden = !needsDuration;
   if (durationTurnsInput.previousElementSibling) durationTurnsInput.previousElementSibling.hidden = !needsDuration;
@@ -99,7 +102,11 @@ function updateDurationVisibility() {
 }
 
 function validateAbilityInput(abilityInput) {
-  if (abilityInput.target === 'enemy' && abilityInput.buffId !== 'none' && abilityInput.buffId !== 'silence') {
+  if (abilityInput.target === 'enemy'
+    && abilityInput.buffId !== 'none'
+    && abilityInput.buffId !== 'silence'
+    && abilityInput.buffId !== 'poison'
+    && abilityInput.buffId !== 'fire') {
     return 'Enemy-targeting abilities may only use enemy debuffs.';
   }
   if ((abilityInput.target === 'self' || abilityInput.target === 'friendly') && abilityInput.buffId !== 'none' && abilityInput.buffId !== 'taunt') {
@@ -110,14 +117,17 @@ function validateAbilityInput(abilityInput) {
     return 'Taunt buffs must target self or friendly.';
   }
 
-  if (abilityInput.buffId === 'silence' && abilityInput.buffTarget !== 'enemy') {
-    return 'Silence debuffs must target enemy.';
+  if ((abilityInput.buffId === 'silence' || abilityInput.buffId === 'poison' || abilityInput.buffId === 'fire') && abilityInput.buffTarget !== 'enemy') {
+    return `${toTitle(abilityInput.buffId)} debuffs must target enemy.`;
   }
 
-  if (abilityInput.buffId !== 'taunt' && abilityInput.buffId !== 'silence') return null;
+  if (abilityInput.buffId !== 'taunt'
+    && abilityInput.buffId !== 'silence'
+    && abilityInput.buffId !== 'poison'
+    && abilityInput.buffId !== 'fire') return null;
   const durationTurns = Number(abilityInput.durationTurns);
   if (!Number.isInteger(durationTurns) || durationTurns < 1) {
-    return 'Taunt and silence effects must include a duration of at least 1 turn.';
+    return 'Taunt, silence, poison, and fire effects must include a duration of at least 1 turn.';
   }
   return null;
 }

@@ -77,6 +77,7 @@ export class PhaseManagerClient {
     this.availableBackgroundAssets = [];
     this.boundControlListeners = [];
     this.playedRemoteSpellResolutionIds = new Set();
+    this.lastPlayedDotEventKey = null;
     this.previewTuning = loadPreviewTuning();
     this.playerId = createTabPlayerId();
     this.buffBadgeSlotsLayout = this.createInitialBuffBadgeSlotsLayout();
@@ -862,6 +863,8 @@ export class PhaseManagerClient {
         targetSlotIndex: null,
         tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
         silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
+        poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
+        fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -888,6 +891,8 @@ export class PhaseManagerClient {
         targetSide: card.targetSide || null,
         tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
         silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
+        poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
+        fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -936,6 +941,45 @@ export class PhaseManagerClient {
     };
   }
 
+  playDotDamageEvents(dotDamageEvents = []) {
+    if (!this.client || !Array.isArray(dotDamageEvents)) return;
+
+    const dotKey = `${this.match?.id || 'none'}:${this.match?.turnNumber || 0}:${this.match?.phase || 0}:${dotDamageEvents
+      .map((event) => `${event?.cardId || 'unknown'}:${event?.damage || 0}:${Array.isArray(event?.appliedDebuffs) ? event.appliedDebuffs.join('+') : ''}`)
+      .join('|')}`;
+    if (dotKey === this.lastPlayedDotEventKey) return;
+    this.lastPlayedDotEventKey = dotKey;
+
+    if (!dotDamageEvents.length) return;
+    const now = performance.now();
+
+    dotDamageEvents.forEach((event) => {
+      if (!event || !Number.isFinite(event.damage) || event.damage <= 0) return;
+      const side = event.side === 'player' ? PLAYER_SIDE : OPPONENT_SIDE;
+      const sceneCard = this.client.cards.find((card) => card?.userData?.cardId === event.cardId && card.userData.owner === side);
+      if (!sceneCard) return;
+
+      this.client.spawnDamagePopup({
+        amount: event.damage,
+        worldPoint: sceneCard.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+        driftTowardWorldPoint: this.client.getCardSlotAnchorPoint(sceneCard),
+        time: now,
+      });
+
+      this.client.combatShakeEffects.push({
+        card: sceneCard,
+        startAtMs: now,
+        durationMs: 220,
+        basePosition: sceneCard.position.clone(),
+        baseRotationZ: sceneCard.rotation.z,
+        axis: new THREE.Vector3(0, 0, side === PLAYER_SIDE ? -1 : 1),
+        amplitude: 0.12,
+        swayAmplitude: 0.045,
+        rollAmplitude: 0.07,
+      });
+    });
+  }
+
   syncCardBuffStateFromMatch(currentMatch) {
     if (!this.client || !currentMatch?.players) return;
     const commitAnimationKey = `${currentMatch.id}:${currentMatch.turnNumber}:${currentMatch.phase}`;
@@ -953,6 +997,8 @@ export class PhaseManagerClient {
         buffStateByCardId.set(card.id, {
           tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
           silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
+          poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
+          fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
         });
       });
     });
@@ -962,6 +1008,8 @@ export class PhaseManagerClient {
       const state = buffStateByCardId.get(sceneCard.userData.cardId);
       sceneCard.userData.tauntTurnsRemaining = state?.tauntTurnsRemaining ?? 0;
       sceneCard.userData.silenceTurnsRemaining = state?.silenceTurnsRemaining ?? 0;
+      sceneCard.userData.poisonTurnsRemaining = state?.poisonTurnsRemaining ?? 0;
+      sceneCard.userData.fireTurnsRemaining = state?.fireTurnsRemaining ?? 0;
       sceneCard.userData.activeBuffIds = [];
       this.client.updateCardBuffBadges(sceneCard);
     });
@@ -1415,14 +1463,17 @@ export class PhaseManagerClient {
         this.match = nextMatch;
         if (shouldRefreshScene) {
           this.renderMatch();
+          this.playDotDamageEvents(this.match?.meta?.dotDamageEvents || []);
         } else {
           this.syncCardBuffStateFromMatch(this.match);
+          this.playDotDamageEvents(this.match?.meta?.dotDamageEvents || []);
           this.setReadyLockState();
           this.updateSummaryPanels();
           this.triggerRemoteSpellPlayback();
         }
       } else {
         this.syncCardBuffStateFromMatch(this.match);
+        this.playDotDamageEvents(this.match?.meta?.dotDamageEvents || []);
         this.setReadyLockState();
         this.updateSummaryPanels();
         this.triggerRemoteSpellPlayback();
@@ -1436,6 +1487,7 @@ export class PhaseManagerClient {
     this.lastAnimatedCommitKey = null;
     this.commitSequencePromise = null;
     this.playedRemoteSpellResolutionIds.clear();
+    this.lastPlayedDotEventKey = null;
     if (this.client) {
       this.client.destroy();
       this.client = null;
