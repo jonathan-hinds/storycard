@@ -597,15 +597,31 @@ export class CardGameClient {
     return { x, y };
   }
 
-  spawnCombatNumberPopup({ amount, worldPoint, time = performance.now(), prefix = '', variant = COMBAT_NUMBER_VARIANTS.damage }) {
+  getCardSlotAnchorPoint(card) {
+    if (!card || card.userData?.zone !== CARD_ZONE_TYPES.BOARD || !Number.isInteger(card.userData?.slotIndex)) return null;
+    const slot = this.boardSlots[card.userData.slotIndex];
+    if (!slot) return null;
+    return new THREE.Vector3(slot.x, 0.22, slot.z);
+  }
+
+  spawnCombatNumberPopup({ amount, worldPoint, driftTowardWorldPoint = null, time = performance.now(), prefix = '', variant = COMBAT_NUMBER_VARIANTS.damage }) {
     if (!this.damagePopupLayer || !Number.isFinite(amount) || amount <= 0 || !worldPoint) return;
     const start = this.getScreenPositionForWorldPoint(worldPoint);
     if (!start) return;
 
-    const driftAngle = Math.random() * Math.PI * 2;
-    const driftDistance = COMBAT_NUMBER_DRIFT_DISTANCE * (0.65 + Math.random() * 0.45);
-    const driftX = Math.cos(driftAngle) * driftDistance;
-    const driftY = Math.sin(driftAngle) * driftDistance - 36;
+    const driftDistance = COMBAT_NUMBER_DRIFT_DISTANCE * (0.7 + Math.random() * 0.4);
+    const randomAngle = Math.random() * Math.PI * 2;
+    const randomDrift = new THREE.Vector2(Math.cos(randomAngle), Math.sin(randomAngle));
+    const directedTarget = driftTowardWorldPoint ? this.getScreenPositionForWorldPoint(driftTowardWorldPoint) : null;
+    const directionalDrift = directedTarget
+      ? new THREE.Vector2(directedTarget.x - start.x, directedTarget.y - start.y)
+      : null;
+    const hasDirectionalDrift = directionalDrift && directionalDrift.lengthSq() > 1;
+    const driftVector = hasDirectionalDrift
+      ? directionalDrift.normalize().multiplyScalar(0.9).addScaledVector(randomDrift, 0.2).normalize().multiplyScalar(driftDistance)
+      : randomDrift.multiplyScalar(driftDistance);
+    const driftX = driftVector.x;
+    const driftY = driftVector.y - 28;
 
     const node = document.createElement('div');
     node.className = `damage-number-popup damage-number-popup--${variant}`;
@@ -625,8 +641,15 @@ export class CardGameClient {
     });
   }
 
-  spawnDamagePopup({ amount, worldPoint, time = performance.now() }) {
-    this.spawnCombatNumberPopup({ amount, worldPoint, time, prefix: '-', variant: COMBAT_NUMBER_VARIANTS.damage });
+  spawnDamagePopup({ amount, worldPoint, driftTowardWorldPoint = null, time = performance.now() }) {
+    this.spawnCombatNumberPopup({
+      amount,
+      worldPoint,
+      driftTowardWorldPoint,
+      time,
+      prefix: '-',
+      variant: COMBAT_NUMBER_VARIANTS.damage,
+    });
   }
 
   spawnBeneficialPopup({ amount, worldPoint, time = performance.now() }) {
@@ -2114,6 +2137,7 @@ export class CardGameClient {
             this.spawnDamagePopup({
               amount: animation.resolvedDamage,
               worldPoint: animation.defenderCard.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              driftTowardWorldPoint: this.getCardSlotAnchorPoint(animation.defenderCard),
               time,
             });
             if (Number.isFinite(nextHealth)) {
@@ -2137,6 +2161,7 @@ export class CardGameClient {
             this.spawnDamagePopup({
               amount: animation.retaliationDamage,
               worldPoint: card.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              driftTowardWorldPoint: this.getCardSlotAnchorPoint(card),
               time,
             });
 
