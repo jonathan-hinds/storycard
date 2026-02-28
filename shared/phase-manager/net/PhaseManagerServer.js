@@ -19,6 +19,59 @@ const TYPE_ADVANTAGE_BY_ATTACKER = {
   Water: 'Fire',
 };
 
+const DOT_HANDLERS = {
+  poison: {
+    apply(card, durationTurns) {
+      const currentTurns = Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0;
+      if (currentTurns > 0) {
+        card.poisonTurnsRemaining = currentTurns + 1;
+        return;
+      }
+      card.poisonTurnsRemaining = durationTurns;
+    },
+    tick(card) {
+      const turnsRemaining = Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0;
+      if (turnsRemaining < 1) {
+        card.poisonTurnsRemaining = 0;
+        return 0;
+      }
+
+      card.poisonTurnsRemaining = Math.max(0, turnsRemaining - 1);
+      return 1;
+    },
+  },
+  fire: {
+    apply(card, durationTurns) {
+      const currentTurns = Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0;
+      const currentStacks = Number.isInteger(card.fireStacks) ? card.fireStacks : 0;
+      if (currentTurns > 0) {
+        card.fireStacks = Math.max(1, currentStacks + 1);
+        return;
+      }
+
+      card.fireTurnsRemaining = durationTurns;
+      card.fireStacks = 1;
+    },
+    tick(card) {
+      const turnsRemaining = Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0;
+      if (turnsRemaining < 1) {
+        card.fireTurnsRemaining = 0;
+        card.fireStacks = 0;
+        return 0;
+      }
+
+      const fireStacks = Number.isInteger(card.fireStacks) ? Math.max(1, card.fireStacks) : 1;
+      card.fireTurnsRemaining = Math.max(0, turnsRemaining - 1);
+      if (card.fireTurnsRemaining < 1) {
+        card.fireStacks = 0;
+      } else {
+        card.fireStacks = fireStacks;
+      }
+      return fireStacks;
+    },
+  },
+};
+
 class PhaseManagerServer {
   constructor(options = {}) {
     this.options = {
@@ -160,6 +213,7 @@ class PhaseManagerServer {
         silenceTurnsRemaining: 0,
         poisonTurnsRemaining: 0,
         fireTurnsRemaining: 0,
+        fireStacks: 0,
       }));
     }
 
@@ -179,6 +233,7 @@ class PhaseManagerServer {
         silenceTurnsRemaining: 0,
         poisonTurnsRemaining: 0,
         fireTurnsRemaining: 0,
+        fireStacks: 0,
       };
     });
   }
@@ -303,22 +358,15 @@ class PhaseManagerServer {
       if (!playerState?.board?.length) return;
 
       playerState.board.forEach((card) => {
-        const poisonTurns = Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0;
-        const fireTurns = Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0;
         const appliedDebuffs = [];
         let totalDamage = 0;
 
-        if (poisonTurns > 0) {
-          appliedDebuffs.push('poison');
-          totalDamage += 1;
-        }
-        if (fireTurns > 0) {
-          appliedDebuffs.push('fire');
-          totalDamage += 1;
-        }
-
-        card.poisonTurnsRemaining = Math.max(0, poisonTurns - 1);
-        card.fireTurnsRemaining = Math.max(0, fireTurns - 1);
+        Object.entries(DOT_HANDLERS).forEach(([dotId, dotHandler]) => {
+          const dotDamage = dotHandler.tick(card);
+          if (dotDamage < 1) return;
+          appliedDebuffs.push(dotId);
+          totalDamage += dotDamage;
+        });
 
         if (totalDamage < 1) return;
 
@@ -379,6 +427,7 @@ class PhaseManagerServer {
         silenceTurnsRemaining: Math.max(0, (Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0) - 1),
         poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
         fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
+        fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
       }));
     });
     this.applyDecisionPhaseStartDraw(match);
@@ -479,14 +528,10 @@ class PhaseManagerServer {
       return { executed: true, reason: 'silence_applied' };
     }
 
-    if (buffId === 'poison') {
-      targetCard.poisonTurnsRemaining = normalizedDuration;
-      return { executed: true, reason: 'poison_applied' };
-    }
-
-    if (buffId === 'fire') {
-      targetCard.fireTurnsRemaining = normalizedDuration;
-      return { executed: true, reason: 'fire_applied' };
+    if (buffId === 'poison' || buffId === 'fire') {
+      const dotHandler = DOT_HANDLERS[buffId];
+      dotHandler?.apply(targetCard, normalizedDuration);
+      return { executed: true, reason: `${buffId}_applied` };
     }
 
     return { executed: true, reason: 'no_buff' };
@@ -1035,6 +1080,7 @@ class PhaseManagerServer {
         silenceTurnsRemaining: Number.isInteger(knownCard?.silenceTurnsRemaining) ? knownCard.silenceTurnsRemaining : 0,
         poisonTurnsRemaining: Number.isInteger(knownCard?.poisonTurnsRemaining) ? knownCard.poisonTurnsRemaining : 0,
         fireTurnsRemaining: Number.isInteger(knownCard?.fireTurnsRemaining) ? knownCard.fireTurnsRemaining : 0,
+        fireStacks: Number.isInteger(knownCard?.fireStacks) ? knownCard.fireStacks : 0,
       });
     }
 
