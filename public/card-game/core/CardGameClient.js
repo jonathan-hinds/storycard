@@ -684,7 +684,7 @@ export class CardGameClient {
     let hasAdvantage = false;
     if (effectId === 'damage_enemy') {
       hasAdvantage = TYPE_ADVANTAGE_BY_ATTACKER[normalizedSourceType] === normalizedTargetType;
-    } else if (effectId === 'heal_target' || effectId === 'retaliation_bonus') {
+    } else if (effectId === 'heal_target' || effectId === 'retaliation_bonus' || effectId === 'life_steal') {
       hasAdvantage = normalizedSourceType === normalizedTargetType;
     }
     if (!hasAdvantage) return 0;
@@ -1294,9 +1294,15 @@ export class CardGameClient {
     const resolvedHealing = Number.isFinite(targetCard?.userData?.pendingSpellHealing)
       ? targetCard.userData.pendingSpellHealing
       : null;
+    const resolvedLifeStealHealing = Number.isFinite(card?.userData?.pendingSpellHealing)
+      ? card.userData.pendingSpellHealing
+      : null;
     if (targetCard?.userData) {
       targetCard.userData.pendingSpellDamage = null;
       targetCard.userData.pendingSpellHealing = null;
+    }
+    if (card?.userData) {
+      card.userData.pendingSpellHealing = null;
     }
     const startAtMs = performance.now();
     this.combatAnimations.push({
@@ -1308,6 +1314,7 @@ export class CardGameClient {
       durationMs: 760,
       resolvedDamage,
       resolvedHealing,
+      resolvedLifeStealHealing,
       didHit: false,
       initialized: true,
     });
@@ -1326,7 +1333,7 @@ export class CardGameClient {
         ability,
       });
       if (!Number.isFinite(bonusPercent) || bonusPercent <= 0) return baseValue;
-      if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus') {
+      if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus' && effectId !== 'life_steal') {
         return baseValue;
       }
       const multiplier = this.resolveTypeAdvantageMultiplier(sourceCard, ability);
@@ -1455,8 +1462,9 @@ export class CardGameClient {
         sourceCard: card,
         targetCard,
       });
-      targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' ? resolvedValue : null;
+      targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' || selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
       targetCard.userData.pendingSpellHealing = selectedAbility?.effectId === 'heal_target' ? resolvedValue : null;
+      card.userData.pendingSpellHealing = selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
       this.queueSpellAttackAnimation(card, targetCard);
       await new Promise((resolve) => window.setTimeout(resolve, 760));
     }
@@ -1579,8 +1587,12 @@ export class CardGameClient {
         const resolvedHealing = Number.isFinite(liveSpellResolution?.resolvedHealing)
           ? Math.max(0, Math.floor(Number(liveSpellResolution.resolvedHealing)))
           : null;
+        const resolvedLifeStealHealing = Number.isFinite(liveSpellResolution?.resolvedLifeStealHealing)
+          ? Math.max(0, Math.floor(Number(liveSpellResolution.resolvedLifeStealHealing)))
+          : null;
         targetCard.userData.pendingSpellDamage = resolvedDamage;
         targetCard.userData.pendingSpellHealing = resolvedHealing;
+        card.userData.pendingSpellHealing = resolvedLifeStealHealing;
         this.queueSpellAttackAnimation(card, targetCard);
         await new Promise((resolve) => window.setTimeout(resolve, 760));
       }
@@ -2183,6 +2195,7 @@ export class CardGameClient {
         durationMs: 760,
         resolvedDamage: Number.isFinite(step?.resolvedDamage) ? step.resolvedDamage : null,
         resolvedHealing: Number.isFinite(step?.resolvedHealing) ? step.resolvedHealing : null,
+        resolvedLifeStealHealing: Number.isFinite(step?.resolvedLifeStealHealing) ? step.resolvedLifeStealHealing : null,
         retaliationDamage: Number.isFinite(step?.retaliationDamage) ? step.retaliationDamage : 0,
         retaliationAppliedDamage: Number.isFinite(step?.retaliationAppliedDamage) ? step.retaliationAppliedDamage : 0,
         defenseRemaining: Number.isFinite(step?.defenseRemaining) ? step.defenseRemaining : null,
@@ -2319,6 +2332,19 @@ export class CardGameClient {
             if (Number.isFinite(animation.defenseRemaining) && card?.userData?.cardId) {
               this.setCardStatDisplayOverride(card.userData.cardId, 'defense', Math.max(0, Math.floor(animation.defenseRemaining)));
             }
+          }
+
+          if (Number.isFinite(animation.resolvedLifeStealHealing) && animation.resolvedLifeStealHealing > 0) {
+            const attackerHealth = Number(card.userData?.catalogCard?.health);
+            if (Number.isFinite(attackerHealth)) {
+              card.userData.catalogCard.health = attackerHealth + animation.resolvedLifeStealHealing;
+              this.refreshCardFace(card);
+            }
+            this.spawnBeneficialPopup({
+              amount: animation.resolvedLifeStealHealing,
+              worldPoint: card.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              time,
+            });
           }
 
           const buffDuration = Number.isInteger(animation.buffDurationTurns)

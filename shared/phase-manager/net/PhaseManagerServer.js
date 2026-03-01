@@ -278,6 +278,12 @@ class PhaseManagerServer {
         }
 
       if (executionState) {
+          resolvedAttack.resolvedLifeStealHealing = Number.isFinite(executionState.lifeStealHealing)
+            ? executionState.lifeStealHealing
+            : resolvedAttack.resolvedLifeStealHealing;
+          resolvedAttack.lifeStealNetHealing = Number.isFinite(executionState.lifeStealNetHealing)
+            ? executionState.lifeStealNetHealing
+            : 0;
           resolvedAttack.retaliationDamage = Number.isFinite(executionState.retaliationDamage)
             ? executionState.retaliationDamage
             : 0;
@@ -561,7 +567,7 @@ class PhaseManagerServer {
     let hasAdvantage = false;
     if (effectId === 'damage_enemy') {
       hasAdvantage = TYPE_ADVANTAGE_BY_ATTACKER[normalizedSourceType] === normalizedTargetType;
-    } else if (effectId === 'heal_target' || effectId === 'retaliation_bonus') {
+    } else if (effectId === 'heal_target' || effectId === 'retaliation_bonus' || effectId === 'life_steal') {
       hasAdvantage = normalizedSourceType && normalizedSourceType === normalizedTargetType;
     }
 
@@ -595,7 +601,7 @@ class PhaseManagerServer {
 
   applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue, sourceType }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus') {
+    if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus' && effectId !== 'life_steal') {
       return { executed: true, reason: 'no_effect' };
     }
 
@@ -609,9 +615,10 @@ class PhaseManagerServer {
       sourceType,
     });
     const hasDamage = effectId === 'damage_enemy' && adjustedResolvedValue > 0;
+    const hasLifeSteal = effectId === 'life_steal' && adjustedResolvedValue > 0;
     const hasHealing = effectId === 'heal_target' && adjustedResolvedValue > 0;
     const hasRetaliationBonus = effectId === 'retaliation_bonus' && adjustedResolvedValue > 0;
-    if (!hasDamage && !hasHealing && !hasRetaliationBonus) {
+    if (!hasDamage && !hasHealing && !hasRetaliationBonus && !hasLifeSteal) {
       return { executed: true, reason: 'no_value' };
     }
     if (!Number.isInteger(targetSlotIndex)) {
@@ -645,7 +652,9 @@ class PhaseManagerServer {
       return { executed: true, appliedValue: adjustedResolvedValue };
     }
 
-    const nextHealth = hasDamage ? currentHealth - adjustedResolvedValue : currentHealth + adjustedResolvedValue;
+    const nextHealth = (hasDamage || hasLifeSteal)
+      ? currentHealth - adjustedResolvedValue
+      : currentHealth + adjustedResolvedValue;
     defenderCard.catalogCard.health = nextHealth;
 
     if (nextHealth <= 0) {
@@ -739,8 +748,9 @@ class PhaseManagerServer {
       effectId: ability?.effectId || 'none',
       baseResolvedValue,
       resolvedValue,
-      resolvedDamage: ability?.effectId === 'damage_enemy' ? resolvedValue : 0,
+      resolvedDamage: ability?.effectId === 'damage_enemy' || ability?.effectId === 'life_steal' ? resolvedValue : 0,
       resolvedHealing: ability?.effectId === 'heal_target' ? resolvedValue : 0,
+      resolvedLifeStealHealing: ability?.effectId === 'life_steal' ? resolvedValue : 0,
       buffId: ability?.buffId || 'none',
       buffTarget: ability?.buffTarget || 'none',
       buffDurationTurns: Number.isInteger(ability?.durationTurns) ? ability.durationTurns : null,
@@ -801,8 +811,9 @@ class PhaseManagerServer {
           ? executionResult.appliedValue
           : resolvedAttack.resolvedValue;
       resolvedAttack.resolvedValue = executedResolvedValue;
-      resolvedAttack.resolvedDamage = resolvedAttack.effectId === 'damage_enemy' ? executedResolvedValue : 0;
+      resolvedAttack.resolvedDamage = resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal' ? executedResolvedValue : 0;
       resolvedAttack.resolvedHealing = resolvedAttack.effectId === 'heal_target' ? executedResolvedValue : 0;
+      resolvedAttack.resolvedLifeStealHealing = resolvedAttack.effectId === 'life_steal' ? executedResolvedValue : 0;
 
       const buffResult = executionResult.executed === false
         ? { executed: false, reason: 'effect_failed' }
@@ -824,7 +835,7 @@ class PhaseManagerServer {
         };
 
       const isEnemyDamageAttack = executionResult.executed !== false
-          && resolvedAttack.effectId === 'damage_enemy'
+          && (resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal')
           && tauntAdjustedAttack.targetSide === 'opponent'
           && Number.isInteger(tauntAdjustedAttack.targetSlotIndex);
 
@@ -852,11 +863,31 @@ class PhaseManagerServer {
           }));
         }
 
+      const lifeStealResult = {
+        lifeStealHealing: 0,
+        lifeStealNetHealing: 0,
+      };
+
+      if (executionResult.executed !== false && resolvedAttack.effectId === 'life_steal' && Number.isInteger(attack.attackerSlotIndex)) {
+        const attackerState = match.cardsByPlayer.get(attackerId);
+        const attackerCardAfterRetaliation = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
+        const attackerHealth = Number(attackerCardAfterRetaliation?.catalogCard?.health);
+        if (attackerCardAfterRetaliation?.catalogCard && Number.isFinite(attackerHealth)) {
+          const healedAmount = Math.max(0, Math.floor(executedResolvedValue));
+          if (healedAmount > 0) {
+            attackerCardAfterRetaliation.catalogCard.health = attackerHealth + healedAmount;
+            lifeStealResult.lifeStealHealing = healedAmount;
+            lifeStealResult.lifeStealNetHealing = Math.max(0, healedAmount - retaliationResult.retaliationAppliedDamage);
+          }
+        }
+      }
+
       commitExecutionByAttackId.set(attack.id, {
           ...executionResult,
           buffExecuted: buffResult.executed !== false,
           buffReason: buffResult.reason || null,
           ...retaliationResult,
+          ...lifeStealResult,
         });
     }
 
@@ -1417,6 +1448,7 @@ class PhaseManagerServer {
       resolvedValue: 0,
       resolvedDamage: 0,
       resolvedHealing: 0,
+      resolvedLifeStealHealing: 0,
       startedAt: Date.now(),
       completedAt: null,
     };
@@ -1480,8 +1512,9 @@ class PhaseManagerServer {
     });
     active.effectId = effectId;
     active.resolvedValue = resolvedValue;
-    active.resolvedDamage = effectId === 'damage_enemy' ? resolvedValue : 0;
+    active.resolvedDamage = effectId === 'damage_enemy' || effectId === 'life_steal' ? resolvedValue : 0;
     active.resolvedHealing = effectId === 'heal_target' ? resolvedValue : 0;
+    active.resolvedLifeStealHealing = effectId === 'life_steal' ? resolvedValue : 0;
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
@@ -1533,8 +1566,9 @@ class PhaseManagerServer {
 
     active.effectId = effectId;
     active.resolvedValue = resolvedValue;
-    active.resolvedDamage = effectId === 'damage_enemy' && executionResult.executed !== false ? resolvedValue : 0;
+    active.resolvedDamage = (effectId === 'damage_enemy' || effectId === 'life_steal') && executionResult.executed !== false ? resolvedValue : 0;
     active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false ? resolvedValue : 0;
+    active.resolvedLifeStealHealing = effectId === 'life_steal' && executionResult.executed !== false ? resolvedValue : 0;
 
     this.applyResolvedAbilityBuff({
       match,
