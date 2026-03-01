@@ -4,6 +4,7 @@ const USER_SESSION_KEY = 'storycard-user-session';
 
 const cardList = document.getElementById('user-card-list');
 const cardLibraryCanvas = document.getElementById('user-card-library-canvas');
+const cardLibraryStage = document.getElementById('user-card-library-stage');
 const deckStatus = document.getElementById('user-deck-status');
 let deckBuilderScene;
 
@@ -51,12 +52,16 @@ function updateDeckStatus(summary) {
 function renderCards(cards) {
   if (!cards.length) {
     cardLibraryCanvas.hidden = true;
-    cardList.innerHTML = '<p class="catalog-empty">No cards found in the catalog.</p>';
+    if (cardLibraryStage) cardLibraryStage.hidden = true;
+    const emptyState = document.getElementById('user-card-list-empty');
+    if (emptyState) emptyState.remove();
+    cardList.insertAdjacentHTML('beforeend', '<p id="user-card-list-empty" class="catalog-empty">No cards found in the catalog.</p>');
     return;
   }
 
-  cardList.innerHTML = '';
-  cardList.append(cardLibraryCanvas);
+  const emptyState = document.getElementById('user-card-list-empty');
+  if (emptyState) emptyState.remove();
+  if (cardLibraryStage) cardLibraryStage.hidden = false;
   cardLibraryCanvas.hidden = false;
 
   deckBuilderScene?.destroy?.();
@@ -79,5 +84,8 @@ async function loadCards() {
 }
 
 loadCards().catch((error) => {
-  cardList.innerHTML = `<p class="catalog-empty">${error.message || 'Unable to load cards.'}</p>`;
+  if (cardLibraryStage) cardLibraryStage.hidden = true;
+  const emptyState = document.getElementById('user-card-list-empty');
+  if (emptyState) emptyState.remove();
+  cardList.insertAdjacentHTML('beforeend', `<p id="user-card-list-empty" class="catalog-empty">${error.message || 'Unable to load cards.'}</p>`);
 });
