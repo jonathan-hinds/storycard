@@ -3,7 +3,6 @@ import { CardMeshFactory } from '/public/card-game/render/CardMeshFactory.js';
 import { createCardLabelTexture } from '/public/card-game/render/cardLabelTexture.js';
 import { resolveCardKind, CARD_KINDS } from '/public/card-game/render/cardStyleConfig.js';
 import {
-  PREVIEW_HOLD_DELAY_MS,
   PREVIEW_BASE_POSITION,
   beginPreviewTransition,
   beginPreviewReturnTransition,
@@ -20,6 +19,7 @@ const COLUMN_PADDING = 1.2;
 const ROW_PADDING = 1.8;
 const DRAG_START_DISTANCE_PX = 8;
 const HOLD_CANCEL_DISTANCE_PX = 10;
+const PREVIEW_HIGHLIGHT_COLOR = 0x7bb0ff;
 
 function createTitleSprite(text) {
   const canvas = document.createElement('canvas');
@@ -90,6 +90,7 @@ export class DeckBuilderScene {
 
     this.previewTuning = loadPreviewTuning();
     this.previewCard = null;
+    this.previewEntry = null;
     this.previewPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
     this.previewOriginPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
     this.previewTransition = { isActive: false, direction: 'toPreview', startedAt: 0, durationMs: 0 };
@@ -187,6 +188,7 @@ export class DeckBuilderScene {
   }
 
   rebuildLibraryPane() {
+    this.closePreview({ immediate: true });
     this.clearEntries(this.libraryPane);
     this.libraryCards.forEach((card) => {
       const entry = this.createEntry(card, this.libraryPane, 1);
@@ -197,6 +199,7 @@ export class DeckBuilderScene {
   }
 
   rebuildDeckPane() {
+    this.closePreview({ immediate: true });
     this.clearEntries(this.deckPane);
     const cards = [...this.deckCounts.entries()]
       .map(([id, count]) => ({ card: this.libraryCards.find((candidate) => candidate.id === id), count }))
@@ -222,6 +225,56 @@ export class DeckBuilderScene {
       this.scene.remove(entry.root);
     });
     pane.entries.length = 0;
+  }
+
+  setEntryHighlighted(entry, isHighlighted) {
+    if (!entry?.root) return;
+    const outlineMaterial = entry.root.userData.outline?.material;
+    if (outlineMaterial?.color) {
+      outlineMaterial.color.setHex(isHighlighted ? PREVIEW_HIGHLIGHT_COLOR : 0x000000);
+    }
+    entry.root.userData.isPreviewHighlighted = isHighlighted;
+  }
+
+  beginPreviewForEntry(entry) {
+    if (!entry?.root) return;
+    if (this.previewEntry && this.previewEntry !== entry) {
+      this.setEntryHighlighted(this.previewEntry, false);
+    }
+    this.previewCard = entry.root;
+    this.previewEntry = entry;
+    this.setEntryHighlighted(entry, true);
+    this.previewStartedAt = performance.now();
+    this.previewOriginPose.position.copy(this.previewCard.position);
+    this.previewOriginPose.rotation.copy(this.previewCard.rotation);
+    this.previewPose.position.set(
+      this.camera.position.x + PREVIEW_BASE_POSITION.x,
+      this.camera.position.y + PREVIEW_BASE_POSITION.y,
+      PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+    );
+    this.previewPose.rotation.set(this.previewTuning.rotationX, 0, 0);
+    beginPreviewTransition(this, this.previewStartedAt);
+  }
+
+  closePreview({ immediate = false } = {}) {
+    if (!this.previewCard) return;
+    if (immediate) {
+      this.previewCard.position.copy(this.previewOriginPose.position);
+      this.previewCard.rotation.copy(this.previewOriginPose.rotation);
+      if (this.previewEntry) this.setEntryHighlighted(this.previewEntry, false);
+      this.previewEntry = null;
+      this.previewCard = null;
+      this.previewTransition.isActive = false;
+      return;
+    }
+    this.previewStartedAt = performance.now();
+    beginPreviewReturnTransition(this, this.previewStartedAt);
+  }
+
+  getPointerDistance(event) {
+    const dx = event.clientX - this.pointerDown.x;
+    const dy = event.clientY - this.pointerDown.y;
+    return Math.hypot(dx, dy);
   }
 
   createEntry(card, pane, count) {
@@ -313,29 +366,13 @@ export class DeckBuilderScene {
     this.pointerEntry = this.raycastEntry(event);
     this.draggingScroll = null;
     clearTimeout(this.holdTimeoutId);
-    if (this.pointerEntry) {
-      this.holdTimeoutId = setTimeout(() => {
-        if (!this.pointerEntry) return;
-        this.previewCard = this.pointerEntry.root;
-        this.previewStartedAt = performance.now();
-        this.previewOriginPose.position.copy(this.previewCard.position);
-        this.previewOriginPose.rotation.copy(this.previewCard.rotation);
-        this.previewPose.position.set(
-          this.camera.position.x + PREVIEW_BASE_POSITION.x,
-          this.camera.position.y + PREVIEW_BASE_POSITION.y,
-          PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
-        );
-        this.previewPose.rotation.set(this.previewTuning.rotationX, 0, 0);
-        beginPreviewTransition(this, this.previewStartedAt);
-      }, PREVIEW_HOLD_DELAY_MS);
-    }
   }
 
   onPointerMove(event) {
     if (this.activePointerId !== event.pointerId) return;
     const dx = event.clientX - this.pointerDown.x;
     const dy = event.clientY - this.pointerDown.y;
-    const dist = Math.hypot(event.clientX - this.pointerDown.x, event.clientY - this.pointerDown.y);
+    const dist = this.getPointerDistance(event);
     if (dist > HOLD_CANCEL_DISTANCE_PX) {
       clearTimeout(this.holdTimeoutId);
     }
@@ -372,10 +409,7 @@ export class DeckBuilderScene {
   onPointerUp(event) {
     if (this.activePointerId !== event.pointerId) return;
     clearTimeout(this.holdTimeoutId);
-    if (this.previewCard) {
-      this.previewStartedAt = performance.now();
-      beginPreviewReturnTransition(this, this.previewStartedAt);
-    }
+    const pointerDistance = this.getPointerDistance(event);
     if (this.dragging) {
       const targetPane = this.paneFromPointer(event);
       if (this.dragging.pane === 'library' && targetPane.name === 'deck') {
@@ -386,6 +420,16 @@ export class DeckBuilderScene {
       }
       this.rebuildDeckPane();
       this.emitDeckChange();
+    } else if (pointerDistance <= DRAG_START_DISTANCE_PX) {
+      if (this.pointerEntry) {
+        if (this.previewEntry === this.pointerEntry && this.previewTransition.direction !== 'toPreview') {
+          this.closePreview();
+        } else {
+          this.beginPreviewForEntry(this.pointerEntry);
+        }
+      } else if (this.previewCard) {
+        this.closePreview();
+      }
     }
     this.pointerEntry = null;
     this.activePane = null;
@@ -453,6 +497,8 @@ export class DeckBuilderScene {
       this.previewCard.rotation.copy(pose.rotation);
       if (pose.isComplete && this.previewTransition.direction === 'fromPreview') {
         this.previewTransition.isActive = false;
+        if (this.previewEntry) this.setEntryHighlighted(this.previewEntry, false);
+        this.previewEntry = null;
         this.previewCard = null;
       }
     }
