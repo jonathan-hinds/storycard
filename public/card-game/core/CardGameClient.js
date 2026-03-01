@@ -67,6 +67,7 @@ const BUFF_TAUNT = 'taunt';
 const BUFF_SILENCE = 'silence';
 const BUFF_POISON = 'poison';
 const BUFF_FIRE = 'fire';
+const BUFF_FROSTBITE = 'frostbite';
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -233,6 +234,9 @@ export class CardGameClient {
     if (Number.isInteger(card?.userData?.fireTurnsRemaining) && card.userData.fireTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FIRE)) {
       activeBuffs.push(BUFF_FIRE);
     }
+    if (Number.isInteger(card?.userData?.frostbiteTurnsRemaining) && card.userData.frostbiteTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FROSTBITE)) {
+      activeBuffs.push(BUFF_FROSTBITE);
+    }
     return activeBuffs;
   }
 
@@ -283,6 +287,9 @@ export class CardGameClient {
     }
     if (buffId === BUFF_POISON) {
       return Number.isInteger(card.userData.poisonStacks) ? Math.max(0, card.userData.poisonStacks) : 0;
+    }
+    if (buffId === BUFF_FROSTBITE) {
+      return Number.isInteger(card.userData.frostbiteStacks) ? Math.max(0, card.userData.frostbiteStacks) : 0;
     }
     return 0;
   }
@@ -376,6 +383,9 @@ export class CardGameClient {
     }
     if (buffId === BUFF_FIRE) {
       return Number.isInteger(card.userData.fireTurnsRemaining) ? Math.max(0, card.userData.fireTurnsRemaining) : 0;
+    }
+    if (buffId === BUFF_FROSTBITE) {
+      return Number.isInteger(card.userData.frostbiteTurnsRemaining) ? Math.max(0, card.userData.frostbiteTurnsRemaining) : 0;
     }
     return 0;
   }
@@ -1904,6 +1914,8 @@ export class CardGameClient {
       card.userData.poisonStacks = Number.isInteger(cfg.poisonStacks) ? cfg.poisonStacks : 0;
       card.userData.fireTurnsRemaining = Number.isInteger(cfg.fireTurnsRemaining) ? cfg.fireTurnsRemaining : 0;
       card.userData.fireStacks = Number.isInteger(cfg.fireStacks) ? cfg.fireStacks : 0;
+      card.userData.frostbiteTurnsRemaining = Number.isInteger(cfg.frostbiteTurnsRemaining) ? cfg.frostbiteTurnsRemaining : 0;
+      card.userData.frostbiteStacks = Number.isInteger(cfg.frostbiteStacks) ? cfg.frostbiteStacks : 0;
       card.userData.catalogCard = cfg.catalogCard ?? null;
       card.userData.statDisplayOverrides = null;
       card.userData.isAttackHover = false;
@@ -2202,6 +2214,8 @@ export class CardGameClient {
         buffId: typeof step?.buffId === 'string' ? step.buffId : 'none',
         buffTarget: typeof step?.buffTarget === 'string' ? step.buffTarget : 'none',
         buffDurationTurns: Number.isInteger(step?.buffDurationTurns) ? step.buffDurationTurns : 0,
+        speedOutcome: Number.isFinite(step?.speedOutcome) ? Math.max(0, Math.floor(step.speedOutcome)) : null,
+        adjustedSpeedOutcome: Number.isFinite(step?.adjustedSpeedOutcome) ? Math.max(0, Math.floor(step.adjustedSpeedOutcome)) : null,
         didHit: false,
         initialized: false,
       });
@@ -2231,6 +2245,12 @@ export class CardGameClient {
           animation.defenderCard = resolved.defenderSlot.card;
           animation.originPosition = new THREE.Vector3(resolved.attackerSlot.x, 0, resolved.attackerSlot.z);
           animation.defenderPosition = new THREE.Vector3(resolved.defenderSlot.x, 0, resolved.defenderSlot.z);
+          const hasAdjustedSpeed = Number.isFinite(animation.adjustedSpeedOutcome)
+            && Number.isFinite(animation.speedOutcome)
+            && animation.adjustedSpeedOutcome !== animation.speedOutcome;
+          if (hasAdjustedSpeed && animation.attackerCard?.userData?.cardId) {
+            this.setCardStatDisplayOverride(animation.attackerCard.userData.cardId, 'speed', animation.adjustedSpeedOutcome);
+          }
         }
 
         const t = THREE.MathUtils.clamp(elapsed / animation.durationMs, 0, 1);
@@ -2351,7 +2371,7 @@ export class CardGameClient {
             ? Math.max(0, animation.buffDurationTurns)
             : 0;
           const shouldApplyBuff = buffDuration > 0
-            && (animation.buffId === BUFF_TAUNT || animation.buffId === BUFF_SILENCE || animation.buffId === BUFF_POISON || animation.buffId === BUFF_FIRE);
+            && (animation.buffId === BUFF_TAUNT || animation.buffId === BUFF_SILENCE || animation.buffId === BUFF_POISON || animation.buffId === BUFF_FIRE || animation.buffId === BUFF_FROSTBITE);
           if (shouldApplyBuff) {
             const buffRecipient = animation.buffTarget === 'self'
               ? card
@@ -2365,9 +2385,18 @@ export class CardGameClient {
               }
               if (animation.buffId === BUFF_POISON) {
                 buffRecipient.userData.poisonTurnsRemaining = buffDuration;
+                const currentStacks = Number.isInteger(buffRecipient.userData.poisonStacks) ? buffRecipient.userData.poisonStacks : 0;
+                buffRecipient.userData.poisonStacks = currentStacks > 0 ? currentStacks + 1 : 1;
               }
               if (animation.buffId === BUFF_FIRE) {
                 buffRecipient.userData.fireTurnsRemaining = buffDuration;
+                const currentStacks = Number.isInteger(buffRecipient.userData.fireStacks) ? buffRecipient.userData.fireStacks : 0;
+                buffRecipient.userData.fireStacks = currentStacks > 0 ? currentStacks + 1 : 1;
+              }
+              if (animation.buffId === BUFF_FROSTBITE) {
+                buffRecipient.userData.frostbiteTurnsRemaining = buffDuration;
+                const currentStacks = Number.isInteger(buffRecipient.userData.frostbiteStacks) ? buffRecipient.userData.frostbiteStacks : 0;
+                buffRecipient.userData.frostbiteStacks = currentStacks > 0 ? currentStacks + 1 : 1;
               }
               this.updateCardBuffBadges(buffRecipient);
             }
