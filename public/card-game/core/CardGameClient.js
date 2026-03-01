@@ -1341,6 +1341,17 @@ export class CardGameClient {
     return this.cards.find((entry) => entry.userData.zone === CARD_ZONE_TYPES.BOARD && entry.userData.slotIndex === resolvedSlotIndex) || null;
   }
 
+  selectRandomFriendlyBoardCard(owner = this.template.playerSide) {
+    const candidates = this.cards.filter((entry) => (
+      entry?.userData?.zone === CARD_ZONE_TYPES.BOARD
+      && entry?.userData?.owner === owner
+      && entry?.userData?.catalogCard
+    ));
+    if (!candidates.length) return null;
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    return candidates[randomIndex] || null;
+  }
+
   resolveSpellAbilityValue(ability, rollOutcome, { sourceCard = null, targetCard = null } = {}) {
     if (!ability || ability.valueSourceType === 'none') return 0;
     const effectId = String(ability?.effectId || '').trim();
@@ -1493,6 +1504,9 @@ export class CardGameClient {
           );
         }
       }
+      if (selectedAbility?.effectId === 'life_steal' && !lifeStealHealingCard) {
+        lifeStealHealingCard = this.selectRandomFriendlyBoardCard();
+      }
 
       targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' || selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
       targetCard.userData.pendingSpellHealing = selectedAbility?.effectId === 'heal_target' ? resolvedValue : null;
@@ -1623,13 +1637,16 @@ export class CardGameClient {
           liveSpellResolution?.lifeStealHealingTargetSide,
           liveSpellResolution?.lifeStealHealingTargetSlotIndex,
         );
+        const resolvedLifeStealTargetCard = (resolvedLifeStealHealing > 0 && !lifeStealHealingTargetCard)
+          ? this.selectRandomFriendlyBoardCard(spellResolution.casterSide)
+          : lifeStealHealingTargetCard;
         targetCard.userData.pendingSpellDamage = resolvedDamage;
         targetCard.userData.pendingSpellHealing = resolvedHealing;
-        if (lifeStealHealingTargetCard?.userData) {
-          lifeStealHealingTargetCard.userData.pendingSpellLifeStealHealing = resolvedLifeStealHealing;
+        if (resolvedLifeStealTargetCard?.userData) {
+          resolvedLifeStealTargetCard.userData.pendingSpellLifeStealHealing = resolvedLifeStealHealing;
         }
         this.queueSpellAttackAnimation(card, targetCard, {
-          lifeStealHealingCard: lifeStealHealingTargetCard,
+          lifeStealHealingCard: resolvedLifeStealTargetCard,
         });
         await new Promise((resolve) => window.setTimeout(resolve, 760));
       }
