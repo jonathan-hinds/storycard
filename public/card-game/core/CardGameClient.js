@@ -1296,7 +1296,7 @@ export class CardGameClient {
     this.state.activeSpellRoller = null;
   }
 
-  queueSpellAttackAnimation(card, targetCard, { lifeStealHealingCard = null } = {}) {
+  queueSpellAttackAnimation(card, targetCard, { lifeStealHealingCard = null, lifeStealHealingAmount = null } = {}) {
     if (!card || !targetCard) return;
     const resolvedDamage = Number.isFinite(targetCard?.userData?.pendingSpellDamage)
       ? targetCard.userData.pendingSpellDamage
@@ -1304,9 +1304,12 @@ export class CardGameClient {
     const resolvedHealing = Number.isFinite(targetCard?.userData?.pendingSpellHealing)
       ? targetCard.userData.pendingSpellHealing
       : null;
-    const resolvedLifeStealHealing = Number.isFinite(lifeStealHealingCard?.userData?.pendingSpellLifeStealHealing)
+    const pendingLifeStealHealing = Number.isFinite(lifeStealHealingCard?.userData?.pendingSpellLifeStealHealing)
       ? lifeStealHealingCard.userData.pendingSpellLifeStealHealing
       : null;
+    const resolvedLifeStealHealing = Number.isFinite(lifeStealHealingAmount)
+      ? Math.max(0, Math.floor(Number(lifeStealHealingAmount)))
+      : pendingLifeStealHealing;
     if (targetCard?.userData) {
       targetCard.userData.pendingSpellDamage = null;
       targetCard.userData.pendingSpellHealing = null;
@@ -1326,6 +1329,7 @@ export class CardGameClient {
       resolvedHealing,
       resolvedLifeStealHealing,
       lifeStealHealingCard,
+      lifeStealCasterSide: card?.userData?.owner || this.template.playerSide,
       didHit: false,
       initialized: true,
     });
@@ -1505,7 +1509,7 @@ export class CardGameClient {
         }
       }
       if (selectedAbility?.effectId === 'life_steal' && !lifeStealHealingCard) {
-        lifeStealHealingCard = this.selectRandomFriendlyBoardCard();
+        lifeStealHealingCard = this.selectRandomFriendlyBoardCard(card?.userData?.owner || this.template.playerSide);
       }
 
       targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' || selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
@@ -1513,7 +1517,10 @@ export class CardGameClient {
       if (lifeStealHealingCard?.userData) {
         lifeStealHealingCard.userData.pendingSpellLifeStealHealing = selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
       }
-      this.queueSpellAttackAnimation(card, targetCard, { lifeStealHealingCard });
+      this.queueSpellAttackAnimation(card, targetCard, {
+        lifeStealHealingCard,
+        lifeStealHealingAmount: selectedAbility?.effectId === 'life_steal' ? resolvedValue : null,
+      });
       await new Promise((resolve) => window.setTimeout(resolve, 760));
     }
 
@@ -1647,6 +1654,7 @@ export class CardGameClient {
         }
         this.queueSpellAttackAnimation(card, targetCard, {
           lifeStealHealingCard: resolvedLifeStealTargetCard,
+          lifeStealHealingAmount: resolvedLifeStealHealing,
         });
         await new Promise((resolve) => window.setTimeout(resolve, 760));
       }
@@ -2400,7 +2408,10 @@ export class CardGameClient {
 
           if (Number.isFinite(animation.resolvedLifeStealHealing) && animation.resolvedLifeStealHealing > 0) {
             const lifeStealHealingCard = animation.lifeStealHealingCard || null;
-            const healingRecipient = lifeStealHealingCard?.userData?.catalogCard ? lifeStealHealingCard : card;
+            const fallbackRecipient = this.selectRandomFriendlyBoardCard(animation.lifeStealCasterSide || card?.userData?.owner || this.template.playerSide);
+            const healingRecipient = lifeStealHealingCard?.userData?.catalogCard
+              ? lifeStealHealingCard
+              : (fallbackRecipient?.userData?.catalogCard ? fallbackRecipient : card);
             const recipientHealth = Number(healingRecipient.userData?.catalogCard?.health);
             if (Number.isFinite(recipientHealth)) {
               healingRecipient.userData.catalogCard.health = recipientHealth + animation.resolvedLifeStealHealing;
