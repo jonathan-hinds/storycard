@@ -818,6 +818,25 @@ button {
   gap: 0.6rem;
 }
 
+
+.user-deck-status {
+  margin-top: 0.35rem;
+  font-weight: 600;
+}
+
+.user-deck-status[data-error='true'] {
+  color: #f4a8a8;
+}
+
+.user-deck-canvas-wrap {
+  border: 1px solid #2a3448;
+  border-radius: 0.8rem;
+  overflow: hidden;
+}
+
+.user-deck-canvas-wrap .cards-library-canvas {
+  border: 0;
+}
 .user-decks-layout {
   min-height: 100vh;
   grid-template-rows: auto auto minmax(560px, 1fr);
