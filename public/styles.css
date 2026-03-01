@@ -832,8 +832,6 @@ button {
   min-height: 100vh;
   grid-template-rows: auto auto auto minmax(560px, 1fr);
   padding: 0;
-  width: min(100%, calc(100vw - 320px));
-  margin-left: auto;
 }
 
 .user-decks-layout > h1,
@@ -844,6 +842,5 @@ button {
 @media (max-width: 900px) {
   .user-decks-layout {
     grid-template-rows: auto auto auto minmax(320px, 1fr);
-    width: 100%;
   }
 }
