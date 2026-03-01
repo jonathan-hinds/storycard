@@ -363,6 +363,31 @@ export class CardGameClient {
       .join(' ');
   }
 
+  getBuffTurnsRemaining(card, buffId) {
+    if (!card?.userData || typeof buffId !== 'string') return 0;
+    if (buffId === BUFF_TAUNT) {
+      return Number.isInteger(card.userData.tauntTurnsRemaining) ? Math.max(0, card.userData.tauntTurnsRemaining) : 0;
+    }
+    if (buffId === BUFF_SILENCE) {
+      return Number.isInteger(card.userData.silenceTurnsRemaining) ? Math.max(0, card.userData.silenceTurnsRemaining) : 0;
+    }
+    if (buffId === BUFF_POISON) {
+      return Number.isInteger(card.userData.poisonTurnsRemaining) ? Math.max(0, card.userData.poisonTurnsRemaining) : 0;
+    }
+    if (buffId === BUFF_FIRE) {
+      return Number.isInteger(card.userData.fireTurnsRemaining) ? Math.max(0, card.userData.fireTurnsRemaining) : 0;
+    }
+    return 0;
+  }
+
+  getBuffTooltipLabel(card, buffId) {
+    const label = this.formatBuffLabel(buffId);
+    if (!label) return '';
+    const turnsRemaining = this.getBuffTurnsRemaining(card, buffId);
+    if (turnsRemaining < 1) return label;
+    return `${label}: ${turnsRemaining} Turns Remaining`;
+  }
+
   getBuffBadgeHit(event, card) {
     const badges = Array.isArray(card?.userData?.buffBadges)
       ? card.userData.buffBadges.filter((badgeMesh) => badgeMesh?.visible && badgeMesh.userData?.buffId)
@@ -385,7 +410,7 @@ export class CardGameClient {
 
   showBuffTooltip({ card, badgeMesh, buffId }) {
     if (!this.damagePopupLayer || !card || !badgeMesh || !buffId) return;
-    const label = this.formatBuffLabel(buffId);
+    const label = this.getBuffTooltipLabel(card, buffId);
     if (!label) return;
 
     let tooltipNode = this.activeBuffTooltip?.node;
@@ -413,6 +438,7 @@ export class CardGameClient {
   positionActiveBuffTooltip() {
     const activeTooltip = this.activeBuffTooltip;
     if (!activeTooltip?.node || !activeTooltip?.badgeMesh) return;
+    activeTooltip.node.textContent = this.getBuffTooltipLabel(activeTooltip.card, activeTooltip.buffId);
     const worldPoint = activeTooltip.badgeMesh.getWorldPosition(new THREE.Vector3());
     worldPoint.y += 0.13;
     const screen = this.getScreenPositionForWorldPoint(worldPoint);
