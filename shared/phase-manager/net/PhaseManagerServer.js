@@ -349,10 +349,13 @@ class PhaseManagerServer {
       }
       : null;
 
-    if (activeSpellResolution?.targetSide) {
+    if (activeSpellResolution) {
       const viewerIsCaster = activeSpellResolution.casterId === playerId;
-      if (!viewerIsCaster) {
+      if (!viewerIsCaster && activeSpellResolution.targetSide) {
         activeSpellResolution.targetSide = activeSpellResolution.targetSide === 'player' ? 'opponent' : 'player';
+      }
+      if (!viewerIsCaster && (activeSpellResolution.lifeStealHealingTargetSide === 'player' || activeSpellResolution.lifeStealHealingTargetSide === 'opponent')) {
+        activeSpellResolution.lifeStealHealingTargetSide = activeSpellResolution.lifeStealHealingTargetSide === 'player' ? 'opponent' : 'player';
       }
     }
 

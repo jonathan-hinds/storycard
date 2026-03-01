@@ -30,6 +30,8 @@ const match = {
     dieSides: 6,
     rollOutcome: null,
     rollData: null,
+    lifeStealHealingTargetSide: 'player',
+    lifeStealHealingTargetSlotIndex: 1,
     startedAt: Date.now(),
     completedAt: null,
   },
@@ -45,9 +47,11 @@ match.pendingCommitAttacksByPlayer.set(opponentId, []);
 const casterView = server.serializeMatchForPlayer(match, playerId);
 assert.equal(casterView.meta.activeSpellResolution.casterSide, 'player');
 assert.equal(casterView.meta.activeSpellResolution.targetSide, 'opponent');
+assert.equal(casterView.meta.activeSpellResolution.lifeStealHealingTargetSide, 'player');
 
 const targetView = server.serializeMatchForPlayer(match, opponentId);
 assert.equal(targetView.meta.activeSpellResolution.casterSide, 'opponent');
 assert.equal(targetView.meta.activeSpellResolution.targetSide, 'player');
+assert.equal(targetView.meta.activeSpellResolution.lifeStealHealingTargetSide, 'opponent');
 
 console.log('phase manager spell sync checks passed');
