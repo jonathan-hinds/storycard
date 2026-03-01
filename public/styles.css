@@ -841,7 +841,12 @@ button {
 .user-decks-layout {
   min-height: 100vh;
   grid-template-rows: auto auto auto minmax(560px, 1fr);
-  padding: 1rem;
+  padding: 0;
+}
+
+.user-decks-layout > h1,
+.user-decks-layout > .cards-library-caption {
+  padding: 0 1rem;
 }
 
 @media (max-width: 900px) {
