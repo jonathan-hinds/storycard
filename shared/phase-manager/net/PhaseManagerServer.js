@@ -904,6 +904,15 @@ class PhaseManagerServer {
       const playerState = match.cardsByPlayer.get(playerId);
       const attacks = playerState?.board
         ?.filter((card) => card.attackCommitted === true && Number.isInteger(card.slotIndex))
+        .filter((card) => {
+          const silenced = Number.isInteger(card.silenceTurnsRemaining) && card.silenceTurnsRemaining > 0;
+          if (!silenced) return true;
+          card.attackCommitted = false;
+          card.targetSlotIndex = null;
+          card.targetSide = null;
+          card.selectedAbilityIndex = 0;
+          return false;
+        })
         .map((card) => ({
           id: `${playerId}:${card.slotIndex}:${card.targetSide || 'none'}:${Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : 'none'}`,
           attackerSlotIndex: card.slotIndex,
@@ -1128,8 +1137,11 @@ class PhaseManagerServer {
       if (!attackerCard) {
         return { error: `no attacker card found in slot ${attack.attackerSlotIndex}` };
       }
+      const knownAttackerCard = knownCards.get(attackerCard.id);
       if (Number.isInteger(attackerCard.silenceTurnsRemaining) && attackerCard.silenceTurnsRemaining > 0) {
-        return { error: `card in slot ${attack.attackerSlotIndex} is silenced and cannot use abilities` };
+        if (knownAttackerCard?.attackCommitted !== true) {
+          return { error: `card in slot ${attack.attackerSlotIndex} is silenced and cannot use abilities` };
+        }
       }
       if (!Number.isInteger(attackerCard.summonedTurn) || attackerCard.summonedTurn >= currentTurnNumber) {
         return { error: `card in slot ${attack.attackerSlotIndex} has summoning sickness` };

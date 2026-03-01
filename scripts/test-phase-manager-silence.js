@@ -157,4 +157,61 @@ function createDuelMatch({ speedA, speedB }) {
   assert.equal(result?.error, 'card in slot 0 is silenced and cannot use abilities', 'silenced cards should be blocked from committing attacks');
 }
 
+// If a creature committed before being silenced, ready-up validation should allow the stale commit,
+// but phase 2 should drop the attack before any commit dice are expected.
+{
+  const server = new PhaseManagerServer();
+  const silencedCard = buildCreature({
+    id: 'precommitted-silenced',
+    slotIndex: 0,
+    silenceTurnsRemaining: 1,
+    summonedTurn: 1,
+    ability: {
+      effectId: 'damage_enemy',
+      valueSourceType: 'fixed',
+      valueSourceFixed: 3,
+    },
+  });
+  silencedCard.attackCommitted = true;
+  silencedCard.targetSide = 'opponent';
+  silencedCard.targetSlotIndex = 0;
+  silencedCard.selectedAbilityIndex = 0;
+
+  const playerState = {
+    hand: [],
+    board: [silencedCard],
+    deck: [],
+    discard: [],
+  };
+
+  const match = {
+    players: ['p1', 'p2'],
+    phase: 1,
+    phaseStartedAt: Date.now(),
+    phaseEndsAt: null,
+    cardsByPlayer: new Map([
+      ['p1', playerState],
+      ['p2', { hand: [], board: [], deck: [], discard: [] }],
+    ]),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+    commitCompletedPlayers: new Set(),
+    commitAnimationCompletedPlayers: new Set(),
+  };
+
+  const readyValidation = server.validatePhaseTurnPayload({
+    hand: [],
+    board: [{ id: 'precommitted-silenced', slotIndex: 0 }],
+    discard: [],
+    attacks: [{ attackerSlotIndex: 0, targetSlotIndex: 0, targetSide: 'opponent', selectedAbilityIndex: 0 }],
+  }, match, 'p1', playerState, 2);
+
+  assert.equal(readyValidation?.error, undefined, 'existing committed attacks should not block ready-up if silence was applied afterwards');
+
+  server.resolveCommitPhase(match);
+  const pendingAttacks = match.pendingCommitAttacksByPlayer.get('p1') || [];
+  assert.equal(pendingAttacks.length, 0, 'silenced precommitted attacks should be removed before commit dice are rolled');
+}
+
 console.log('phase manager silence checks passed');
