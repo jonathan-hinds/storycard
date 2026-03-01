@@ -3,7 +3,8 @@ const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
 const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
-const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus', 'life_steal'];
+const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus', 'life_steal', 'disruption'];
+const ABILITY_DISRUPTION_TARGET_STATS = ['damage', 'speed', 'defense'];
 const ABILITY_BUFFS = ['none', 'taunt', 'silence', 'poison', 'fire', 'frostbite'];
 const ABILITY_BUFF_TARGETS = ['none', 'self', 'friendly', 'enemy'];
 const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
@@ -190,6 +191,7 @@ function toAbilityRecord(document) {
     valueSourceType: document.valueSourceType || 'none',
     valueSourceStat: document.valueSourceStat || null,
     valueSourceFixed: Number.isFinite(document.valueSourceFixed) ? document.valueSourceFixed : null,
+    enemyValueSourceStat: document.enemyValueSourceStat || null,
     durationTurns: Number.isInteger(document.durationTurns) ? document.durationTurns : null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
@@ -207,6 +209,7 @@ function normalizeAbilityInput(input = {}) {
   const buffTarget = typeof input.buffTarget === 'string' ? input.buffTarget.trim().toLowerCase() : 'none';
   const valueSourceType = typeof input.valueSourceType === 'string' ? input.valueSourceType.trim().toLowerCase() : 'none';
   const valueSourceStat = typeof input.valueSourceStat === 'string' ? input.valueSourceStat.trim().toLowerCase() : null;
+  const enemyValueSourceStat = typeof input.enemyValueSourceStat === 'string' ? input.enemyValueSourceStat.trim().toLowerCase() : null;
   const fixedRaw = input.valueSourceFixed;
   const valueSourceFixed = fixedRaw === '' || fixedRaw == null ? null : Number(fixedRaw);
   const durationRaw = input.durationTurns;
@@ -234,6 +237,10 @@ function normalizeAbilityInput(input = {}) {
 
   if (!ABILITY_EFFECTS.includes(effectId)) {
     throw new Error(`effectId must be one of: ${ABILITY_EFFECTS.join(', ')}`);
+  }
+
+  if (effectId === 'disruption' && !ABILITY_DISRUPTION_TARGET_STATS.includes(enemyValueSourceStat || '')) {
+    throw new Error(`enemyValueSourceStat must be one of: ${ABILITY_DISRUPTION_TARGET_STATS.join(', ')}`);
   }
 
   if (!ABILITY_BUFFS.includes(buffId)) {
@@ -322,6 +329,7 @@ function normalizeAbilityInput(input = {}) {
     valueSourceType,
     valueSourceStat: valueSourceType === 'roll' ? valueSourceStat : null,
     valueSourceFixed: valueSourceType === 'fixed' ? valueSourceFixed : null,
+    enemyValueSourceStat: effectId === 'disruption' ? enemyValueSourceStat : null,
     durationTurns: buffId === 'taunt' || buffId === 'silence' || buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' ? durationTurns : null,
   };
 }
@@ -401,6 +409,7 @@ module.exports = {
   ABILITY_KINDS,
   ABILITY_TARGETS,
   ABILITY_EFFECTS,
+  ABILITY_DISRUPTION_TARGET_STATS,
   ABILITY_BUFFS,
   ABILITY_BUFF_TARGETS,
   ABILITY_VALUE_SOURCE_TYPES,

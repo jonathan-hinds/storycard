@@ -2216,6 +2216,8 @@ export class CardGameClient {
         buffDurationTurns: Number.isInteger(step?.buffDurationTurns) ? step.buffDurationTurns : 0,
         speedOutcome: Number.isFinite(step?.speedOutcome) ? Math.max(0, Math.floor(step.speedOutcome)) : null,
         adjustedSpeedOutcome: Number.isFinite(step?.adjustedSpeedOutcome) ? Math.max(0, Math.floor(step.adjustedSpeedOutcome)) : null,
+        disruptionAppliedToStat: typeof step?.disruptionAppliedToStat === 'string' ? step.disruptionAppliedToStat : null,
+        disruptionAdjustedValue: Number.isFinite(step?.disruptionAdjustedValue) ? Math.max(0, Math.floor(step.disruptionAdjustedValue)) : null,
         didHit: false,
         initialized: false,
       });
@@ -2250,6 +2252,9 @@ export class CardGameClient {
             && animation.adjustedSpeedOutcome !== animation.speedOutcome;
           if (hasAdjustedSpeed && animation.attackerCard?.userData?.cardId) {
             this.setCardStatDisplayOverride(animation.attackerCard.userData.cardId, 'speed', animation.adjustedSpeedOutcome);
+          }
+          if (animation.disruptionAppliedToStat && Number.isFinite(animation.disruptionAdjustedValue) && animation.defenderCard?.userData?.cardId) {
+            this.setCardStatDisplayOverride(animation.defenderCard.userData.cardId, animation.disruptionAppliedToStat, animation.disruptionAdjustedValue);
           }
         }
 

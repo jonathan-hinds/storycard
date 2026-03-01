@@ -19,6 +19,7 @@ const {
   ABILITY_KINDS,
   ABILITY_TARGETS,
   ABILITY_EFFECTS,
+  ABILITY_DISRUPTION_TARGET_STATS,
   ABILITY_BUFFS,
   ABILITY_BUFF_TARGETS,
   ABILITY_VALUE_SOURCE_TYPES,
@@ -213,6 +214,7 @@ async function handleApi(req, res, pathname) {
         abilityKinds: ABILITY_KINDS,
         abilityTargets: ABILITY_TARGETS,
         abilityEffects: ABILITY_EFFECTS,
+        abilityDisruptionTargetStats: ABILITY_DISRUPTION_TARGET_STATS,
         abilityBuffs: ABILITY_BUFFS,
         abilityBuffTargets: ABILITY_BUFF_TARGETS,
         abilityValueSourceTypes: ABILITY_VALUE_SOURCE_TYPES,
@@ -264,6 +266,7 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('buffTarget must be one of')
         || error.message.includes('valueSourceType must be one of')
         || error.message.includes('valueSourceStat must be one of')
+        || error.message.includes('enemyValueSourceStat must be one of')
         || error.message.includes('valueSourceFixed must be');
       sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create ability' });
     }
@@ -286,6 +289,7 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('buffTarget must be one of')
         || error.message.includes('valueSourceType must be one of')
         || error.message.includes('valueSourceStat must be one of')
+        || error.message.includes('enemyValueSourceStat must be one of')
         || error.message.includes('valueSourceFixed must be');
       const isNotFound = error.message === 'Ability not found';
       const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
