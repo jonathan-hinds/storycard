@@ -4,6 +4,7 @@ import { createCardLabelTexture } from '/public/card-game/render/cardLabelTextur
 import { resolveCardKind, CARD_KINDS } from '/public/card-game/render/cardStyleConfig.js';
 import {
   PREVIEW_BASE_POSITION,
+  PREVIEW_HOLD_DELAY_MS,
   beginPreviewTransition,
   beginPreviewReturnTransition,
   getPreviewPose,
@@ -13,13 +14,15 @@ import {
 const BASE_CARD_WIDTH = 1.8;
 const BASE_CARD_HEIGHT = 2.5;
 const CARD_THICKNESS = 0.08;
-const CARD_SCALE = 0.5;
+const CARD_SCALE = 0.78;
 const CARD_COLUMNS = 2;
-const COLUMN_PADDING = 1.2;
-const ROW_PADDING = 1.8;
-const DRAG_START_DISTANCE_PX = 8;
+const COLUMN_PADDING = 0.35;
+const ROW_PADDING = 0.42;
+const DRAG_START_DISTANCE_PX = 6;
 const HOLD_CANCEL_DISTANCE_PX = 10;
 const PREVIEW_HIGHLIGHT_COLOR = 0x7bb0ff;
+const MIN_VIEWPORT_HEIGHT_PX = 320;
+const TARGET_VISIBLE_ROWS = 2;
 
 function createTitleSprite(text) {
   const canvas = document.createElement('canvas');
@@ -106,6 +109,7 @@ export class DeckBuilderScene {
     this.pointerEntry = null;
     this.activePane = null;
     this.holdTimeoutId = null;
+    this.viewportHeight = MIN_VIEWPORT_HEIGHT_PX;
     this.dragging = null;
     this.draggingScroll = null;
 
@@ -319,7 +323,7 @@ export class DeckBuilderScene {
       entry.root.userData.basePosition = entry.basePosition.clone();
     });
     const rows = Math.max(1, Math.ceil(pane.entries.length / CARD_COLUMNS));
-    const viewRows = 2;
+    const viewRows = TARGET_VISIBLE_ROWS;
     pane.maxScrollY = Math.max(0, (rows - viewRows) * this.layout.ySpacing);
     pane.scrollY = THREE.MathUtils.clamp(pane.scrollY, 0, pane.maxScrollY);
     pane.scrollTargetY = THREE.MathUtils.clamp(pane.scrollTargetY, 0, pane.maxScrollY);
@@ -327,7 +331,8 @@ export class DeckBuilderScene {
 
   onResize() {
     const width = Math.max(this.canvas.clientWidth, 300);
-    const height = Math.max(this.canvas.clientHeight, 320);
+    const height = Math.max(this.canvas.clientHeight, MIN_VIEWPORT_HEIGHT_PX);
+    this.viewportHeight = height;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.position.set(0, -2.7, 11.2);
@@ -366,6 +371,15 @@ export class DeckBuilderScene {
     this.pointerEntry = this.raycastEntry(event);
     this.draggingScroll = null;
     clearTimeout(this.holdTimeoutId);
+
+    if (this.pointerEntry) {
+      this.holdTimeoutId = window.setTimeout(() => {
+        if (this.activePointerId !== event.pointerId) return;
+        if (!this.pointerEntry) return;
+        this.beginPreviewForEntry(this.pointerEntry);
+        this.pointerEntry = null;
+      }, PREVIEW_HOLD_DELAY_MS);
+    }
   }
 
   onPointerMove(event) {
@@ -375,6 +389,7 @@ export class DeckBuilderScene {
     const dist = this.getPointerDistance(event);
     if (dist > HOLD_CANCEL_DISTANCE_PX) {
       clearTimeout(this.holdTimeoutId);
+      this.pointerEntry = null;
     }
     if (!this.dragging && !this.draggingScroll && this.pointerEntry && dist > DRAG_START_DISTANCE_PX) {
       if (Math.abs(dy) > Math.abs(dx) * 1.2) {
@@ -398,7 +413,7 @@ export class DeckBuilderScene {
     if (this.draggingScroll) {
       const deltaY = event.clientY - this.lastPointerY;
       this.draggingScroll.scrollTargetY = THREE.MathUtils.clamp(
-        this.draggingScroll.scrollTargetY + (deltaY * 0.018),
+        this.draggingScroll.scrollTargetY - this.pixelsToWorldY(deltaY),
         0,
         this.draggingScroll.maxScrollY,
       );
@@ -453,6 +468,13 @@ export class DeckBuilderScene {
     if (!count) return;
     if (count === 1) this.deckCounts.delete(cardId);
     else this.deckCounts.set(cardId, count - 1);
+  }
+
+
+  pixelsToWorldY(pixelDelta) {
+    const viewportHeightPx = Math.max(this.viewportHeight, MIN_VIEWPORT_HEIGHT_PX);
+    const worldVisibleHeight = this.layout.cardHeight + ((TARGET_VISIBLE_ROWS - 1) * this.layout.ySpacing);
+    return (pixelDelta / viewportHeightPx) * worldVisibleHeight;
   }
 
   worldFromPointer(event) {
