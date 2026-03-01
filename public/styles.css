@@ -785,3 +785,47 @@ button {
     border-top: 1px solid #252b3a;
   }
 }
+
+
+.user-auth-layout,
+.user-home-layout {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.user-auth-card,
+.user-home-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 0.8rem;
+  background: #171b25;
+  border: 1px solid #2d374d;
+  border-radius: 0.8rem;
+  padding: 1rem;
+}
+
+.user-auth-card p,
+.user-home-card p {
+  margin: 0;
+  color: #c6d0e7;
+}
+
+.user-auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.user-decks-layout {
+  min-height: 100vh;
+  grid-template-rows: auto auto minmax(560px, 1fr);
+  padding: 1rem;
+}
+
+@media (max-width: 900px) {
+  .user-decks-layout {
+    grid-template-rows: auto auto minmax(320px, 1fr);
+  }
+}

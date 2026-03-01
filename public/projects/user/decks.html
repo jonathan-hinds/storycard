@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Decks</title>
+    <link rel="stylesheet" href="/public/styles.css" />
+  </head>
+  <body data-page="user-decks">
+    <main class="cards-list-wrap user-decks-layout" aria-live="polite">
+      <h1>Card Library</h1>
+      <p class="cards-library-caption">Read-only card library for deck-building workflows.</p>
+      <div id="user-card-list" class="cards-list">
+        <div class="cards-library-stage-wrap">
+          <canvas id="user-card-library-canvas" class="cards-library-canvas" aria-label="Read-only 3D card library scene"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="/public/projects/user/decks.js"></script>
+  </body>
+</html>

@@ -32,6 +32,11 @@ const {
   listBuffIcons,
   updateBuffIcons,
 } = require('./shared/buff-icons/store');
+const { UserServer } = require('./shared/user');
+const {
+  createUser,
+  loginUser,
+} = require('./shared/user/mongoStore');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -55,6 +60,10 @@ const cardGameServer = new CardGameServer({
     { id: 'card-gamma', held: false, updatedAt: null, zone: 'board', slotIndex: 3 },
     { id: 'card-delta', held: false, updatedAt: null, zone: 'board', slotIndex: 4 },
   ],
+});
+const userServer = new UserServer({
+  createUser,
+  loginUser,
 });
 
 function sendJson(res, statusCode, payload) {
@@ -193,6 +202,37 @@ async function handleApi(req, res, pathname) {
       }
     }
     sendJson(res, 200, { dieId, roll });
+    return true;
+  }
+
+
+  if (req.method === 'POST' && pathname === '/api/users/register') {
+    try {
+      const body = await readRequestJson(req);
+      const result = await userServer.register(body);
+      sendJson(res, 201, result);
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('username')
+        || error.message.includes('password');
+      sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create account' });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/users/login') {
+    try {
+      const body = await readRequestJson(req);
+      const result = await userServer.login(body);
+      sendJson(res, 200, result);
+    } catch (error) {
+      const isAuthError = error.message === 'invalid username or password';
+      const isValidationError =
+        error.message.includes('username')
+        || error.message.includes('password');
+      const statusCode = isAuthError ? 401 : isValidationError ? 400 : 500;
+      sendJson(res, statusCode, { error: error.message || 'Unable to login' });
+    }
     return true;
   }
 
