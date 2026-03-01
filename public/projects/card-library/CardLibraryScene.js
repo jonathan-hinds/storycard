@@ -63,6 +63,11 @@ const SECTION_LABEL_COLOR = '#9cb7ff';
 const SECTION_LABEL_SCALE_X = 2.4;
 const SECTION_LABEL_SCALE_Y = 0.34;
 
+const CARD_KIND_SECTION_ORDER = Object.freeze({
+  [CARD_KINDS.CREATURE]: 0,
+  [CARD_KINDS.SPELL]: 1,
+});
+
 function createSectionLabelTexture(labelText) {
   const canvas = document.createElement('canvas');
   canvas.width = SECTION_LABEL_TEXTURE_WIDTH;
@@ -85,6 +90,21 @@ function createSectionLabelTexture(labelText) {
   texture.needsUpdate = true;
   return texture;
 }
+
+function sortCardsWithinType(cards = []) {
+  return [...cards]
+    .map((card, index) => ({ card, index }))
+    .sort((left, right) => {
+      const leftKind = resolveCardKind(left.card?.cardKind);
+      const rightKind = resolveCardKind(right.card?.cardKind);
+      const leftPriority = CARD_KIND_SECTION_ORDER[leftKind] ?? Number.MAX_SAFE_INTEGER;
+      const rightPriority = CARD_KIND_SECTION_ORDER[rightKind] ?? Number.MAX_SAFE_INTEGER;
+      if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+      return left.index - right.index;
+    })
+    .map(({ card }) => card);
+}
+
 function normalizeTextColor(color, fallbackColor) {
   if (typeof color !== 'string') return fallbackColor;
   const normalized = color.trim();
@@ -540,7 +560,9 @@ export class CardLibraryScene {
       groupedCards.get(key).push(card);
     });
 
-    const sortedSections = [...groupedCards.entries()].sort(([left], [right]) => left.localeCompare(right));
+    const sortedSections = [...groupedCards.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([sectionType, sectionCards]) => [sectionType, sortCardsWithinType(sectionCards)]);
     this.cards = sortedSections.flatMap(([, sectionCards]) => sectionCards);
 
     const { cardsPerRow, cardWidth, cardHeight, gridXSpacing, gridYSpacing, gridLeftPadding, gridTopPadding } = this.getLayoutMetrics();
