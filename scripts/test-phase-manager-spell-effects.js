@@ -242,6 +242,71 @@ function createSpellMatch({
   assert.equal(defenderCard.catalogCard.health, 9, 'same-type beneficial spell resolution should be multiplied and rounded up');
 }
 
+
+{
+  const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
+    targetHealth: 8,
+    rollOutcome: 3,
+    ability: {
+      effectId: 'life_steal',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
+
+  const friendlyA = {
+    id: 'friendly-a',
+    slotIndex: 1,
+    catalogCard: { health: 4 },
+  };
+  const friendlyB = {
+    id: 'friendly-b',
+    slotIndex: 2,
+    catalogCard: { health: 7 },
+  };
+  const casterState = match.cardsByPlayer.get(playerId);
+  casterState.board.push(friendlyA, friendlyB);
+
+  const rollResult = server.submitSpellRoll({ playerId, spellId, rollOutcome: 3, rollData: null });
+  assert.equal(rollResult.statusCode, 200);
+  assert.equal(match.activeSpellResolution.resolvedDamage, 3, 'life steal spell preview should expose enemy damage amount');
+  assert.equal(match.activeSpellResolution.lifeStealHealingTargetSide, 'player', 'life steal spell preview should target a friendly board slot for healing');
+  assert.ok(Number.isInteger(match.activeSpellResolution.lifeStealHealingTargetSlotIndex), 'life steal spell preview should expose the chosen friendly slot');
+
+  const expectedTargetSlot = match.activeSpellResolution.lifeStealHealingTargetSlotIndex;
+  const expectedTarget = casterState.board.find((card) => card.slotIndex === expectedTargetSlot);
+  assert.ok(expectedTarget, 'life steal spell preview should select an existing friendly card');
+
+  const initialExpectedTargetHealth = expectedTarget.catalogCard.health;
+  const result = server.completeSpellResolution({ playerId, spellId });
+  assert.equal(result.statusCode, 200);
+  assert.equal(defenderCard.catalogCard.health, 5, 'life steal spell should still damage the selected enemy target');
+  assert.equal(expectedTarget.catalogCard.health, initialExpectedTargetHealth + 3, 'life steal spell should heal the selected friendly card');
+  assert.equal(match.activeSpellResolution.resolvedLifeStealHealing, 3, 'life steal spell completion should expose actual healing amount');
+}
+
+{
+  const { server, match, playerId, spellId } = createSpellMatch({
+    targetHealth: 8,
+    rollOutcome: 3,
+    ability: {
+      effectId: 'life_steal',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
+
+  const rollResult = server.submitSpellRoll({ playerId, spellId, rollOutcome: 3, rollData: null });
+  assert.equal(rollResult.statusCode, 200);
+  assert.equal(match.activeSpellResolution.lifeStealHealingTargetSlotIndex, null, 'life steal spells with no friendly board cards should not choose a heal target');
+  assert.equal(match.activeSpellResolution.resolvedLifeStealHealing, 0, 'life steal preview should expose zero healing when no friendly board cards are available');
+
+  const result = server.completeSpellResolution({ playerId, spellId });
+  assert.equal(result.statusCode, 200);
+  assert.equal(match.activeSpellResolution.resolvedLifeStealHealing, 0, 'life steal completion should preserve zero healing without a valid target');
+}
+
+
 console.log('phase manager spell effects checks passed');
 
 {

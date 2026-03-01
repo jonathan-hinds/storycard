@@ -639,6 +639,21 @@ class PhaseManagerServer {
     });
   }
 
+  selectRandomFriendlyLifeStealTarget({ match, casterId, spellId = '' }) {
+    if (!match || !casterId) return null;
+    const casterState = match.cardsByPlayer.get(casterId);
+    const friendlyBoardCards = (casterState?.board || []).filter((card) => card?.catalogCard);
+    if (!friendlyBoardCards.length) return null;
+
+    let seed = 0;
+    const normalizedSpellId = String(spellId || '');
+    for (let index = 0; index < normalizedSpellId.length; index += 1) {
+      seed = ((seed * 31) + normalizedSpellId.charCodeAt(index)) >>> 0;
+    }
+    const selectedIndex = seed % friendlyBoardCards.length;
+    return friendlyBoardCards[selectedIndex] || null;
+  }
+
   applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue, sourceType }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
     if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus' && effectId !== 'life_steal') {
@@ -1510,6 +1525,8 @@ class PhaseManagerServer {
       resolvedDamage: 0,
       resolvedHealing: 0,
       resolvedLifeStealHealing: 0,
+      lifeStealHealingTargetSlotIndex: null,
+      lifeStealHealingTargetSide: null,
       startedAt: Date.now(),
       completedAt: null,
     };
@@ -1575,7 +1592,22 @@ class PhaseManagerServer {
     active.resolvedValue = resolvedValue;
     active.resolvedDamage = effectId === 'damage_enemy' || effectId === 'life_steal' ? resolvedValue : 0;
     active.resolvedHealing = effectId === 'heal_target' ? resolvedValue : 0;
-    active.resolvedLifeStealHealing = effectId === 'life_steal' ? resolvedValue : 0;
+    if (effectId === 'life_steal') {
+      const lifeStealTarget = this.selectRandomFriendlyLifeStealTarget({
+        match,
+        casterId: playerId,
+        spellId: active.id,
+      });
+      active.lifeStealHealingTargetSlotIndex = Number.isInteger(lifeStealTarget?.slotIndex)
+        ? lifeStealTarget.slotIndex
+        : null;
+      active.lifeStealHealingTargetSide = Number.isInteger(lifeStealTarget?.slotIndex) ? 'player' : null;
+      active.resolvedLifeStealHealing = Number.isInteger(lifeStealTarget?.slotIndex) ? resolvedValue : 0;
+    } else {
+      active.lifeStealHealingTargetSlotIndex = null;
+      active.lifeStealHealingTargetSide = null;
+      active.resolvedLifeStealHealing = 0;
+    }
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
@@ -1629,7 +1661,30 @@ class PhaseManagerServer {
     active.resolvedValue = resolvedValue;
     active.resolvedDamage = (effectId === 'damage_enemy' || effectId === 'life_steal') && executionResult.executed !== false ? resolvedValue : 0;
     active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false ? resolvedValue : 0;
-    active.resolvedLifeStealHealing = effectId === 'life_steal' && executionResult.executed !== false ? resolvedValue : 0;
+    if (effectId === 'life_steal' && executionResult.executed !== false) {
+      const casterState = match.cardsByPlayer.get(playerId);
+      const selectedSlotIndex = Number.isInteger(active.lifeStealHealingTargetSlotIndex)
+        ? active.lifeStealHealingTargetSlotIndex
+        : null;
+      const healingTarget = selectedSlotIndex == null
+        ? null
+        : (casterState?.board || []).find((card) => card?.slotIndex === selectedSlotIndex) || null;
+      const healingTargetCurrentHealth = Number(healingTarget?.catalogCard?.health);
+      if (healingTarget?.catalogCard && Number.isFinite(healingTargetCurrentHealth) && resolvedValue > 0) {
+        healingTarget.catalogCard.health = healingTargetCurrentHealth + resolvedValue;
+        active.resolvedLifeStealHealing = resolvedValue;
+        active.lifeStealHealingTargetSlotIndex = selectedSlotIndex;
+        active.lifeStealHealingTargetSide = 'player';
+      } else {
+        active.resolvedLifeStealHealing = 0;
+        active.lifeStealHealingTargetSlotIndex = null;
+        active.lifeStealHealingTargetSide = null;
+      }
+    } else {
+      active.resolvedLifeStealHealing = 0;
+      active.lifeStealHealingTargetSlotIndex = null;
+      active.lifeStealHealingTargetSide = null;
+    }
 
     this.applyResolvedAbilityBuff({
       match,
