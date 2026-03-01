@@ -101,7 +101,9 @@ export class DeckBuilderScene {
     this.deckCounts = new Map();
     this.activePointerId = null;
     this.pointerDown = { x: 0, y: 0 };
+    this.lastPointerY = 0;
     this.pointerEntry = null;
+    this.activePane = null;
     this.holdTimeoutId = null;
     this.dragging = null;
     this.draggingScroll = null;
@@ -306,8 +308,10 @@ export class DeckBuilderScene {
     this.activePointerId = event.pointerId;
     this.interactionTarget.setPointerCapture(event.pointerId);
     this.pointerDown = { x: event.clientX, y: event.clientY };
+    this.lastPointerY = event.clientY;
+    this.activePane = this.paneFromPointer(event);
     this.pointerEntry = this.raycastEntry(event);
-    this.draggingScroll = !this.pointerEntry ? this.paneFromPointer(event) : null;
+    this.draggingScroll = null;
     clearTimeout(this.holdTimeoutId);
     if (this.pointerEntry) {
       this.holdTimeoutId = setTimeout(() => {
@@ -316,8 +320,12 @@ export class DeckBuilderScene {
         this.previewStartedAt = performance.now();
         this.previewOriginPose.position.copy(this.previewCard.position);
         this.previewOriginPose.rotation.copy(this.previewCard.rotation);
-        this.previewPose.position.set(this.camera.position.x + PREVIEW_BASE_POSITION.x, this.camera.position.y - 0.6, PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset);
-        this.previewPose.rotation.set(this.previewTuning.rotationX + 1.1, 0, 0);
+        this.previewPose.position.set(
+          this.camera.position.x + PREVIEW_BASE_POSITION.x,
+          this.camera.position.y + PREVIEW_BASE_POSITION.y,
+          PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+        );
+        this.previewPose.rotation.set(this.previewTuning.rotationX, 0, 0);
         beginPreviewTransition(this, this.previewStartedAt);
       }, PREVIEW_HOLD_DELAY_MS);
     }
@@ -325,23 +333,40 @@ export class DeckBuilderScene {
 
   onPointerMove(event) {
     if (this.activePointerId !== event.pointerId) return;
+    const dx = event.clientX - this.pointerDown.x;
+    const dy = event.clientY - this.pointerDown.y;
     const dist = Math.hypot(event.clientX - this.pointerDown.x, event.clientY - this.pointerDown.y);
     if (dist > HOLD_CANCEL_DISTANCE_PX) {
       clearTimeout(this.holdTimeoutId);
     }
-    if (!this.dragging && this.pointerEntry && dist > DRAG_START_DISTANCE_PX) {
-      this.dragging = this.pointerEntry;
-      this.pointerEntry = null;
+    if (!this.dragging && !this.draggingScroll && this.pointerEntry && dist > DRAG_START_DISTANCE_PX) {
+      if (Math.abs(dy) > Math.abs(dx) * 1.2) {
+        this.draggingScroll = this.activePane;
+        this.pointerEntry = null;
+      } else {
+        this.dragging = this.pointerEntry;
+        this.pointerEntry = null;
+      }
+    }
+    if (!this.dragging && !this.draggingScroll && !this.pointerEntry && dist > DRAG_START_DISTANCE_PX) {
+      this.draggingScroll = this.activePane;
     }
     if (this.dragging) {
       const pos = this.worldFromPointer(event);
       this.dragging.root.position.set(pos.x, pos.y, 0.65);
       this.dragging.root.rotation.set(0.16, 0, 0);
+      this.lastPointerY = event.clientY;
       return;
     }
     if (this.draggingScroll) {
-      this.draggingScroll.scrollTargetY = THREE.MathUtils.clamp(this.draggingScroll.scrollTargetY + ((event.movementY || 0) * 0.018), 0, this.draggingScroll.maxScrollY);
+      const deltaY = event.clientY - this.lastPointerY;
+      this.draggingScroll.scrollTargetY = THREE.MathUtils.clamp(
+        this.draggingScroll.scrollTargetY + (deltaY * 0.018),
+        0,
+        this.draggingScroll.maxScrollY,
+      );
     }
+    this.lastPointerY = event.clientY;
   }
 
   onPointerUp(event) {
@@ -363,6 +388,7 @@ export class DeckBuilderScene {
       this.emitDeckChange();
     }
     this.pointerEntry = null;
+    this.activePane = null;
     this.dragging = null;
     this.draggingScroll = null;
     if (this.interactionTarget.hasPointerCapture(event.pointerId)) {
@@ -410,7 +436,11 @@ export class DeckBuilderScene {
     });
 
     if (this.previewCard) {
-      this.previewPose.position.set(this.camera.position.x + PREVIEW_BASE_POSITION.x, this.camera.position.y - 0.6, PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset);
+      this.previewPose.position.set(
+        this.camera.position.x + PREVIEW_BASE_POSITION.x,
+        this.camera.position.y + PREVIEW_BASE_POSITION.y,
+        PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+      );
       const pose = getPreviewPose({
         mode: this.previewTransition.direction === 'fromPreview' ? 'preview-return' : 'preview',
         now: performance.now(),
