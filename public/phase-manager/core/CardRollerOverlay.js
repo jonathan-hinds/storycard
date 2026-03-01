@@ -152,10 +152,24 @@ export class CardRollerOverlay {
     return rollSequence;
   }
 
-  applyOutcomeToCard(cardId, rollType, outcome) {
+  getDisplayedOutcome(card, rollType, outcome) {
+    if (!Number.isFinite(outcome)) return outcome;
+    if (rollType !== 'speed') return outcome;
+
+    const frostbiteStacks = Number.isInteger(card?.userData?.frostbiteStacks)
+      ? Math.max(0, card.userData.frostbiteStacks)
+      : 0;
+    return Math.max(0, outcome - frostbiteStacks);
+  }
+
+  applyOutcomeToCard(card, rollType, outcome) {
     const statKey = ROLL_TYPE_TO_STAT_KEY[rollType] || rollType;
-    if (typeof outcome === 'number') {
-      this.cardGameClient?.setCardStatDisplayOverride(cardId, statKey, outcome);
+    const cardId = card?.userData?.cardId;
+    if (!cardId) return;
+
+    const displayedOutcome = this.getDisplayedOutcome(card, rollType, outcome);
+    if (typeof displayedOutcome === 'number') {
+      this.cardGameClient?.setCardStatDisplayOverride(cardId, statKey, displayedOutcome);
     }
   }
 
@@ -189,7 +203,7 @@ export class CardRollerOverlay {
       }
 
       await this.pause(this.postSettleDelayMs);
-      this.applyOutcomeToCard(card.userData.cardId, rollType, normalizedOutcome);
+      this.applyOutcomeToCard(card, rollType, normalizedOutcome);
       await this.pause(this.postUpdateDelayMs);
       outcomes.push({
         cardId: card.userData.cardId,
@@ -220,7 +234,7 @@ export class CardRollerOverlay {
       await settled.promise;
       const authoritativeOutcome = Number.isFinite(remoteRoll?.roll?.outcome) ? remoteRoll.roll.outcome : null;
       await this.pause(this.postSettleDelayMs);
-      this.applyOutcomeToCard(card.userData.cardId, rollType, authoritativeOutcome);
+      this.applyOutcomeToCard(card, rollType, authoritativeOutcome);
       await this.pause(this.postUpdateDelayMs);
       outcomes.push({
         cardId: card.userData.cardId,
