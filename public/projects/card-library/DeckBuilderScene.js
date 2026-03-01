@@ -509,7 +509,7 @@ export class DeckBuilderScene {
       );
       const pose = getPreviewPose({
         mode: this.previewTransition.direction === 'fromPreview' ? 'preview-return' : 'preview',
-        now: performance.now(),
+        time: performance.now(),
         previewStartedAt: this.previewStartedAt,
         previewOriginPose: this.previewOriginPose,
         activePose: this.previewPose,
@@ -517,11 +517,13 @@ export class DeckBuilderScene {
       });
       this.previewCard.position.copy(pose.position);
       this.previewCard.rotation.copy(pose.rotation);
-      if (pose.isComplete && this.previewTransition.direction === 'fromPreview') {
+      if (pose.transitionCompleted) {
         this.previewTransition.isActive = false;
-        if (this.previewEntry) this.setEntryHighlighted(this.previewEntry, false);
-        this.previewEntry = null;
-        this.previewCard = null;
+        if (this.previewTransition.direction === 'fromPreview') {
+          if (this.previewEntry) this.setEntryHighlighted(this.previewEntry, false);
+          this.previewEntry = null;
+          this.previewCard = null;
+        }
       }
     }
 
