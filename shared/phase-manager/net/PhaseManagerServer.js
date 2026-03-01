@@ -79,6 +79,36 @@ const DOT_HANDLERS = {
       return fireStacks;
     },
   },
+  frostbite: {
+    apply(card, durationTurns) {
+      const currentTurns = Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0;
+      const currentStacks = Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0;
+      if (currentTurns > 0) {
+        card.frostbiteStacks = Math.max(1, currentStacks + 1);
+        return;
+      }
+
+      card.frostbiteTurnsRemaining = durationTurns;
+      card.frostbiteStacks = 1;
+    },
+    tick(card) {
+      const turnsRemaining = Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0;
+      if (turnsRemaining < 1) {
+        card.frostbiteTurnsRemaining = 0;
+        card.frostbiteStacks = 0;
+        return 0;
+      }
+
+      const frostbiteStacks = Number.isInteger(card.frostbiteStacks) ? Math.max(1, card.frostbiteStacks) : 1;
+      card.frostbiteTurnsRemaining = Math.max(0, turnsRemaining - 1);
+      if (card.frostbiteTurnsRemaining < 1) {
+        card.frostbiteStacks = 0;
+      } else {
+        card.frostbiteStacks = frostbiteStacks;
+      }
+      return 0;
+    },
+  },
 };
 
 class PhaseManagerServer {
@@ -224,6 +254,8 @@ class PhaseManagerServer {
         poisonStacks: 0,
         fireTurnsRemaining: 0,
         fireStacks: 0,
+        frostbiteTurnsRemaining: 0,
+        frostbiteStacks: 0,
       }));
     }
 
@@ -245,6 +277,8 @@ class PhaseManagerServer {
         poisonStacks: 0,
         fireTurnsRemaining: 0,
         fireStacks: 0,
+        frostbiteTurnsRemaining: 0,
+        frostbiteStacks: 0,
       };
     });
   }
@@ -264,12 +298,16 @@ class PhaseManagerServer {
     }));
 
     const commitAttacks = [];
-    for (const { attackerId, attack } of this.getOrderedCommitAttacks(match)) {
+    for (const orderedAttack of this.getOrderedCommitAttacks(match)) {
+      const { attackerId, attack } = orderedAttack;
       const attackerSide = attackerId === playerId ? 'player' : 'opponent';
       const resolvedAttack = {
           ...this.resolveCommitAttackStep(match, attackerId, attack),
           attackerId,
           attackerSide,
+          speedOutcome: Number.isFinite(orderedAttack.speedOutcome) ? orderedAttack.speedOutcome : 0,
+          adjustedSpeedOutcome: Number.isFinite(orderedAttack.adjustedSpeedOutcome) ? orderedAttack.adjustedSpeedOutcome : 0,
+          frostbiteStacks: Number.isFinite(orderedAttack.frostbiteStacks) ? orderedAttack.frostbiteStacks : 0,
         };
 
       const executionState = match.commitExecutionByAttackId?.get(attack.id);
@@ -446,6 +484,8 @@ class PhaseManagerServer {
         poisonStacks: Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0,
         fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
+        frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
+        frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
       }));
     });
     this.applyDecisionPhaseStartDraw(match);
@@ -517,7 +557,7 @@ class PhaseManagerServer {
 
   applyResolvedAbilityBuff({ match, casterId, attack, buffId, buffTarget, durationTurns }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire') {
+    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire' && buffId !== 'frostbite') {
       return { executed: true, reason: 'no_buff' };
     }
     const normalizedDuration = Number.isInteger(durationTurns) ? Math.max(0, durationTurns) : 0;
@@ -546,7 +586,7 @@ class PhaseManagerServer {
       return { executed: true, reason: 'silence_applied' };
     }
 
-    if (buffId === 'poison' || buffId === 'fire') {
+    if (buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite') {
       const dotHandler = DOT_HANDLERS[buffId];
       dotHandler?.apply(targetCard, normalizedDuration);
       return { executed: true, reason: `${buffId}_applied` };
@@ -900,17 +940,33 @@ class PhaseManagerServer {
     const ordered = [];
     let originalOrder = 0;
 
+    const getFrostbiteStacks = (attackerId, slotIndex) => {
+      if (!attackerId || !Number.isInteger(slotIndex)) return 0;
+      const attackerState = match?.cardsByPlayer?.get(attackerId);
+      const attackerCard = attackerState?.board?.find((card) => card?.slotIndex === slotIndex) || null;
+      if (!attackerCard) return 0;
+      const turnsRemaining = Number.isInteger(attackerCard.frostbiteTurnsRemaining) ? attackerCard.frostbiteTurnsRemaining : 0;
+      if (turnsRemaining < 1) return 0;
+      return Number.isInteger(attackerCard.frostbiteStacks) ? Math.max(1, attackerCard.frostbiteStacks) : 1;
+    };
+
     for (const attackerId of match?.players || []) {
       const attacks = pendingCommitAttacksByPlayer?.get(attackerId) || [];
       for (const attack of attacks) {
         const speedRollEntry = commitRollsByAttackId?.get(`${attack.id}:speed`);
         const speedOutcome = Number(speedRollEntry?.roll?.outcome);
         const speedResolvedAt = Number(speedRollEntry?.submittedAt);
+        const normalizedSpeedOutcome = Number.isFinite(speedOutcome) ? Math.max(0, Math.floor(speedOutcome)) : 0;
+        const frostbiteStacks = getFrostbiteStacks(attackerId, attack?.attackerSlotIndex);
+        const adjustedSpeedOutcome = Math.max(0, normalizedSpeedOutcome - frostbiteStacks);
 
         ordered.push({
           attackerId,
           attack,
-          speedOutcome: Number.isFinite(speedOutcome) ? Math.max(0, Math.floor(speedOutcome)) : 0,
+          speedOutcome: normalizedSpeedOutcome,
+          adjustedSpeedOutcome,
+          frostbiteStacks,
+          hasFrostbiteSpeedPenalty: frostbiteStacks > 0,
           speedResolvedAt: Number.isFinite(speedResolvedAt) ? speedResolvedAt : Number.POSITIVE_INFINITY,
           originalOrder,
         });
@@ -919,7 +975,10 @@ class PhaseManagerServer {
     }
 
     ordered.sort((a, b) => {
-      if (b.speedOutcome !== a.speedOutcome) return b.speedOutcome - a.speedOutcome;
+      if (b.adjustedSpeedOutcome !== a.adjustedSpeedOutcome) return b.adjustedSpeedOutcome - a.adjustedSpeedOutcome;
+      if (a.hasFrostbiteSpeedPenalty !== b.hasFrostbiteSpeedPenalty) {
+        return a.hasFrostbiteSpeedPenalty ? 1 : -1;
+      }
       if (a.speedResolvedAt !== b.speedResolvedAt) return a.speedResolvedAt - b.speedResolvedAt;
       return a.originalOrder - b.originalOrder;
     });
@@ -1134,6 +1193,8 @@ class PhaseManagerServer {
         poisonStacks: Number.isInteger(knownCard?.poisonStacks) ? knownCard.poisonStacks : 0,
         fireTurnsRemaining: Number.isInteger(knownCard?.fireTurnsRemaining) ? knownCard.fireTurnsRemaining : 0,
         fireStacks: Number.isInteger(knownCard?.fireStacks) ? knownCard.fireStacks : 0,
+        frostbiteTurnsRemaining: Number.isInteger(knownCard?.frostbiteTurnsRemaining) ? knownCard.frostbiteTurnsRemaining : 0,
+        frostbiteStacks: Number.isInteger(knownCard?.frostbiteStacks) ? knownCard.frostbiteStacks : 0,
       });
     }
 

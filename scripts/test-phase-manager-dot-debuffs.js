@@ -14,6 +14,8 @@ function createMatch() {
     poisonStacks: 0,
     fireTurnsRemaining: 0,
     fireStacks: 0,
+    frostbiteTurnsRemaining: 0,
+    frostbiteStacks: 0,
     tauntTurnsRemaining: 0,
     silenceTurnsRemaining: 0,
   };
@@ -97,6 +99,30 @@ function createMatch() {
   assert.equal(targetCard().fireTurnsRemaining, 2, 'reapplying fire should not change duration while active');
   assert.equal(targetCard().fireStacks, 2, 'reapplying fire should increase fire damage while active');
 
+  const frostbiteResult = server.applyResolvedAbilityBuff({
+    match,
+    casterId: p1,
+    attack: { targetSide: 'opponent', targetSlotIndex: 0 },
+    buffId: 'frostbite',
+    buffTarget: 'enemy',
+    durationTurns: 2,
+  });
+  assert.equal(frostbiteResult.executed, true);
+  assert.equal(targetCard().frostbiteTurnsRemaining, 2, 'initial frostbite should use configured duration');
+  assert.equal(targetCard().frostbiteStacks, 1, 'initial frostbite should start at one stack');
+
+  const frostbiteRefreshResult = server.applyResolvedAbilityBuff({
+    match,
+    casterId: p1,
+    attack: { targetSide: 'opponent', targetSlotIndex: 0 },
+    buffId: 'frostbite',
+    buffTarget: 'enemy',
+    durationTurns: 4,
+  });
+  assert.equal(frostbiteRefreshResult.executed, true);
+  assert.equal(targetCard().frostbiteTurnsRemaining, 2, 'reapplying frostbite should not change duration while active');
+  assert.equal(targetCard().frostbiteStacks, 2, 'reapplying frostbite should increase speed penalty stacks while active');
+
   server.advanceMatchToDecisionPhase(match);
 
   assert.equal(targetCard().catalogCard.health, 9, 'poison + amplified fire should deal 3 total damage');
@@ -104,6 +130,8 @@ function createMatch() {
   assert.equal(targetCard().poisonStacks, 2, 'poison stack counter should persist while poison is active');
   assert.equal(targetCard().fireTurnsRemaining, 1, 'fire duration should tick down each phase change');
   assert.equal(targetCard().fireStacks, 2, 'fire damage amplification should persist while the effect is active');
+  assert.equal(targetCard().frostbiteTurnsRemaining, 1, 'frostbite duration should tick down each phase change');
+  assert.equal(targetCard().frostbiteStacks, 2, 'frostbite stacks should persist while active');
   assert.equal(match.lastDotDamageEvents.length, 1, 'dot tick should be surfaced as a match event');
   assert.equal(match.lastDotDamageEvents[0].damage, 3);
   assert.deepEqual(match.lastDotDamageEvents[0].appliedDebuffs.sort(), ['fire', 'poison']);
@@ -113,6 +141,8 @@ function createMatch() {
   assert.equal(targetCard().poisonTurnsRemaining, 1, 'poison should still be active after second tick');
   assert.equal(targetCard().fireTurnsRemaining, 0, 'fire should expire when its duration runs out');
   assert.equal(targetCard().fireStacks, 0, 'fire amplification should reset once the effect expires');
+  assert.equal(targetCard().frostbiteTurnsRemaining, 0, 'frostbite should expire when its duration runs out');
+  assert.equal(targetCard().frostbiteStacks, 0, 'frostbite stacks should reset once the effect expires');
   assert.equal(targetCard().poisonStacks, 2, 'poison stack counter should persist until poison expires');
 
   server.advanceMatchToDecisionPhase(match);

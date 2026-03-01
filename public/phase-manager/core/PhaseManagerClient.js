@@ -867,6 +867,8 @@ export class PhaseManagerClient {
         poisonStacks: Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0,
         fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
+        frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
+        frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -897,6 +899,8 @@ export class PhaseManagerClient {
         poisonStacks: Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0,
         fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
+        frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
+        frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -1005,6 +1009,8 @@ export class PhaseManagerClient {
           poisonStacks: Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0,
           fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
           fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
+          frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
+          frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
         });
       });
     });
@@ -1018,6 +1024,8 @@ export class PhaseManagerClient {
       sceneCard.userData.poisonStacks = state?.poisonStacks ?? 0;
       sceneCard.userData.fireTurnsRemaining = state?.fireTurnsRemaining ?? 0;
       sceneCard.userData.fireStacks = state?.fireStacks ?? 0;
+      sceneCard.userData.frostbiteTurnsRemaining = state?.frostbiteTurnsRemaining ?? 0;
+      sceneCard.userData.frostbiteStacks = state?.frostbiteStacks ?? 0;
       sceneCard.userData.activeBuffIds = [];
       this.client.updateCardBuffBadges(sceneCard);
     });
