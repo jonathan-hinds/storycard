@@ -4,7 +4,6 @@ import { createCardLabelTexture } from '/public/card-game/render/cardLabelTextur
 import { resolveCardKind, CARD_KINDS } from '/public/card-game/render/cardStyleConfig.js';
 import {
   PREVIEW_BASE_POSITION,
-  PREVIEW_HOLD_DELAY_MS,
   beginPreviewTransition,
   beginPreviewReturnTransition,
   getPreviewPose,
@@ -19,7 +18,6 @@ const CARD_COLUMNS = 2;
 const COLUMN_PADDING = 0.35;
 const ROW_PADDING = 0.42;
 const DRAG_START_DISTANCE_PX = 6;
-const HOLD_CANCEL_DISTANCE_PX = 10;
 const PREVIEW_HIGHLIGHT_COLOR = 0x7bb0ff;
 const MIN_VIEWPORT_HEIGHT_PX = 320;
 const TARGET_VISIBLE_ROWS = 2;
@@ -108,7 +106,6 @@ export class DeckBuilderScene {
     this.lastPointerY = 0;
     this.pointerEntry = null;
     this.activePane = null;
-    this.holdTimeoutId = null;
     this.viewportHeight = MIN_VIEWPORT_HEIGHT_PX;
     this.dragging = null;
     this.draggingScroll = null;
@@ -370,16 +367,6 @@ export class DeckBuilderScene {
     this.activePane = this.paneFromPointer(event);
     this.pointerEntry = this.raycastEntry(event);
     this.draggingScroll = null;
-    clearTimeout(this.holdTimeoutId);
-
-    if (this.pointerEntry) {
-      this.holdTimeoutId = window.setTimeout(() => {
-        if (this.activePointerId !== event.pointerId) return;
-        if (!this.pointerEntry) return;
-        this.beginPreviewForEntry(this.pointerEntry);
-        this.pointerEntry = null;
-      }, PREVIEW_HOLD_DELAY_MS);
-    }
   }
 
   onPointerMove(event) {
@@ -387,10 +374,6 @@ export class DeckBuilderScene {
     const dx = event.clientX - this.pointerDown.x;
     const dy = event.clientY - this.pointerDown.y;
     const dist = this.getPointerDistance(event);
-    if (dist > HOLD_CANCEL_DISTANCE_PX) {
-      clearTimeout(this.holdTimeoutId);
-      this.pointerEntry = null;
-    }
     if (!this.dragging && !this.draggingScroll && this.pointerEntry && dist > DRAG_START_DISTANCE_PX) {
       if (Math.abs(dy) > Math.abs(dx) * 1.2) {
         this.draggingScroll = this.activePane;
@@ -423,7 +406,6 @@ export class DeckBuilderScene {
 
   onPointerUp(event) {
     if (this.activePointerId !== event.pointerId) return;
-    clearTimeout(this.holdTimeoutId);
     const pointerDistance = this.getPointerDistance(event);
     if (this.dragging) {
       const targetPane = this.paneFromPointer(event);
@@ -437,7 +419,7 @@ export class DeckBuilderScene {
       this.emitDeckChange();
     } else if (pointerDistance <= DRAG_START_DISTANCE_PX) {
       if (this.pointerEntry) {
-        if (this.previewEntry === this.pointerEntry && this.previewTransition.direction !== 'toPreview') {
+        if (this.previewEntry === this.pointerEntry) {
           this.closePreview();
         } else {
           this.beginPreviewForEntry(this.pointerEntry);
