@@ -41,6 +41,7 @@ const CARD_LIBRARY_PREVIEW_DEFAULTS = {
 const cardList = document.getElementById('user-card-list');
 const cardLibraryCanvas = document.getElementById('user-card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
+let cardLibraryScene;
 
 function ensureSession() {
   try {
@@ -54,15 +55,6 @@ function ensureSession() {
 }
 
 ensureSession();
-
-const cardLibraryScene = new CardLibraryScene({
-  canvas: cardLibraryCanvas,
-  scrollContainer: cardList,
-  previewRotationOffset: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
-  previewPositionOffset: getResponsivePreviewPosition(),
-  layoutTuning: GRID_LAYOUT_DEFAULTS,
-  onCardSelect: () => {},
-});
 
 function getDynamicPreviewZMax(baseMax) {
   const cameraDistance = cardLibraryScene?.camera?.position?.z;
@@ -100,6 +92,15 @@ function getResponsivePreviewPosition() {
     z: getPreviewOffsetZFromCloseness(closeness, bounds),
   };
 }
+
+cardLibraryScene = new CardLibraryScene({
+  canvas: cardLibraryCanvas,
+  scrollContainer: cardList,
+  previewRotationOffset: { x: CARD_LIBRARY_PREVIEW_DEFAULTS.rotation.x },
+  previewPositionOffset: getResponsivePreviewPosition(),
+  layoutTuning: GRID_LAYOUT_DEFAULTS,
+  onCardSelect: () => {},
+});
 
 function applyResponsivePreviewPosition() {
   cardLibraryScene.setPreviewDebugOffsets({
