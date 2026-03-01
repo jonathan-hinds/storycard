@@ -258,11 +258,14 @@ export class CardGameClient {
       const stackMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
+        depthTest: false,
         depthWrite: false,
+        toneMapped: false,
       });
       const stackGeometry = new THREE.PlaneGeometry(0.28, 0.2);
       const stackLabelMesh = new THREE.Mesh(stackGeometry, stackMaterial);
-      stackLabelMesh.position.set(0, -0.19, 0.03);
+      stackLabelMesh.position.set(0, -0.13, 0.08);
+      stackLabelMesh.renderOrder = 10;
       stackLabelMesh.visible = false;
       badgeMesh.add(stackLabelMesh);
       badgeMesh.userData.stackLabelMesh = stackLabelMesh;
