@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Account Module</title>
+    <link rel="stylesheet" href="/public/styles.css" />
+  </head>
+  <body data-page="user-auth">
+    <main class="user-auth-layout">
+      <section class="user-auth-card" aria-labelledby="user-auth-title">
+        <h1 id="user-auth-title">Player Account</h1>
+        <p>Create an account or login to access your deck workflow.</p>
+
+        <form id="user-auth-form" class="card" novalidate>
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" maxlength="24" minlength="3" autocomplete="username" required />
+
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" minlength="8" maxlength="128" autocomplete="current-password" required />
+
+          <div class="user-auth-actions">
+            <button id="register-button" type="button">Create Account</button>
+            <button id="login-button" type="button" class="secondary-action">Login</button>
+          </div>
+          <p id="user-auth-status" class="cards-status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <script type="module" src="/public/projects/user/auth.js"></script>
+  </body>
+</html>
