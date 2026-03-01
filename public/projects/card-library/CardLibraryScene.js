@@ -4,7 +4,6 @@ import { createCardLabelTexture, DEFAULT_CARD_LABEL_LAYOUT } from '/public/card-
 import { CARD_KINDS, DEFAULT_CARD_LABEL_LAYOUTS, resolveCardKind } from '/public/card-game/render/cardStyleConfig.js';
 import { createBadgeSlotsGroup, normalizeBadgeSlotsLayout } from '/public/card-game/render/badgeSlotsLayout.js';
 import {
-  PREVIEW_HOLD_DELAY_MS,
   PREVIEW_BASE_POSITION,
   beginPreviewTransition,
   beginPreviewReturnTransition,
@@ -31,7 +30,6 @@ const COMPACT_BREAKPOINT_PX = 900;
 const DESKTOP_MIN_CANVAS_HEIGHT_PX = 460;
 const MOBILE_MIN_CANVAS_HEIGHT_PX = 320;
 const VIEWPORT_RESERVED_HEIGHT_PX = 140;
-const HOLD_CANCEL_DISTANCE_PX = 10;
 const DRAG_START_DISTANCE_PX = 6;
 const DEFAULT_PREVIEW_ROTATION_OFFSET = Object.freeze({
   x: 0,
@@ -312,7 +310,6 @@ export class CardLibraryScene {
     this.pressPointer = { x: 0, y: 0 };
     this.lastPointerY = 0;
     this.pointerCard = null;
-    this.holdTimeoutId = null;
     this.previewCard = null;
     this.previewTuning = loadPreviewTuning();
     this.previewPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
@@ -685,11 +682,6 @@ export class CardLibraryScene {
     return Math.hypot(dx, dy);
   }
 
-  clearHoldTimer() {
-    if (!this.holdTimeoutId) return;
-    window.clearTimeout(this.holdTimeoutId);
-    this.holdTimeoutId = null;
-  }
 
   releasePointerCapture() {
     if (this.activePointerId == null) return;
@@ -709,24 +701,28 @@ export class CardLibraryScene {
 
     this.scrollContainer.setPointerCapture(event.pointerId);
 
-    const target = this.pickCard(event);
-    this.pointerCard = target;
-    if (!target) return;
+    this.pointerCard = this.pickCard(event);
+  }
 
-    this.holdTimeoutId = window.setTimeout(() => {
-      if (this.activePointerId !== event.pointerId || this.pointerCard !== target) return;
-      this.previewCard = target;
-      this.previewStartedAt = performance.now();
-      this.previewOriginPose.position.copy(target.position);
-      this.previewOriginPose.rotation.copy(target.rotation);
-      this.previewPose.position.copy(this.getPreviewAnchorPosition());
-      this.previewPose.rotation.set(
-        this.previewTuning.rotationX + this.previewRotationOffset.x,
-        this.previewRotationOffset.y,
-        this.previewRotationOffset.z,
-      );
-      beginPreviewTransition(this, this.previewStartedAt);
-    }, PREVIEW_HOLD_DELAY_MS);
+  beginPreviewForCard(cardRoot) {
+    if (!cardRoot) return;
+    this.previewCard = cardRoot;
+    this.previewStartedAt = performance.now();
+    this.previewOriginPose.position.copy(cardRoot.position);
+    this.previewOriginPose.rotation.copy(cardRoot.rotation);
+    this.previewPose.position.copy(this.getPreviewAnchorPosition());
+    this.previewPose.rotation.set(
+      this.previewTuning.rotationX + this.previewRotationOffset.x,
+      this.previewRotationOffset.y,
+      this.previewRotationOffset.z,
+    );
+    beginPreviewTransition(this, this.previewStartedAt);
+  }
+
+  closePreview() {
+    if (!this.previewCard) return;
+    this.previewStartedAt = performance.now();
+    beginPreviewReturnTransition(this, this.previewStartedAt);
   }
 
   getPreviewAnchorPosition() {
@@ -754,7 +750,6 @@ export class CardLibraryScene {
     if (!this.previewCard && !this.isDraggingScroll && pointerDistance > DRAG_START_DISTANCE_PX) {
       this.isDraggingScroll = true;
       this.pointerCard = null;
-      this.clearHoldTimer();
     }
 
     if (this.isDraggingScroll && !this.previewCard) {
@@ -765,10 +760,6 @@ export class CardLibraryScene {
 
     this.lastPointerY = event.clientY;
 
-    if (!this.previewCard && this.pointerCard && pointerDistance > HOLD_CANCEL_DISTANCE_PX) {
-      this.clearHoldTimer();
-      this.pointerCard = null;
-    }
 
     if (this.previewCard) event.preventDefault();
   }
@@ -776,15 +767,16 @@ export class CardLibraryScene {
   onPointerUp(event) {
     if (this.activePointerId !== event.pointerId) return;
 
-    this.clearHoldTimer();
+    const pointerDistance = this.getPointerDistance(event);
 
-    if (this.previewCard) {
-      this.previewStartedAt = performance.now();
-      beginPreviewReturnTransition(this, this.previewStartedAt);
-    }
-
-    if (!this.previewCard && this.pointerCard && this.getPointerDistance(event) <= DRAG_START_DISTANCE_PX) {
-      this.onCardSelect?.(this.pointerCard.userData.catalogCard);
+    if (pointerDistance <= DRAG_START_DISTANCE_PX) {
+      if (this.pointerCard) {
+        if (this.previewCard === this.pointerCard) this.closePreview();
+        else this.beginPreviewForCard(this.pointerCard);
+        this.onCardSelect?.(this.pointerCard.userData.catalogCard);
+      } else if (this.previewCard) {
+        this.closePreview();
+      }
     }
 
     this.releasePointerCapture();
