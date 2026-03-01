@@ -4,7 +4,7 @@ const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
 const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus', 'life_steal'];
-const ABILITY_BUFFS = ['none', 'taunt', 'silence', 'poison', 'fire'];
+const ABILITY_BUFFS = ['none', 'taunt', 'silence', 'poison', 'fire', 'frostbite'];
 const ABILITY_BUFF_TARGETS = ['none', 'self', 'friendly', 'enemy'];
 const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
 const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense', 'efct'];
@@ -286,7 +286,7 @@ function normalizeAbilityInput(input = {}) {
     }
   }
 
-  if (buffId === 'poison' || buffId === 'fire') {
+  if (buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite') {
     if (!Number.isInteger(durationTurns)) {
       throw new Error(`durationTurns must be a whole number when buffId is ${buffId}`);
     }
@@ -300,7 +300,7 @@ function normalizeAbilityInput(input = {}) {
 
   if (buffId !== 'none') {
     if (target === 'enemy') {
-      if ((buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire') || buffTarget !== 'enemy') {
+      if ((buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire' && buffId !== 'frostbite') || buffTarget !== 'enemy') {
         throw new Error('enemy-targeting abilities may only use enemy-targeting debuffs');
       }
     } else if (target === 'self' || target === 'friendly') {
@@ -322,7 +322,7 @@ function normalizeAbilityInput(input = {}) {
     valueSourceType,
     valueSourceStat: valueSourceType === 'roll' ? valueSourceStat : null,
     valueSourceFixed: valueSourceType === 'fixed' ? valueSourceFixed : null,
-    durationTurns: buffId === 'taunt' || buffId === 'silence' || buffId === 'poison' || buffId === 'fire' ? durationTurns : null,
+    durationTurns: buffId === 'taunt' || buffId === 'silence' || buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' ? durationTurns : null,
   };
 }
 
