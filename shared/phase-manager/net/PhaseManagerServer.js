@@ -23,20 +23,29 @@ const DOT_HANDLERS = {
   poison: {
     apply(card, durationTurns) {
       const currentTurns = Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0;
+      const currentStacks = Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0;
       if (currentTurns > 0) {
         card.poisonTurnsRemaining = currentTurns + 1;
+        card.poisonStacks = Math.max(1, currentStacks + 1);
         return;
       }
       card.poisonTurnsRemaining = durationTurns;
+      card.poisonStacks = 1;
     },
     tick(card) {
       const turnsRemaining = Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0;
       if (turnsRemaining < 1) {
         card.poisonTurnsRemaining = 0;
+        card.poisonStacks = 0;
         return 0;
       }
 
       card.poisonTurnsRemaining = Math.max(0, turnsRemaining - 1);
+      if (card.poisonTurnsRemaining < 1) {
+        card.poisonStacks = 0;
+      } else {
+        card.poisonStacks = Number.isInteger(card.poisonStacks) ? Math.max(1, card.poisonStacks) : 1;
+      }
       return 1;
     },
   },
@@ -212,6 +221,7 @@ class PhaseManagerServer {
         tauntTurnsRemaining: 0,
         silenceTurnsRemaining: 0,
         poisonTurnsRemaining: 0,
+        poisonStacks: 0,
         fireTurnsRemaining: 0,
         fireStacks: 0,
       }));
@@ -232,6 +242,7 @@ class PhaseManagerServer {
         tauntTurnsRemaining: 0,
         silenceTurnsRemaining: 0,
         poisonTurnsRemaining: 0,
+        poisonStacks: 0,
         fireTurnsRemaining: 0,
         fireStacks: 0,
       };
@@ -426,6 +437,7 @@ class PhaseManagerServer {
         tauntTurnsRemaining: Math.max(0, (Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0) - 1),
         silenceTurnsRemaining: Math.max(0, (Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0) - 1),
         poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
+        poisonStacks: Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0,
         fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
       }));
@@ -1079,6 +1091,7 @@ class PhaseManagerServer {
         tauntTurnsRemaining: Number.isInteger(knownCard?.tauntTurnsRemaining) ? knownCard.tauntTurnsRemaining : 0,
         silenceTurnsRemaining: Number.isInteger(knownCard?.silenceTurnsRemaining) ? knownCard.silenceTurnsRemaining : 0,
         poisonTurnsRemaining: Number.isInteger(knownCard?.poisonTurnsRemaining) ? knownCard.poisonTurnsRemaining : 0,
+        poisonStacks: Number.isInteger(knownCard?.poisonStacks) ? knownCard.poisonStacks : 0,
         fireTurnsRemaining: Number.isInteger(knownCard?.fireTurnsRemaining) ? knownCard.fireTurnsRemaining : 0,
         fireStacks: Number.isInteger(knownCard?.fireStacks) ? knownCard.fireStacks : 0,
       });

@@ -864,7 +864,9 @@ export class PhaseManagerClient {
         tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
         silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
         poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
+        poisonStacks: Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0,
         fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
+        fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -892,7 +894,9 @@ export class PhaseManagerClient {
         tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
         silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
         poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
+        poisonStacks: Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0,
         fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
+        fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -998,7 +1002,9 @@ export class PhaseManagerClient {
           tauntTurnsRemaining: Number.isInteger(card.tauntTurnsRemaining) ? card.tauntTurnsRemaining : 0,
           silenceTurnsRemaining: Number.isInteger(card.silenceTurnsRemaining) ? card.silenceTurnsRemaining : 0,
           poisonTurnsRemaining: Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0,
+          poisonStacks: Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0,
           fireTurnsRemaining: Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0,
+          fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         });
       });
     });
@@ -1009,7 +1015,9 @@ export class PhaseManagerClient {
       sceneCard.userData.tauntTurnsRemaining = state?.tauntTurnsRemaining ?? 0;
       sceneCard.userData.silenceTurnsRemaining = state?.silenceTurnsRemaining ?? 0;
       sceneCard.userData.poisonTurnsRemaining = state?.poisonTurnsRemaining ?? 0;
+      sceneCard.userData.poisonStacks = state?.poisonStacks ?? 0;
       sceneCard.userData.fireTurnsRemaining = state?.fireTurnsRemaining ?? 0;
+      sceneCard.userData.fireStacks = state?.fireStacks ?? 0;
       sceneCard.userData.activeBuffIds = [];
       this.client.updateCardBuffBadges(sceneCard);
     });

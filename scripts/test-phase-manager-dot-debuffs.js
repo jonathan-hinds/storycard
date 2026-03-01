@@ -11,6 +11,7 @@ function createMatch() {
     slotIndex: 0,
     catalogCard: { health: 12, ability1: null, ability2: null },
     poisonTurnsRemaining: 0,
+    poisonStacks: 0,
     fireTurnsRemaining: 0,
     fireStacks: 0,
     tauntTurnsRemaining: 0,
@@ -58,6 +59,7 @@ function createMatch() {
   });
   assert.equal(poisonResult.executed, true);
   assert.equal(targetCard().poisonTurnsRemaining, 2, 'initial poison should use configured duration');
+  assert.equal(targetCard().poisonStacks, 1, 'initial poison should start with one application stack');
 
   const poisonRefreshResult = server.applyResolvedAbilityBuff({
     match,
@@ -69,6 +71,7 @@ function createMatch() {
   });
   assert.equal(poisonRefreshResult.executed, true);
   assert.equal(targetCard().poisonTurnsRemaining, 3, 'reapplying poison should only extend by one turn');
+  assert.equal(targetCard().poisonStacks, 2, 'reapplying poison should increase the stack counter for badge display');
 
   const fireResult = server.applyResolvedAbilityBuff({
     match,
@@ -98,6 +101,7 @@ function createMatch() {
 
   assert.equal(targetCard().catalogCard.health, 9, 'poison + amplified fire should deal 3 total damage');
   assert.equal(targetCard().poisonTurnsRemaining, 2, 'poison duration should tick down each phase change');
+  assert.equal(targetCard().poisonStacks, 2, 'poison stack counter should persist while poison is active');
   assert.equal(targetCard().fireTurnsRemaining, 1, 'fire duration should tick down each phase change');
   assert.equal(targetCard().fireStacks, 2, 'fire damage amplification should persist while the effect is active');
   assert.equal(match.lastDotDamageEvents.length, 1, 'dot tick should be surfaced as a match event');
@@ -106,8 +110,14 @@ function createMatch() {
 
   server.advanceMatchToDecisionPhase(match);
   assert.equal(targetCard().catalogCard.health, 6, 'second tick should still apply amplified fire before fire expires');
+  assert.equal(targetCard().poisonTurnsRemaining, 1, 'poison should still be active after second tick');
   assert.equal(targetCard().fireTurnsRemaining, 0, 'fire should expire when its duration runs out');
   assert.equal(targetCard().fireStacks, 0, 'fire amplification should reset once the effect expires');
+  assert.equal(targetCard().poisonStacks, 2, 'poison stack counter should persist until poison expires');
+
+  server.advanceMatchToDecisionPhase(match);
+  assert.equal(targetCard().poisonTurnsRemaining, 0, 'poison should expire after extended duration elapses');
+  assert.equal(targetCard().poisonStacks, 0, 'poison stack counter should reset once poison expires');
 
   const fireAfterExpiry = server.applyResolvedAbilityBuff({
     match,

@@ -98,6 +98,7 @@ export class CardGameClient {
     this.cardBackTexture = new THREE.TextureLoader().load(CARD_BACK_TEXTURE_URL);
     this.buffIconTextureLoader = new THREE.TextureLoader();
     this.buffIconTextureCache = new Map();
+    this.buffStackTextureCache = new Map();
     this.buffIconConfig = {};
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
@@ -254,10 +255,63 @@ export class CardGameClient {
     );
     badges.forEach((badgeMesh) => {
       badgeMesh.visible = false;
+      const stackMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        depthWrite: false,
+      });
+      const stackGeometry = new THREE.PlaneGeometry(0.28, 0.2);
+      const stackLabelMesh = new THREE.Mesh(stackGeometry, stackMaterial);
+      stackLabelMesh.position.set(0, -0.16, 0.03);
+      stackLabelMesh.visible = false;
+      badgeMesh.add(stackLabelMesh);
+      badgeMesh.userData.stackLabelMesh = stackLabelMesh;
     });
     card.userData.tiltPivot.add(badgeRoot);
     card.userData.buffBadgeRoot = badgeRoot;
     card.userData.buffBadges = badges;
+  }
+
+
+  getDotStackCountForBuff(card, buffId) {
+    if (!card?.userData || typeof buffId !== 'string') return 0;
+    if (buffId === BUFF_FIRE) {
+      return Number.isInteger(card.userData.fireStacks) ? Math.max(0, card.userData.fireStacks) : 0;
+    }
+    if (buffId === BUFF_POISON) {
+      return Number.isInteger(card.userData.poisonStacks) ? Math.max(0, card.userData.poisonStacks) : 0;
+    }
+    return 0;
+  }
+
+  getBuffStackTexture(stackCount) {
+    if (!Number.isInteger(stackCount) || stackCount < 2) return null;
+    if (this.buffStackTextureCache.has(stackCount)) return this.buffStackTextureCache.get(stackCount);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    const label = String(stackCount);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 58px Arial';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 10;
+    ctx.fillStyle = '#ffffff';
+    const x = canvas.width / 2;
+    const y = canvas.height / 2;
+    ctx.strokeText(label, x, y);
+    ctx.fillText(label, x, y);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    this.buffStackTextureCache.set(stackCount, texture);
+    return texture;
   }
 
   updateCardBuffBadges(card) {
@@ -277,6 +331,16 @@ export class CardGameClient {
       const isActive = Boolean(buffId && texture);
       badgeMesh.userData.buffId = isActive ? buffId : null;
       badgeMesh.visible = isActive;
+
+      const stackLabelMesh = badgeMesh.userData?.stackLabelMesh;
+      if (stackLabelMesh?.material) {
+        const stackCount = isActive ? this.getDotStackCountForBuff(card, buffId) : 0;
+        const stackTexture = this.getBuffStackTexture(stackCount);
+        stackLabelMesh.material.map = stackTexture;
+        stackLabelMesh.material.opacity = stackTexture ? 1 : 0;
+        stackLabelMesh.material.needsUpdate = true;
+        stackLabelMesh.visible = Boolean(stackTexture);
+      }
     });
 
     const tooltipCard = this.activeBuffTooltip?.card;
@@ -1796,7 +1860,9 @@ export class CardGameClient {
       card.userData.tauntTurnsRemaining = Number.isInteger(cfg.tauntTurnsRemaining) ? cfg.tauntTurnsRemaining : 0;
       card.userData.silenceTurnsRemaining = Number.isInteger(cfg.silenceTurnsRemaining) ? cfg.silenceTurnsRemaining : 0;
       card.userData.poisonTurnsRemaining = Number.isInteger(cfg.poisonTurnsRemaining) ? cfg.poisonTurnsRemaining : 0;
+      card.userData.poisonStacks = Number.isInteger(cfg.poisonStacks) ? cfg.poisonStacks : 0;
       card.userData.fireTurnsRemaining = Number.isInteger(cfg.fireTurnsRemaining) ? cfg.fireTurnsRemaining : 0;
+      card.userData.fireStacks = Number.isInteger(cfg.fireStacks) ? cfg.fireStacks : 0;
       card.userData.catalogCard = cfg.catalogCard ?? null;
       card.userData.statDisplayOverrides = null;
       card.userData.isAttackHover = false;
