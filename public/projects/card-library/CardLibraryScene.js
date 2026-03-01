@@ -54,6 +54,37 @@ const DEFAULT_LAYOUT_TUNING = Object.freeze({
 });
 const CARD_FACE_Z_EPSILON = 0.01;
 const DEFAULT_CARD_MESH_COLOR = 0x000000;
+const SECTION_HEADER_ROW_HEIGHT = 0.55;
+const SECTION_GAP_ROWS = 0.35;
+const SECTION_LABEL_FONT_SIZE = 54;
+const SECTION_LABEL_TEXTURE_WIDTH = 1024;
+const SECTION_LABEL_TEXTURE_HEIGHT = 160;
+const SECTION_LABEL_COLOR = '#9cb7ff';
+const SECTION_LABEL_SCALE_X = 2.4;
+const SECTION_LABEL_SCALE_Y = 0.34;
+
+function createSectionLabelTexture(labelText) {
+  const canvas = document.createElement('canvas');
+  canvas.width = SECTION_LABEL_TEXTURE_WIDTH;
+  canvas.height = SECTION_LABEL_TEXTURE_HEIGHT;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = 'rgba(12, 20, 44, 0.82)';
+  const padding = 16;
+  context.fillRect(padding, 24, canvas.width - (padding * 2), canvas.height - 48);
+  context.fillStyle = SECTION_LABEL_COLOR;
+  context.font = `700 ${SECTION_LABEL_FONT_SIZE}px "Trebuchet MS", "Segoe UI", sans-serif`;
+  context.textAlign = 'left';
+  context.textBaseline = 'middle';
+  context.fillText(labelText, 52, canvas.height * 0.5);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = 4;
+  texture.needsUpdate = true;
+  return texture;
+}
 function normalizeTextColor(color, fallbackColor) {
   if (typeof color !== 'string') return fallbackColor;
   const normalized = color.trim();
@@ -252,6 +283,9 @@ export class CardLibraryScene {
     this.clock = new THREE.Clock();
     this.cards = [];
     this.cardRoots = [];
+    this.sectionLabelRoots = [];
+    this.cardLayoutEntries = [];
+    this.totalGridRows = 1;
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.activePointerId = null;
@@ -419,19 +453,9 @@ export class CardLibraryScene {
   }
 
   reflowCardPositions() {
-    const {
-      cardsPerRow,
-      cardWidth,
-      cardHeight,
-      gridXSpacing,
-      gridYSpacing,
-      gridLeftPadding,
-      gridTopPadding,
-    } = this.getLayoutMetrics();
+    const { cardWidth, cardHeight, gridXSpacing, gridYSpacing, gridLeftPadding, gridTopPadding } = this.getLayoutMetrics();
 
-    this.cardRoots.forEach((root, index) => {
-      const row = Math.floor(index / cardsPerRow);
-      const column = index % cardsPerRow;
+    this.cardLayoutEntries.forEach(({ root, row, column }) => {
       const basePosition = new THREE.Vector3(
         gridLeftPadding + cardWidth * 0.5 + column * gridXSpacing,
         -(gridTopPadding + cardHeight * 0.5 + row * gridYSpacing),
@@ -439,6 +463,15 @@ export class CardLibraryScene {
       );
       root.userData.basePosition = basePosition;
       if (root !== this.previewCard) root.position.copy(basePosition);
+    });
+
+    this.sectionLabelRoots.forEach((labelRoot) => {
+      const row = labelRoot.userData.row;
+      labelRoot.position.set(
+        gridLeftPadding + (SECTION_LABEL_SCALE_X * 0.5),
+        -(gridTopPadding + cardHeight * 0.5 + row * gridYSpacing),
+        0.16,
+      );
     });
   }
 
@@ -479,8 +512,19 @@ export class CardLibraryScene {
       this.scene.remove(root);
     });
 
+    this.sectionLabelRoots.forEach((labelRoot) => {
+      const material = labelRoot.material;
+      if (material?.map?.dispose) material.map.dispose();
+      if (material?.dispose) material.dispose();
+      if (labelRoot.geometry?.dispose) labelRoot.geometry.dispose();
+      this.scene.remove(labelRoot);
+    });
+
     this.cards.length = 0;
     this.cardRoots.length = 0;
+    this.sectionLabelRoots.length = 0;
+    this.cardLayoutEntries.length = 0;
+    this.totalGridRows = 1;
     this.pointerCard = null;
     this.activePointerId = null;
     this.previewCard = null;
@@ -489,66 +533,108 @@ export class CardLibraryScene {
 
   setCards(cards) {
     this.clearCards();
-    this.cards = cards.slice();
+    const groupedCards = new Map();
+    cards.forEach((card) => {
+      const key = typeof card?.type === 'string' && card.type.trim() ? card.type.trim() : 'Other';
+      if (!groupedCards.has(key)) groupedCards.set(key, []);
+      groupedCards.get(key).push(card);
+    });
+
+    const sortedSections = [...groupedCards.entries()].sort(([left], [right]) => left.localeCompare(right));
+    this.cards = sortedSections.flatMap(([, sectionCards]) => sectionCards);
+
     const { cardsPerRow, cardWidth, cardHeight, gridXSpacing, gridYSpacing, gridLeftPadding, gridTopPadding } = this.getLayoutMetrics();
 
-    this.cards.forEach((card, index) => {
-      const row = Math.floor(index / cardsPerRow);
-      const column = index % cardsPerRow;
-      const basePosition = new THREE.Vector3(
-        gridLeftPadding + cardWidth * 0.5 + column * gridXSpacing,
-        -(gridTopPadding + cardHeight * 0.5 + row * gridYSpacing),
-        0,
-      );
+    let rowCursor = 0;
+    let cardAnimationPhase = 0;
 
-      const root = CardMeshFactory.createCard({
-        id: card.id,
-        width: cardWidth,
-        height: cardHeight,
-        thickness: CARD_THICKNESS,
-        cornerRadius: 0.15,
-        color: colorFromHexString(card.meshColor, DEFAULT_CARD_MESH_COLOR),
+    sortedSections.forEach(([sectionType, sectionCards], sectionIndex) => {
+      const sectionLabelTexture = createSectionLabelTexture(`${sectionType}:`);
+      if (sectionLabelTexture) {
+        const sectionLabel = new THREE.Mesh(
+          new THREE.PlaneGeometry(SECTION_LABEL_SCALE_X, SECTION_LABEL_SCALE_Y),
+          new THREE.MeshBasicMaterial({ map: sectionLabelTexture, transparent: true }),
+        );
+        const sectionLabelRow = rowCursor + (SECTION_HEADER_ROW_HEIGHT * 0.5);
+        sectionLabel.userData.row = sectionLabelRow;
+        sectionLabel.position.set(
+          gridLeftPadding + (SECTION_LABEL_SCALE_X * 0.5),
+          -(gridTopPadding + cardHeight * 0.5 + sectionLabelRow * gridYSpacing),
+          0.16,
+        );
+        this.scene.add(sectionLabel);
+        this.sectionLabelRoots.push(sectionLabel);
+      }
+
+      rowCursor += SECTION_HEADER_ROW_HEIGHT;
+
+      sectionCards.forEach((card, index) => {
+        const row = rowCursor + Math.floor(index / cardsPerRow);
+        const column = index % cardsPerRow;
+
+        const basePosition = new THREE.Vector3(
+          gridLeftPadding + cardWidth * 0.5 + column * gridXSpacing,
+          -(gridTopPadding + cardHeight * 0.5 + row * gridYSpacing),
+          0,
+        );
+
+        const root = CardMeshFactory.createCard({
+          id: card.id,
+          width: cardWidth,
+          height: cardHeight,
+          thickness: CARD_THICKNESS,
+          cornerRadius: 0.15,
+          color: colorFromHexString(card.meshColor, DEFAULT_CARD_MESH_COLOR),
+        });
+
+        const cardLayout = this.cardLabelLayouts[resolveCardKind(card.cardKind)] || DEFAULT_CARD_LABEL_LAYOUT;
+        const texture = createCardLabelTexture(card, { cardLabelLayout: cardLayout });
+        const face = new THREE.Mesh(
+          new THREE.PlaneGeometry(cardWidth * 0.92, cardHeight * 0.92),
+          new THREE.MeshStandardMaterial({
+            map: texture,
+            roughness: 0.75,
+            metalness: 0.04,
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -2,
+          }),
+        );
+        face.position.set(0, 0, (CARD_THICKNESS * 0.5) + CARD_FACE_Z_EPSILON);
+        root.userData.tiltPivot.add(face);
+        root.userData.face = face;
+
+        const { badgeRoot } = createBadgeSlotsGroup(
+          cardLayout.badgeSlots,
+          () => new THREE.MeshStandardMaterial({
+            color: 0x000000,
+            roughness: 0.62,
+            metalness: 0.08,
+          }),
+          { width: cardWidth, height: cardHeight, thickness: CARD_THICKNESS },
+        );
+        root.userData.tiltPivot.add(badgeRoot);
+        root.userData.badgeSlots = badgeRoot;
+
+        root.userData.basePosition = basePosition;
+        root.userData.phase = cardAnimationPhase * 0.63;
+        root.userData.catalogCard = card;
+
+        root.position.copy(basePosition);
+        root.rotation.set(-0.08, 0, 0);
+
+        this.scene.add(root);
+        this.cardRoots.push(root);
+        this.cardLayoutEntries.push({ root, row, column });
+
+        cardAnimationPhase += 1;
       });
 
-      const cardLayout = this.cardLabelLayouts[resolveCardKind(card.cardKind)] || DEFAULT_CARD_LABEL_LAYOUT;
-      const texture = createCardLabelTexture(card, { cardLabelLayout: cardLayout });
-      const face = new THREE.Mesh(
-        new THREE.PlaneGeometry(cardWidth * 0.92, cardHeight * 0.92),
-        new THREE.MeshStandardMaterial({
-          map: texture,
-          roughness: 0.75,
-          metalness: 0.04,
-          polygonOffset: true,
-          polygonOffsetFactor: -2,
-          polygonOffsetUnits: -2,
-        }),
-      );
-      face.position.set(0, 0, (CARD_THICKNESS * 0.5) + CARD_FACE_Z_EPSILON);
-      root.userData.tiltPivot.add(face);
-      root.userData.face = face;
-
-      const { badgeRoot } = createBadgeSlotsGroup(
-        cardLayout.badgeSlots,
-        () => new THREE.MeshStandardMaterial({
-          color: 0x000000,
-          roughness: 0.62,
-          metalness: 0.08,
-        }),
-        { width: cardWidth, height: cardHeight, thickness: CARD_THICKNESS },
-      );
-      root.userData.tiltPivot.add(badgeRoot);
-      root.userData.badgeSlots = badgeRoot;
-
-      root.userData.basePosition = basePosition;
-      root.userData.phase = index * 0.63;
-      root.userData.catalogCard = card;
-
-      root.position.copy(basePosition);
-      root.rotation.set(-0.08, 0, 0);
-
-      this.scene.add(root);
-      this.cardRoots.push(root);
+      rowCursor += Math.ceil(sectionCards.length / cardsPerRow);
+      if (sectionIndex < sortedSections.length - 1) rowCursor += SECTION_GAP_ROWS;
     });
+
+    this.totalGridRows = Math.max(rowCursor, 1);
 
     this.onResize();
   }
@@ -713,7 +799,7 @@ export class CardLibraryScene {
       gridBottomPadding,
     } = this.getLayoutMetrics();
     const { width, height } = this.getViewportSize();
-    const rows = Math.max(Math.ceil(this.cards.length / cardsPerRow), 1);
+    const rows = Math.max(this.totalGridRows, 1);
     const viewportHeight = height;
     const visibleRows = Math.min(Math.max(TARGET_VISIBLE_ROWS, 1), rows);
     this.visibleRows = visibleRows;
