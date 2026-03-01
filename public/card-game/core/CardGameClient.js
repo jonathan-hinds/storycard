@@ -1296,7 +1296,7 @@ export class CardGameClient {
     this.state.activeSpellRoller = null;
   }
 
-  queueSpellAttackAnimation(card, targetCard) {
+  queueSpellAttackAnimation(card, targetCard, { lifeStealHealingCard = null } = {}) {
     if (!card || !targetCard) return;
     const resolvedDamage = Number.isFinite(targetCard?.userData?.pendingSpellDamage)
       ? targetCard.userData.pendingSpellDamage
@@ -1304,15 +1304,15 @@ export class CardGameClient {
     const resolvedHealing = Number.isFinite(targetCard?.userData?.pendingSpellHealing)
       ? targetCard.userData.pendingSpellHealing
       : null;
-    const resolvedLifeStealHealing = Number.isFinite(card?.userData?.pendingSpellHealing)
-      ? card.userData.pendingSpellHealing
+    const resolvedLifeStealHealing = Number.isFinite(lifeStealHealingCard?.userData?.pendingSpellLifeStealHealing)
+      ? lifeStealHealingCard.userData.pendingSpellLifeStealHealing
       : null;
     if (targetCard?.userData) {
       targetCard.userData.pendingSpellDamage = null;
       targetCard.userData.pendingSpellHealing = null;
     }
-    if (card?.userData) {
-      card.userData.pendingSpellHealing = null;
+    if (lifeStealHealingCard?.userData) {
+      lifeStealHealingCard.userData.pendingSpellLifeStealHealing = null;
     }
     const startAtMs = performance.now();
     this.combatAnimations.push({
@@ -1325,9 +1325,20 @@ export class CardGameClient {
       resolvedDamage,
       resolvedHealing,
       resolvedLifeStealHealing,
+      lifeStealHealingCard,
       didHit: false,
       initialized: true,
     });
+  }
+
+  resolveBoardCardFromSideSlot(targetSide, targetSlotIndex) {
+    if (!Number.isInteger(targetSlotIndex)) return null;
+    if (targetSide !== 'player' && targetSide !== 'opponent') return null;
+    const boardSlotsPerSide = this.zoneFramework.boardSlotsPerSide;
+    const resolvedSlotIndex = targetSide === this.template.playerSide
+      ? targetSlotIndex + boardSlotsPerSide
+      : targetSlotIndex;
+    return this.cards.find((entry) => entry.userData.zone === CARD_ZONE_TYPES.BOARD && entry.userData.slotIndex === resolvedSlotIndex) || null;
   }
 
   resolveSpellAbilityValue(ability, rollOutcome, { sourceCard = null, targetCard = null } = {}) {
@@ -1472,10 +1483,23 @@ export class CardGameClient {
         sourceCard: card,
         targetCard,
       });
+      let lifeStealHealingCard = null;
+      if (selectedAbility?.effectId === 'life_steal' && spellResolutionId && typeof this.getSpellResolutionSnapshot === 'function') {
+        const latestResolution = this.getSpellResolutionSnapshot();
+        if (latestResolution?.id === spellResolutionId) {
+          lifeStealHealingCard = this.resolveBoardCardFromSideSlot(
+            latestResolution.lifeStealHealingTargetSide,
+            latestResolution.lifeStealHealingTargetSlotIndex,
+          );
+        }
+      }
+
       targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' || selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
       targetCard.userData.pendingSpellHealing = selectedAbility?.effectId === 'heal_target' ? resolvedValue : null;
-      card.userData.pendingSpellHealing = selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
-      this.queueSpellAttackAnimation(card, targetCard);
+      if (lifeStealHealingCard?.userData) {
+        lifeStealHealingCard.userData.pendingSpellLifeStealHealing = selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
+      }
+      this.queueSpellAttackAnimation(card, targetCard, { lifeStealHealingCard });
       await new Promise((resolve) => window.setTimeout(resolve, 760));
     }
 
@@ -1536,12 +1560,7 @@ export class CardGameClient {
     const targetSide = spellResolution.targetSide === 'player' || spellResolution.targetSide === 'opponent'
       ? spellResolution.targetSide
       : null;
-    const resolvedTargetSlot = targetSlotIndex == null
-      ? null
-      : (targetSide === this.template.playerSide ? targetSlotIndex + this.zoneFramework.boardSlotsPerSide : targetSlotIndex);
-    const targetCard = resolvedTargetSlot == null
-      ? null
-      : this.cards.find((entry) => entry.userData.zone === CARD_ZONE_TYPES.BOARD && entry.userData.slotIndex === resolvedTargetSlot) || null;
+    const targetCard = this.resolveBoardCardFromSideSlot(targetSide, targetSlotIndex);
 
     const snapshotCard = spellResolution.cardSnapshot?.catalogCard || null;
     const snapshotAbilityIndex = Number.isInteger(spellResolution.selectedAbilityIndex) ? spellResolution.selectedAbilityIndex : 0;
@@ -1600,10 +1619,18 @@ export class CardGameClient {
         const resolvedLifeStealHealing = Number.isFinite(liveSpellResolution?.resolvedLifeStealHealing)
           ? Math.max(0, Math.floor(Number(liveSpellResolution.resolvedLifeStealHealing)))
           : null;
+        const lifeStealHealingTargetCard = this.resolveBoardCardFromSideSlot(
+          liveSpellResolution?.lifeStealHealingTargetSide,
+          liveSpellResolution?.lifeStealHealingTargetSlotIndex,
+        );
         targetCard.userData.pendingSpellDamage = resolvedDamage;
         targetCard.userData.pendingSpellHealing = resolvedHealing;
-        card.userData.pendingSpellHealing = resolvedLifeStealHealing;
-        this.queueSpellAttackAnimation(card, targetCard);
+        if (lifeStealHealingTargetCard?.userData) {
+          lifeStealHealingTargetCard.userData.pendingSpellLifeStealHealing = resolvedLifeStealHealing;
+        }
+        this.queueSpellAttackAnimation(card, targetCard, {
+          lifeStealHealingCard: lifeStealHealingTargetCard,
+        });
         await new Promise((resolve) => window.setTimeout(resolve, 760));
       }
 
@@ -2355,15 +2382,28 @@ export class CardGameClient {
           }
 
           if (Number.isFinite(animation.resolvedLifeStealHealing) && animation.resolvedLifeStealHealing > 0) {
-            const attackerHealth = Number(card.userData?.catalogCard?.health);
-            if (Number.isFinite(attackerHealth)) {
-              card.userData.catalogCard.health = attackerHealth + animation.resolvedLifeStealHealing;
-              this.refreshCardFace(card);
+            const lifeStealHealingCard = animation.lifeStealHealingCard || null;
+            const healingRecipient = lifeStealHealingCard?.userData?.catalogCard ? lifeStealHealingCard : card;
+            const recipientHealth = Number(healingRecipient.userData?.catalogCard?.health);
+            if (Number.isFinite(recipientHealth)) {
+              healingRecipient.userData.catalogCard.health = recipientHealth + animation.resolvedLifeStealHealing;
+              this.refreshCardFace(healingRecipient);
             }
             this.spawnBeneficialPopup({
               amount: animation.resolvedLifeStealHealing,
-              worldPoint: card.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              worldPoint: healingRecipient.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
               time,
+            });
+            this.combatShakeEffects.push({
+              card: healingRecipient,
+              basePosition: healingRecipient.position.clone(),
+              baseRotationZ: healingRecipient.rotation.z,
+              axis: collisionAxis.clone().multiplyScalar(-1),
+              startAtMs: time,
+              durationMs: 260,
+              amplitude: 0.05,
+              swayAmplitude: 0.03,
+              rollAmplitude: 0.035,
             });
           }
 
