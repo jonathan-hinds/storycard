@@ -51,6 +51,19 @@ function ensureSession() {
 let session = ensureSession();
 
 
+async function refreshUserDeck() {
+  const response = await fetch(`/api/users/${encodeURIComponent(session.user.id)}`);
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || 'Unable to load current deck');
+  }
+  if (payload?.user) {
+    session.user = payload.user;
+    saveSession(session);
+  }
+}
+
+
 async function persistDeck(summary) {
   const response = await fetch(`/api/users/${encodeURIComponent(session.user.id)}/deck`, {
     method: 'PUT',
@@ -155,7 +168,12 @@ async function loadCards() {
 }
 
 
-loadCards().catch((error) => {
+async function initDeckBuilder() {
+  await refreshUserDeck();
+  await loadCards();
+}
+
+initDeckBuilder().catch((error) => {
   if (cardLibraryStage) cardLibraryStage.hidden = true;
   const emptyState = document.getElementById('user-card-list-empty');
   if (emptyState) emptyState.remove();
