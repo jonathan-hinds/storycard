@@ -11,28 +11,6 @@
       <h1>Deck Builder</h1>
       <p class="cards-library-caption">Drag cards from the left library into the right deck panel. Drag back out to remove one copy at a time.</p>
       <p id="user-deck-status" class="cards-library-caption user-deck-status"></p>
-      <section class="preview-tuning-controls user-preview-controls" aria-label="Deck preview controls">
-        <h3>Preview card tuning</h3>
-        <label for="preview-x-slider">Preview X: <output id="preview-x-value" for="preview-x-slider"></output></label>
-        <input id="preview-x-slider" type="range" min="-4" max="4" step="0.01" />
-
-        <label for="preview-y-slider">Preview Y: <output id="preview-y-value" for="preview-y-slider"></output></label>
-        <input id="preview-y-slider" type="range" min="-4" max="6" step="0.01" />
-
-        <label for="preview-z-slider">Preview Z: <output id="preview-z-value" for="preview-z-slider"></output></label>
-        <input id="preview-z-slider" type="range" min="-2" max="8" step="0.01" />
-
-        <label for="preview-tilt-slider">Preview tilt angle: <output id="preview-tilt-value" for="preview-tilt-slider"></output></label>
-        <input id="preview-tilt-slider" type="range" min="-1.6" max="0" step="0.01" />
-
-        <div class="tools-export">
-          <div class="tools-export-buttons">
-            <button id="preview-export-copy" type="button">Copy JSON</button>
-            <button id="preview-export-download" type="button">Download JSON</button>
-          </div>
-          <textarea id="preview-export-output" class="tools-export-output" rows="5" readonly aria-label="Preview tuning JSON output"></textarea>
-        </div>
-      </section>
       <div id="user-card-list" class="cards-list">
         <div id="user-card-library-stage" class="cards-library-stage-wrap">
           <canvas id="user-card-library-canvas" class="cards-library-canvas" aria-label="Deck builder 3D card library scene"></canvas>
