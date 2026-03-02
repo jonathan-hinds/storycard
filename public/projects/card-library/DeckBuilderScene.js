@@ -70,9 +70,12 @@ function createTitleSprite(text) {
 
 function createFilterPanelSprite() {
   const canvas = document.createElement('canvas');
-  canvas.width = 2048;
-  canvas.height = 460;
+  const texturePixelsPerUnit = 260;
+  canvas.width = Math.round(FILTER_PANEL_WIDTH * texturePixelsPerUnit);
+  canvas.height = Math.round(FILTER_PANEL_HEIGHT * texturePixelsPerUnit);
   const texture = new THREE.CanvasTexture(canvas);
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
   sprite.scale.set(FILTER_PANEL_WIDTH, FILTER_PANEL_HEIGHT, 1);
@@ -230,20 +233,26 @@ export class DeckBuilderScene {
     const { canvas, texture } = this.filterPanel;
     const context = canvas.getContext('2d');
     if (!context) return;
+    const designWidth = 2048;
+    const designHeight = 460;
+    const scaleX = canvas.width / designWidth;
+    const scaleY = canvas.height / designHeight;
+    const toPanelX = (x) => x * scaleX;
+    const toPanelY = (y) => y * scaleY;
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = 'rgba(7, 13, 26, 0.92)';
     context.strokeStyle = 'rgba(148, 176, 255, 0.58)';
-    context.lineWidth = 5;
+    context.lineWidth = 5 * scaleY;
     context.beginPath();
-    context.roundRect(30, 30, canvas.width - 60, canvas.height - 60, 32);
+    context.roundRect(toPanelX(30), toPanelY(30), toPanelX(designWidth - 60), toPanelY(designHeight - 60), 32 * scaleY);
     context.fill();
     context.stroke();
 
     context.fillStyle = '#e8efff';
-    context.font = '700 56px "Trebuchet MS", "Segoe UI", sans-serif';
+    context.font = `700 ${56 * scaleY}px "Trebuchet MS", "Segoe UI", sans-serif`;
     context.textAlign = 'left';
     context.textBaseline = 'middle';
-    context.fillText('All Cards Filters', 90, 92);
+    context.fillText('All Cards Filters', toPanelX(90), toPanelY(92));
 
     const groups = [
       {
@@ -271,35 +280,35 @@ export class DeckBuilderScene {
     this.filterHitAreas = [];
     groups.forEach((group) => {
       context.fillStyle = '#a8bee7';
-      context.font = '600 38px "Trebuchet MS", "Segoe UI", sans-serif';
-      context.fillText(group.label, group.startX, 162);
-      const boxSize = 52;
-      const spacingX = 260;
-      const y = 242;
+      context.font = `600 ${38 * scaleY}px "Trebuchet MS", "Segoe UI", sans-serif`;
+      context.fillText(group.label, toPanelX(group.startX), toPanelY(162));
+      const boxSize = toPanelY(52);
+      const spacingX = toPanelX(260);
+      const y = toPanelY(242);
       group.options.forEach((option, index) => {
-        const x = group.startX + (index * spacingX);
+        const x = toPanelX(group.startX) + (index * spacingX);
         const checked = this.libraryFilters[group.key].has(option.value);
         context.fillStyle = 'rgba(20, 30, 54, 0.95)';
         context.strokeStyle = checked ? '#98c0ff' : '#6f7c95';
-        context.lineWidth = 4;
+        context.lineWidth = 4 * scaleY;
         context.beginPath();
-        context.roundRect(x, y, boxSize, boxSize, 12);
+        context.roundRect(x, y, boxSize, boxSize, 12 * scaleY);
         context.fill();
         context.stroke();
 
         if (checked) {
           context.strokeStyle = '#d8e7ff';
-          context.lineWidth = 6;
+          context.lineWidth = 6 * scaleY;
           context.beginPath();
-          context.moveTo(x + 12, y + 28);
-          context.lineTo(x + 24, y + 40);
-          context.lineTo(x + 42, y + 14);
+          context.moveTo(x + toPanelX(12), y + toPanelY(28));
+          context.lineTo(x + toPanelX(24), y + toPanelY(40));
+          context.lineTo(x + toPanelX(42), y + toPanelY(14));
           context.stroke();
         }
 
         context.fillStyle = '#eef4ff';
-        context.font = '600 36px "Trebuchet MS", "Segoe UI", sans-serif';
-        context.fillText(option.label, x + boxSize + 14, y + (boxSize * 0.5));
+        context.font = `600 ${36 * scaleY}px "Trebuchet MS", "Segoe UI", sans-serif`;
+        context.fillText(option.label, x + boxSize + toPanelX(14), y + (boxSize * 0.5));
         this.filterHitAreas.push({
           x,
           y,
