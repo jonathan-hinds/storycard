@@ -185,10 +185,13 @@ async function updateUserDeck(userId, deck = {}) {
     },
     { returnDocument: 'after' },
   );
-  if (!result) {
+  const updatedUser = result && typeof result === 'object' && 'value' in result
+    ? result.value
+    : result;
+  if (!updatedUser) {
     throw new Error('user not found');
   }
-  return toPublicUser(result);
+  return toPublicUser(updatedUser);
 }
 
 module.exports = {

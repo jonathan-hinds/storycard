@@ -7,6 +7,7 @@ const cardLibraryCanvas = document.getElementById('user-card-library-canvas');
 const cardLibraryStage = document.getElementById('user-card-library-stage');
 const deckStatus = document.getElementById('user-deck-status');
 let deckBuilderScene;
+let pendingSavePromise = null;
 
 const filterPanelControls = {
   width: 6.5,
@@ -54,6 +55,7 @@ async function persistDeck(summary) {
   const response = await fetch(`/api/users/${encodeURIComponent(session.user.id)}/deck`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
+    keepalive: true,
     body: JSON.stringify({
       deck: {
         cards: summary.deckCardIds,
@@ -71,20 +73,32 @@ async function persistDeck(summary) {
   }
 }
 
-function navigateBackHome() {
+async function navigateBackHome() {
+  if (pendingSavePromise) {
+    try {
+      await pendingSavePromise;
+    } catch (error) {
+      // Preserve existing error messaging from save flow and still allow navigation.
+    }
+  }
   window.location.href = '/public/projects/user/home.html';
 }
 
 async function handleSaveDeck() {
   const summary = deckBuilderScene?.getDeckSummary?.();
   if (!summary) return;
+  deckStatus.textContent = 'Saving deck...';
+  deckStatus.dataset.error = 'false';
   try {
-    await persistDeck(summary);
+    pendingSavePromise = persistDeck(summary);
+    await pendingSavePromise;
     updateDeckStatus(summary);
     deckStatus.textContent = `${deckStatus.textContent} — Saved.`;
   } catch (error) {
     deckStatus.textContent = error.message || 'Unable to save deck.';
     deckStatus.dataset.error = 'true';
+  } finally {
+    pendingSavePromise = null;
   }
 }
 
