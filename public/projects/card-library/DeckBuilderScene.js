@@ -88,16 +88,17 @@ function createTitleSprite(text) {
 
 function createFilterPanelSprite() {
   const canvas = document.createElement('canvas');
-  const texturePixelsPerUnit = 260;
-  canvas.width = Math.round(FILTER_PANEL_WIDTH * texturePixelsPerUnit);
-  canvas.height = Math.round(FILTER_PANEL_HEIGHT * texturePixelsPerUnit);
+  const designWidth = 2048;
+  const designHeight = 460;
+  canvas.width = designWidth;
+  canvas.height = designHeight;
   const texture = new THREE.CanvasTexture(canvas);
   texture.generateMipmaps = false;
   texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
   sprite.scale.set(FILTER_PANEL_WIDTH, FILTER_PANEL_HEIGHT, 1);
-  return { sprite, canvas, texture, texturePixelsPerUnit };
+  return { sprite, canvas, texture };
 }
 
 function createCountSprite(count) {
@@ -255,28 +256,19 @@ export class DeckBuilderScene {
   }
 
   redrawFilterPanel() {
-    const { canvas, texture, texturePixelsPerUnit } = this.filterPanel;
-    const { width, height, opacity, fontScale } = this.filterPanelControls;
-    const nextCanvasWidth = Math.max(2, Math.round(width * texturePixelsPerUnit));
-    const nextCanvasHeight = Math.max(2, Math.round(height * texturePixelsPerUnit));
-    if (canvas.width !== nextCanvasWidth || canvas.height !== nextCanvasHeight) {
-      canvas.width = nextCanvasWidth;
-      canvas.height = nextCanvasHeight;
-    }
+    const { canvas, texture } = this.filterPanel;
+    const { opacity, fontScale } = this.filterPanelControls;
     const context = canvas.getContext('2d');
     if (!context) return;
     const designWidth = 2048;
     const designHeight = 460;
     const uniformScale = Math.min(canvas.width / designWidth, canvas.height / designHeight);
-    const contentWidth = designWidth * uniformScale;
-    const contentHeight = designHeight * uniformScale;
-    const xOffset = (canvas.width - contentWidth) * 0.5;
-    const yOffset = (canvas.height - contentHeight) * 0.5;
-    const toPanelX = (x) => xOffset + (x * uniformScale);
-    const toPanelY = (y) => yOffset + (y * uniformScale);
+    const toPanelX = (x) => x * uniformScale;
+    const toPanelY = (y) => y * uniformScale;
+    const panelOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = `rgba(7, 13, 26, ${opacity})`;
-    context.strokeStyle = 'rgba(148, 176, 255, 0.58)';
+    context.fillStyle = `rgba(7, 13, 26, ${panelOpacity})`;
+    context.strokeStyle = `rgba(148, 176, 255, ${0.58 * panelOpacity})`;
     context.lineWidth = 5 * uniformScale;
     context.beginPath();
     context.roundRect(toPanelX(30), toPanelY(30), (designWidth - 60) * uniformScale, (designHeight - 60) * uniformScale, 32 * uniformScale);
@@ -323,8 +315,10 @@ export class DeckBuilderScene {
       group.options.forEach((option, index) => {
         const x = toPanelX(group.startX + (index * 260));
         const checked = this.libraryFilters[group.key].has(option.value);
-        context.fillStyle = 'rgba(20, 30, 54, 0.95)';
-        context.strokeStyle = checked ? '#98c0ff' : '#6f7c95';
+        context.fillStyle = `rgba(20, 30, 54, ${0.95 * panelOpacity})`;
+        context.strokeStyle = checked
+          ? `rgba(152, 192, 255, ${panelOpacity})`
+          : `rgba(111, 124, 149, ${panelOpacity})`;
         context.lineWidth = 4 * uniformScale;
         context.beginPath();
         context.roundRect(x, y, boxSize, boxSize, 12 * uniformScale);
@@ -332,7 +326,7 @@ export class DeckBuilderScene {
         context.stroke();
 
         if (checked) {
-          context.strokeStyle = '#d8e7ff';
+          context.strokeStyle = `rgba(216, 231, 255, ${panelOpacity})`;
           context.lineWidth = 6 * uniformScale;
           context.beginPath();
           context.moveTo(x + (12 * uniformScale), y + (28 * uniformScale));
