@@ -89,9 +89,27 @@ async function verifyPassword(password, passwordHash, passwordSalt) {
 }
 
 function toPublicUser(document) {
+  const normalizeCardId = (cardId) => {
+    if (typeof cardId === 'string') {
+      const normalized = cardId.trim();
+      return normalized || null;
+    }
+    if (cardId && typeof cardId === 'object') {
+      if (typeof cardId.toHexString === 'function') {
+        return cardId.toHexString();
+      }
+      if (typeof cardId.$oid === 'string') {
+        const normalized = cardId.$oid.trim();
+        return normalized || null;
+      }
+    }
+    return null;
+  };
   const deck = document.deck && typeof document.deck === 'object'
     ? {
-      cards: Array.isArray(document.deck.cards) ? document.deck.cards.filter((cardId) => typeof cardId === 'string') : [],
+      cards: Array.isArray(document.deck.cards)
+        ? document.deck.cards.map(normalizeCardId).filter((cardId) => typeof cardId === 'string')
+        : [],
       creatureCount: Number.isInteger(document.deck.creatureCount) ? document.deck.creatureCount : 0,
       updatedAt: typeof document.deck.updatedAt === 'string' ? document.deck.updatedAt : null,
     }
@@ -155,7 +173,24 @@ async function loginUser(input = {}) {
 }
 
 function normalizeDeck(deck = {}) {
-  const cards = Array.isArray(deck.cards) ? deck.cards.filter((cardId) => typeof cardId === 'string') : [];
+  const cards = Array.isArray(deck.cards)
+    ? deck.cards
+      .map((cardId) => {
+        if (typeof cardId === 'string') {
+          const normalized = cardId.trim();
+          return normalized || null;
+        }
+        if (cardId && typeof cardId === 'object' && typeof cardId.toHexString === 'function') {
+          return cardId.toHexString();
+        }
+        if (cardId && typeof cardId === 'object' && typeof cardId.$oid === 'string') {
+          const normalized = cardId.$oid.trim();
+          return normalized || null;
+        }
+        return null;
+      })
+      .filter((cardId) => typeof cardId === 'string')
+    : [];
   if (cards.length > 10) {
     throw new Error('deck cannot exceed 10 cards');
   }
