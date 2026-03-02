@@ -31,6 +31,10 @@ const FILTER_PANEL_WIDTH = 6.5;
 const FILTER_PANEL_HEIGHT = 0.96;
 const FILTER_PANEL_TOP_MARGIN = 0.18;
 const FILTER_PANEL_GAP_FROM_TITLE = 0.22;
+const ACTION_BUTTON_WIDTH = 2.4;
+const ACTION_BUTTON_HEIGHT = 0.7;
+const ACTION_BUTTON_EDGE_MARGIN_X = 0.24;
+const ACTION_BUTTON_EDGE_MARGIN_Y = 0.24;
 const DEFAULT_FILTER_PANEL_CONTROLS = Object.freeze({
   width: FILTER_PANEL_WIDTH,
   height: FILTER_PANEL_HEIGHT,
@@ -103,6 +107,21 @@ function createFilterPanelSprite() {
   return { sprite, canvas, texture };
 }
 
+function createActionButtonSprite() {
+  const canvas = document.createElement('canvas');
+  const designWidth = 900;
+  const designHeight = 280;
+  canvas.width = designWidth;
+  canvas.height = designHeight;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+  sprite.scale.set(ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, 1);
+  return { sprite, canvas, texture };
+}
+
 function createCountSprite(count) {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -129,10 +148,20 @@ function makePane(name, centerX) {
 }
 
 export class DeckBuilderScene {
-  constructor({ canvas, interactionTarget, onDeckChange, previewControls = null, filterPanelControls = null }) {
+  constructor({
+    canvas,
+    interactionTarget,
+    onDeckChange,
+    onSave = null,
+    onBack = null,
+    previewControls = null,
+    filterPanelControls = null,
+  }) {
     this.canvas = canvas;
     this.interactionTarget = interactionTarget;
     this.onDeckChange = onDeckChange;
+    this.onSave = onSave;
+    this.onBack = onBack;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -182,10 +211,16 @@ export class DeckBuilderScene {
     this.titleDeck = createTitleSprite('Deck');
     this.filterPanel = createFilterPanelSprite();
     this.filterHitAreas = [];
+    this.saveButton = createActionButtonSprite();
+    this.backButton = createActionButtonSprite();
     if (this.titleLibrary) this.scene.add(this.titleLibrary);
     if (this.titleDeck) this.scene.add(this.titleDeck);
     this.scene.add(this.filterPanel.sprite);
+    this.scene.add(this.saveButton.sprite);
+    this.scene.add(this.backButton.sprite);
     this.redrawFilterPanel();
+    this.redrawActionButton(this.saveButton, 'Save');
+    this.redrawActionButton(this.backButton, 'Back');
 
     const hemi = new THREE.HemisphereLight(0xdce8ff, 0x1a1f2c, 1.1);
     hemi.position.set(0, 18, 4);
@@ -220,6 +255,10 @@ export class DeckBuilderScene {
     this.clearEntries(this.deckPane);
     this.filterPanel.texture.dispose();
     this.filterPanel.sprite.material?.dispose?.();
+    this.saveButton.texture.dispose();
+    this.saveButton.sprite.material?.dispose?.();
+    this.backButton.texture.dispose();
+    this.backButton.sprite.material?.dispose?.();
     this.renderer.dispose();
   }
 
@@ -230,6 +269,8 @@ export class DeckBuilderScene {
   setFilterPanelControls(nextControls = {}) {
     this.filterPanelControls = normalizeFilterPanelControls(nextControls, this.filterPanelControls);
     this.redrawFilterPanel();
+    this.redrawActionButton(this.saveButton, 'Save');
+    this.redrawActionButton(this.backButton, 'Back');
     this.onResize();
   }
 
@@ -354,6 +395,41 @@ export class DeckBuilderScene {
     texture.needsUpdate = true;
   }
 
+
+  redrawActionButton(button, label) {
+    const { canvas, texture } = button;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const panelOpacity = THREE.MathUtils.clamp(this.filterPanelControls.opacity, 0, 1);
+    const fontScale = this.filterPanelControls.fontScale;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = `rgba(7, 13, 26, ${panelOpacity})`;
+    context.strokeStyle = `rgba(148, 176, 255, ${0.58 * panelOpacity})`;
+    context.lineWidth = 10;
+    context.beginPath();
+    context.roundRect(14, 14, canvas.width - 28, canvas.height - 28, 36);
+    context.fill();
+    context.stroke();
+    context.fillStyle = '#e8efff';
+    context.font = `700 ${84 * fontScale}px "Trebuchet MS", "Segoe UI", sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(label, canvas.width / 2, canvas.height / 2);
+    texture.needsUpdate = true;
+  }
+
+  hitActionButton(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const [saveHit] = this.raycaster.intersectObject(this.saveButton.sprite, true);
+    if (saveHit?.uv) return 'save';
+    const [backHit] = this.raycaster.intersectObject(this.backButton.sprite, true);
+    if (backHit?.uv) return 'back';
+    return null;
+  }
+
   applyLibraryFilters() {
     const normalize = (value) => String(value || '').trim().toLowerCase();
     this.filteredLibraryCards = this.libraryCards.filter((card) => {
@@ -376,7 +452,7 @@ export class DeckBuilderScene {
     this.emitDeckChange();
   }
 
-  emitDeckChange() {
+  getDeckSummary() {
     const deckCardIds = [];
     this.deckCounts.forEach((count, id) => {
       for (let i = 0; i < count; i += 1) deckCardIds.push(id);
@@ -390,12 +466,16 @@ export class DeckBuilderScene {
     this.deckCounts.forEach((count, id) => {
       if (count > 2) violations.push(`Card ${id} cannot appear more than twice.`);
     });
-    this.onDeckChange?.({
+    return {
       deckCardIds,
       creatureCount,
       isValid: deckCardIds.length === 10 && creatureCount >= 3 && !violations.length,
       violations,
-    });
+    };
+  }
+
+  emitDeckChange() {
+    this.onDeckChange?.(this.getDeckSummary());
   }
 
   rebuildLibraryPane() {
@@ -579,6 +659,13 @@ export class DeckBuilderScene {
     if (this.titleDeck) this.titleDeck.position.set(this.deckPane.centerX, headerY, 0.4);
     this.filterPanel.sprite.scale.set(this.filterPanelControls.width, this.filterPanelControls.height, 1);
     this.filterPanel.sprite.position.set(this.filterPanelControls.x, filterPanelY, 0.5);
+
+    const buttonY = (this.camera.position.y - (visibleWorldHeight * 0.5)) + ACTION_BUTTON_EDGE_MARGIN_Y + (ACTION_BUTTON_HEIGHT * 0.5);
+    const buttonX = (visibleWorldWidth * 0.5) - ACTION_BUTTON_EDGE_MARGIN_X - (ACTION_BUTTON_WIDTH * 0.5);
+    this.saveButton.sprite.scale.set(ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, 1);
+    this.backButton.sprite.scale.set(ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, 1);
+    this.saveButton.sprite.position.set(buttonX, buttonY, 0.55);
+    this.backButton.sprite.position.set(-buttonX, buttonY, 0.55);
   }
 
   hitFilterControl(event) {
@@ -619,6 +706,15 @@ export class DeckBuilderScene {
   }
 
   onPointerDown(event) {
+    const actionHit = this.hitActionButton(event);
+    if (actionHit === 'save') {
+      this.onSave?.();
+      return;
+    }
+    if (actionHit === 'back') {
+      this.onBack?.();
+      return;
+    }
     const filterHit = this.hitFilterControl(event);
     if (filterHit) {
       this.toggleLibraryFilter(filterHit.group, filterHit.value);

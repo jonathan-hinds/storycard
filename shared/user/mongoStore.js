@@ -89,11 +89,19 @@ async function verifyPassword(password, passwordHash, passwordSalt) {
 }
 
 function toPublicUser(document) {
+  const deck = document.deck && typeof document.deck === 'object'
+    ? {
+      cards: Array.isArray(document.deck.cards) ? document.deck.cards.filter((cardId) => typeof cardId === 'string') : [],
+      creatureCount: Number.isInteger(document.deck.creatureCount) ? document.deck.creatureCount : 0,
+      updatedAt: typeof document.deck.updatedAt === 'string' ? document.deck.updatedAt : null,
+    }
+    : { cards: [], creatureCount: 0, updatedAt: null };
   return {
     id: document._id.toString(),
     username: document.username,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
+    deck,
   };
 }
 
@@ -109,6 +117,11 @@ async function createUser(input = {}) {
       username,
       passwordHash,
       passwordSalt,
+      deck: {
+        cards: [],
+        creatureCount: 0,
+        updatedAt: now,
+      },
       createdAt: now,
       updatedAt: now,
     });
@@ -141,9 +154,47 @@ async function loginUser(input = {}) {
   return toPublicUser(user);
 }
 
+function normalizeDeck(deck = {}) {
+  const cards = Array.isArray(deck.cards) ? deck.cards.filter((cardId) => typeof cardId === 'string') : [];
+  if (cards.length > 10) {
+    throw new Error('deck cannot exceed 10 cards');
+  }
+  const creatureCount = Number.isInteger(deck.creatureCount) ? deck.creatureCount : 0;
+  return {
+    cards,
+    creatureCount: Math.max(0, creatureCount),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function updateUserDeck(userId, deck = {}) {
+  const { ObjectId } = getMongoClientConstructor();
+  if (typeof userId !== 'string' || !ObjectId.isValid(userId)) {
+    throw new Error('invalid user id');
+  }
+  const collection = await getCollection();
+  const normalizedDeck = normalizeDeck(deck);
+  const updatedAt = new Date().toISOString();
+  const result = await collection.findOneAndUpdate(
+    { _id: new ObjectId(userId) },
+    {
+      $set: {
+        deck: normalizedDeck,
+        updatedAt,
+      },
+    },
+    { returnDocument: 'after' },
+  );
+  if (!result) {
+    throw new Error('user not found');
+  }
+  return toPublicUser(result);
+}
+
 module.exports = {
   createUser,
   loginUser,
+  updateUserDeck,
   normalizeUsername,
   normalizePassword,
 };
