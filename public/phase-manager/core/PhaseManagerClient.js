@@ -79,7 +79,9 @@ export class PhaseManagerClient {
     this.playedRemoteSpellResolutionIds = new Set();
     this.lastPlayedDotEventKey = null;
     this.previewTuning = loadPreviewTuning();
-    this.playerId = createTabPlayerId();
+    this.playerId = typeof this.options.playerId === 'string' && this.options.playerId.trim()
+      ? this.options.playerId.trim()
+      : createTabPlayerId();
     this.buffBadgeSlotsLayout = this.createInitialBuffBadgeSlotsLayout();
 
     this.beginMatchmaking = this.beginMatchmaking.bind(this);
@@ -1572,7 +1574,14 @@ export class PhaseManagerClient {
     const { matchmakingBtn, statusEl } = this.elements;
     if (this.match) return;
 
-    this.postJson('/api/phase-manager/matchmaking/find', { playerId: this.playerId })
+    const requestBody = {
+      playerId: this.playerId,
+      ...(this.options.matchmakingPayload && typeof this.options.matchmakingPayload === 'object'
+        ? this.options.matchmakingPayload
+        : {}),
+    };
+
+    this.postJson('/api/phase-manager/matchmaking/find', requestBody)
       .then((status) => {
         this.applyMatchmakingStatus(status);
         if (!this.matchmakingPollTimer) {
