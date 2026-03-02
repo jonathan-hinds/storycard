@@ -2,6 +2,22 @@ import { DeckBuilderScene } from '/public/projects/card-library/DeckBuilderScene
 
 const USER_SESSION_KEY = 'storycard-user-session';
 
+function getSessionStorage() {
+  try {
+    return window.sessionStorage;
+  } catch (error) {
+    return null;
+  }
+}
+
+function getLocalStorage() {
+  try {
+    return window.localStorage;
+  } catch (error) {
+    return null;
+  }
+}
+
 const cardList = document.getElementById('user-card-list');
 const cardLibraryCanvas = document.getElementById('user-card-library-canvas');
 const cardLibraryStage = document.getElementById('user-card-library-stage');
@@ -25,10 +41,18 @@ function applyFilterPanelControls() {
 
 function loadSession() {
   try {
-    const raw = localStorage.getItem(USER_SESSION_KEY);
+    const sessionStorageRef = getSessionStorage();
+    const localStorageRef = getLocalStorage();
+    const raw = sessionStorageRef?.getItem(USER_SESSION_KEY) || localStorageRef?.getItem(USER_SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.user?.id) return null;
+    if (sessionStorageRef) {
+      sessionStorageRef.setItem(USER_SESSION_KEY, raw);
+    }
+    if (localStorageRef) {
+      localStorageRef.removeItem(USER_SESSION_KEY);
+    }
     return parsed;
   } catch (error) {
     return null;
@@ -36,7 +60,16 @@ function loadSession() {
 }
 
 function saveSession(session) {
-  localStorage.setItem(USER_SESSION_KEY, JSON.stringify(session));
+  const serialized = JSON.stringify(session);
+  const sessionStorageRef = getSessionStorage();
+  if (sessionStorageRef) {
+    sessionStorageRef.setItem(USER_SESSION_KEY, serialized);
+  }
+
+  const localStorageRef = getLocalStorage();
+  if (localStorageRef) {
+    localStorageRef.removeItem(USER_SESSION_KEY);
+  }
 }
 
 function ensureSession() {

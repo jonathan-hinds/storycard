@@ -1,5 +1,21 @@
 const USER_SESSION_KEY = 'storycard-user-session';
 
+function getSessionStorage() {
+  try {
+    return window.sessionStorage;
+  } catch (error) {
+    return null;
+  }
+}
+
+function getLocalStorage() {
+  try {
+    return window.localStorage;
+  } catch (error) {
+    return null;
+  }
+}
+
 const form = document.getElementById('user-auth-form');
 const registerButton = document.getElementById('register-button');
 const loginButton = document.getElementById('login-button');
@@ -24,7 +40,16 @@ function setLoading(isLoading) {
 }
 
 function saveUserSession(user) {
-  localStorage.setItem(USER_SESSION_KEY, JSON.stringify({ user }));
+  const serialized = JSON.stringify({ user });
+  const sessionStorageRef = getSessionStorage();
+  if (sessionStorageRef) {
+    sessionStorageRef.setItem(USER_SESSION_KEY, serialized);
+  }
+
+  const localStorageRef = getLocalStorage();
+  if (localStorageRef) {
+    localStorageRef.removeItem(USER_SESSION_KEY);
+  }
 }
 
 async function submitAuth(url) {
