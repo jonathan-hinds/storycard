@@ -27,6 +27,7 @@ const MOBILE_MIN_CANVAS_HEIGHT_PX = 320;
 const VIEWPORT_RESERVED_HEIGHT_PX = 140;
 const MIN_PANE_EDGE_PADDING = 0.2;
 const MIN_PANE_GAP = 0.36;
+const BASE_CAMERA_Z = 11.2;
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
   x: PREVIEW_BASE_POSITION.x,
   y: PREVIEW_BASE_POSITION.y,
@@ -370,16 +371,20 @@ export class DeckBuilderScene {
     this.interactionTarget.style.minHeight = `${height}px`;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
-    this.camera.position.set(0, -2.7, 11.2);
+    const verticalFovRadians = THREE.MathUtils.degToRad(this.camera.fov);
+    const paneHalfWidth = (this.layout.xSpacing + this.layout.cardWidth) * 0.5;
+    const minPaneCenterX = (MIN_PANE_GAP * 0.5) + paneHalfWidth;
+    const minVisibleWorldWidth = (2 * paneHalfWidth) + (2 * minPaneCenterX) + (2 * MIN_PANE_EDGE_PADDING);
+    const minCameraZForWidth = minVisibleWorldWidth / (2 * Math.tan(verticalFovRadians / 2) * Math.max(this.camera.aspect, 0.01));
+    const cameraZ = Math.max(BASE_CAMERA_Z, minCameraZForWidth);
+
+    this.camera.position.set(0, -2.7, cameraZ);
     this.camera.lookAt(0, -2.6, 0);
 
-    const verticalFovRadians = THREE.MathUtils.degToRad(this.camera.fov);
-    const visibleWorldHeight = 2 * Math.tan(verticalFovRadians / 2) * this.camera.position.z;
+    const visibleWorldHeight = 2 * Math.tan(verticalFovRadians / 2) * cameraZ;
     const visibleWorldWidth = visibleWorldHeight * this.camera.aspect;
-    const paneHalfWidth = (this.layout.xSpacing + this.layout.cardWidth) * 0.5;
     const maxPaneCenterX = Math.max(0, (visibleWorldWidth * 0.5) - paneHalfWidth - MIN_PANE_EDGE_PADDING);
     const preferredPaneCenterX = 3.2;
-    const minPaneCenterX = (MIN_PANE_GAP * 0.5) + paneHalfWidth;
     const paneCenterX = maxPaneCenterX >= minPaneCenterX
       ? THREE.MathUtils.clamp(preferredPaneCenterX, minPaneCenterX, maxPaneCenterX)
       : maxPaneCenterX;
