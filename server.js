@@ -35,6 +35,7 @@ const {
 const { UserServer } = require('./shared/user');
 const {
   createUser,
+  getUserById,
   loginUser,
   updateUserDeck,
 } = require('./shared/user/mongoStore');
@@ -64,6 +65,7 @@ const cardGameServer = new CardGameServer({
 });
 const userServer = new UserServer({
   createUser,
+  getUserById,
   loginUser,
   updateUserDeck,
 });
@@ -234,6 +236,19 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('password');
       const statusCode = isAuthError ? 401 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to login' });
+    }
+    return true;
+  }
+
+
+  const userMatch = pathname.match(/^\/api\/users\/([^/]+)$/);
+  if (req.method === 'GET' && userMatch) {
+    try {
+      const result = await userServer.getUser({ userId: userMatch[1] });
+      sendJson(res, 200, result);
+    } catch (error) {
+      const statusCode = error.message === 'user not found' ? 404 : error.message === 'invalid user id' ? 400 : 500;
+      sendJson(res, statusCode, { error: error.message || 'Unable to fetch user' });
     }
     return true;
   }

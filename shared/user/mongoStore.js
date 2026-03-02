@@ -194,8 +194,24 @@ async function updateUserDeck(userId, deck = {}) {
   return toPublicUser(updatedUser);
 }
 
+async function getUserById(userId) {
+  const { ObjectId } = getMongoClientConstructor();
+  if (typeof userId !== 'string' || !ObjectId.isValid(userId)) {
+    throw new Error('invalid user id');
+  }
+
+  const collection = await getCollection();
+  const user = await collection.findOne({ _id: new ObjectId(userId) });
+  if (!user) {
+    throw new Error('user not found');
+  }
+
+  return toPublicUser(user);
+}
+
 module.exports = {
   createUser,
+  getUserById,
   loginUser,
   updateUserDeck,
   normalizeUsername,
