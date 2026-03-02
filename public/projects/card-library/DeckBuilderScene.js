@@ -27,7 +27,7 @@ const MIN_PANE_EDGE_PADDING = 0.2;
 const MIN_PANE_GAP = 0.36;
 const BASE_CAMERA_Z = 11.2;
 const BASE_TITLE_Y = 1.2;
-const FILTER_PANEL_WIDTH = 7.8;
+const FILTER_PANEL_WIDTH = 6.5;
 const FILTER_PANEL_HEIGHT = 0.96;
 const FILTER_PANEL_TOP_MARGIN = 0.18;
 const FILTER_PANEL_GAP_FROM_TITLE = 0.22;
@@ -37,7 +37,7 @@ const DEFAULT_FILTER_PANEL_CONTROLS = Object.freeze({
   x: 0,
   y: 0,
   fontScale: 1,
-  opacity: 0.92,
+  opacity: 0.3,
 });
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
   x: 0,
