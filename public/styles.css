@@ -963,40 +963,47 @@ button {
 
 .user-match-stage-layout {
   min-height: 100vh;
-  padding: 1rem;
+  height: 100vh;
+  padding: 0;
   position: relative;
+  overflow: hidden;
+  background: #000000;
 }
 
 .user-match-back-button {
   position: absolute;
-  top: 1.15rem;
-  left: 1.15rem;
+  top: max(0.8rem, env(safe-area-inset-top));
+  left: max(0.8rem, env(safe-area-inset-left));
   z-index: 6;
 }
 
 .user-match-stage-wrap {
+  width: 100%;
+  height: 100%;
+  padding: 0;
   min-height: 0;
+  display: grid;
+  place-items: center;
+}
+
+.user-match-stage-wrap .phase-manager-turn-overlay {
+  inset: 0;
+  border-radius: 0;
 }
 
 .user-match-canvas {
-  min-height: 560px;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  border-radius: 0;
+  border: 0;
 }
 
 @media (max-width: 900px) {
-  .user-match-stage-layout {
-    padding: 1rem;
-  }
-
-  .user-match-stage-wrap {
-    min-height: 0;
-  }
-
-  .user-match-canvas {
-    min-height: 320px;
-  }
-
   .user-match-back-button {
-    top: 0.7rem;
-    left: 0.7rem;
+    top: max(0.6rem, env(safe-area-inset-top));
+    left: max(0.6rem, env(safe-area-inset-left));
   }
 }

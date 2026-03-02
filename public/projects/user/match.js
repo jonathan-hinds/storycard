@@ -133,6 +133,10 @@ if (!session) {
       matchmakingPayload: {
         deckCardIds: Array.isArray(session.user.deck?.cards) ? session.user.deck.cards : [],
       },
+      cardClientOptions: {
+        useContainerViewportSize: true,
+        fixedViewportAspectRatio: 16 / 9,
+      },
     },
   });
 

@@ -550,11 +550,36 @@ export class CardGameClient {
   }
 
   updateSize() {
-    const width = this.canvas.parentElement.clientWidth;
+    const containerWidth = this.canvas.parentElement.clientWidth;
+    const containerHeight = this.canvas.parentElement.clientHeight;
     const compactViewport = window.innerWidth <= 900;
     this.state.previewViewportVariant = compactViewport ? 'mobile' : 'desktop';
     const minHeight = compactViewport ? 320 : 460;
-    const height = Math.max(minHeight, window.innerHeight - 140);
+    const useContainerHeight = this.options.useContainerViewportSize === true;
+    let width = containerWidth;
+    let height = useContainerHeight
+      ? Math.max(1, containerHeight || minHeight)
+      : Math.max(minHeight, window.innerHeight - 140);
+
+    const fixedAspectRatio = Number.parseFloat(this.options.fixedViewportAspectRatio);
+    if (Number.isFinite(fixedAspectRatio) && fixedAspectRatio > 0 && useContainerHeight) {
+      const safeContainerWidth = Math.max(1, containerWidth);
+      const safeContainerHeight = Math.max(1, containerHeight);
+      const containerAspect = safeContainerWidth / safeContainerHeight;
+      if (containerAspect > fixedAspectRatio) {
+        height = safeContainerHeight;
+        width = height * fixedAspectRatio;
+      } else {
+        width = safeContainerWidth;
+        height = width / fixedAspectRatio;
+      }
+      this.canvas.style.width = `${Math.round(width)}px`;
+      this.canvas.style.height = `${Math.round(height)}px`;
+    } else {
+      this.canvas.style.width = '';
+      this.canvas.style.height = '';
+    }
+
     const aspect = width / height;
     const portraitIntensity = THREE.MathUtils.clamp((1 - aspect) / 0.45, 0, 1);
     this.state.portraitIntensity = portraitIntensity;
