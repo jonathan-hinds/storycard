@@ -12,12 +12,12 @@ const previewExportDownloadButton = document.getElementById('preview-export-down
 let deckBuilderScene;
 
 const filterPanelControls = {
-  width: 7.8,
+  width: 6.5,
   height: 0.96,
   x: 0,
   y: 0,
   fontScale: 1,
-  opacity: 0.92,
+  opacity: 0.3,
 };
 
 const sliderConfig = {
