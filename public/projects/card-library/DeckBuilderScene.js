@@ -21,6 +21,10 @@ const DRAG_START_DISTANCE_PX = 6;
 const PREVIEW_HIGHLIGHT_COLOR = 0x7bb0ff;
 const MIN_VIEWPORT_HEIGHT_PX = 320;
 const TARGET_VISIBLE_ROWS = 2;
+const COMPACT_BREAKPOINT_PX = 900;
+const DESKTOP_MIN_CANVAS_HEIGHT_PX = 460;
+const MOBILE_MIN_CANVAS_HEIGHT_PX = 320;
+const VIEWPORT_RESERVED_HEIGHT_PX = 140;
 
 function createTitleSprite(text) {
   const canvas = document.createElement('canvas');
@@ -327,9 +331,14 @@ export class DeckBuilderScene {
   }
 
   onResize() {
-    const width = Math.max(this.canvas.clientWidth, 300);
-    const height = Math.max(this.canvas.clientHeight, MIN_VIEWPORT_HEIGHT_PX);
+    const compactViewport = window.innerWidth <= COMPACT_BREAKPOINT_PX;
+    const minCanvasHeight = compactViewport ? MOBILE_MIN_CANVAS_HEIGHT_PX : DESKTOP_MIN_CANVAS_HEIGHT_PX;
+    const targetCanvasHeight = Math.max(minCanvasHeight, window.innerHeight - VIEWPORT_RESERVED_HEIGHT_PX);
+    const width = Math.max(this.canvas.clientWidth, this.interactionTarget.clientWidth, 300);
+    const height = Math.max(targetCanvasHeight, this.canvas.clientHeight, MIN_VIEWPORT_HEIGHT_PX);
     this.viewportHeight = height;
+    this.canvas.style.height = `${height}px`;
+    this.interactionTarget.style.minHeight = `${height}px`;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.position.set(0, -2.7, 11.2);
