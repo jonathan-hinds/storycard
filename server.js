@@ -36,6 +36,7 @@ const { UserServer } = require('./shared/user');
 const {
   createUser,
   loginUser,
+  updateUserDeck,
 } = require('./shared/user/mongoStore');
 
 const PORT = process.env.PORT || 3000;
@@ -64,6 +65,7 @@ const cardGameServer = new CardGameServer({
 const userServer = new UserServer({
   createUser,
   loginUser,
+  updateUserDeck,
 });
 
 function sendJson(res, statusCode, payload) {
@@ -232,6 +234,22 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('password');
       const statusCode = isAuthError ? 401 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to login' });
+    }
+    return true;
+  }
+
+  const userDeckMatch = pathname.match(/^\/api\/users\/([^/]+)\/deck$/);
+  if (req.method === 'PUT' && userDeckMatch) {
+    try {
+      const body = await readRequestJson(req);
+      const result = await userServer.saveDeck({ userId: userDeckMatch[1], deck: body.deck || {} });
+      sendJson(res, 200, result);
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('invalid user id')
+        || error.message.includes('deck cannot exceed');
+      const statusCode = error.message === 'user not found' ? 404 : isValidationError ? 400 : 500;
+      sendJson(res, statusCode, { error: error.message || 'Unable to save deck' });
     }
     return true;
   }

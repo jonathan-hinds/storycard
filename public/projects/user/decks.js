@@ -49,6 +49,45 @@ function ensureSession() {
 
 let session = ensureSession();
 
+
+async function persistDeck(summary) {
+  const response = await fetch(`/api/users/${encodeURIComponent(session.user.id)}/deck`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      deck: {
+        cards: summary.deckCardIds,
+        creatureCount: summary.creatureCount,
+      },
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || 'Unable to save deck');
+  }
+  if (payload?.user) {
+    session.user = payload.user;
+    saveSession(session);
+  }
+}
+
+function navigateBackHome() {
+  window.location.href = '/public/projects/user/home.html';
+}
+
+async function handleSaveDeck() {
+  const summary = deckBuilderScene?.getDeckSummary?.();
+  if (!summary) return;
+  try {
+    await persistDeck(summary);
+    updateDeckStatus(summary);
+    deckStatus.textContent = `${deckStatus.textContent} — Saved.`;
+  } catch (error) {
+    deckStatus.textContent = error.message || 'Unable to save deck.';
+    deckStatus.dataset.error = 'true';
+  }
+}
+
 function updateDeckStatus(summary) {
   const validity = summary.isValid ? '✅ Deck valid' : '⚠️ Deck invalid';
   const violations = summary.violations.length ? ` — ${summary.violations.join(' ')}` : '';
@@ -83,6 +122,8 @@ function renderCards(cards) {
     canvas: cardLibraryCanvas,
     interactionTarget: cardList,
     onDeckChange: updateDeckStatus,
+    onSave: handleSaveDeck,
+    onBack: navigateBackHome,
     filterPanelControls,
   });
   deckBuilderScene.setCards(cards);
