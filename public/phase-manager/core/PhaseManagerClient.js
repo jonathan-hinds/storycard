@@ -1220,7 +1220,6 @@ export class PhaseManagerClient {
         statusElement: statusEl,
         template,
         options: {
-          ...(this.options.cardClientOptions || {}),
           onCardStateCommitted: () => this.syncMatchStateAfterCardCommit(),
           onSpellResolutionRequested: (payload) => this.requestSpellResolutionStart(payload),
           onSpellRollResolved: ({ spellId, rollOutcome, rollData }) => this.submitSpellRoll({ spellId, rollOutcome, rollData }),
