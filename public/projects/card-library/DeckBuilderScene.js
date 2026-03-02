@@ -25,6 +25,22 @@ const COMPACT_BREAKPOINT_PX = 900;
 const DESKTOP_MIN_CANVAS_HEIGHT_PX = 460;
 const MOBILE_MIN_CANVAS_HEIGHT_PX = 320;
 const VIEWPORT_RESERVED_HEIGHT_PX = 140;
+const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
+  x: PREVIEW_BASE_POSITION.x,
+  y: PREVIEW_BASE_POSITION.y,
+  z: PREVIEW_BASE_POSITION.z + 1.44,
+  tiltX: -1.16,
+});
+
+function normalizePreviewControls(previewControls = {}, fallback = DEFAULT_PREVIEW_CONTROLS) {
+  const read = (value, key) => (Number.isFinite(value) ? value : fallback[key]);
+  return {
+    x: read(previewControls.x, 'x'),
+    y: read(previewControls.y, 'y'),
+    z: read(previewControls.z, 'z'),
+    tiltX: read(previewControls.tiltX, 'tiltX'),
+  };
+}
 
 function createTitleSprite(text) {
   const canvas = document.createElement('canvas');
@@ -72,7 +88,7 @@ function makePane(name, centerX) {
 }
 
 export class DeckBuilderScene {
-  constructor({ canvas, interactionTarget, onDeckChange }) {
+  constructor({ canvas, interactionTarget, onDeckChange, previewControls = null }) {
     this.canvas = canvas;
     this.interactionTarget = interactionTarget;
     this.onDeckChange = onDeckChange;
@@ -100,6 +116,13 @@ export class DeckBuilderScene {
     this.previewOriginPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
     this.previewTransition = { isActive: false, direction: 'toPreview', startedAt: 0, durationMs: 0 };
     this.previewStartedAt = 0;
+    this.previewControls = normalizePreviewControls({
+      x: PREVIEW_BASE_POSITION.x,
+      y: PREVIEW_BASE_POSITION.y,
+      z: PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+      tiltX: this.previewTuning.rotationX,
+      ...(previewControls || {}),
+    });
 
     this.libraryPane = makePane('library', -3.2);
     this.deckPane = makePane('deck', 3.2);
@@ -151,6 +174,10 @@ export class DeckBuilderScene {
     this.clearEntries(this.libraryPane);
     this.clearEntries(this.deckPane);
     this.renderer.dispose();
+  }
+
+  setPreviewControls(nextControls = {}) {
+    this.previewControls = normalizePreviewControls(nextControls, this.previewControls);
   }
 
   setCards(cards) {
@@ -253,11 +280,11 @@ export class DeckBuilderScene {
     this.previewOriginPose.position.copy(this.previewCard.position);
     this.previewOriginPose.rotation.copy(this.previewCard.rotation);
     this.previewPose.position.set(
-      this.camera.position.x + PREVIEW_BASE_POSITION.x,
-      this.camera.position.y + PREVIEW_BASE_POSITION.y,
-      PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+      this.camera.position.x + this.previewControls.x,
+      this.camera.position.y + this.previewControls.y,
+      this.previewControls.z,
     );
-    this.previewPose.rotation.set(this.previewTuning.rotationX, 0, 0);
+    this.previewPose.rotation.set(this.previewControls.tiltX, 0, 0);
     beginPreviewTransition(this, this.previewStartedAt);
   }
 
@@ -494,10 +521,11 @@ export class DeckBuilderScene {
 
     if (this.previewCard) {
       this.previewPose.position.set(
-        this.camera.position.x + PREVIEW_BASE_POSITION.x,
-        this.camera.position.y + PREVIEW_BASE_POSITION.y,
-        PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
+        this.camera.position.x + this.previewControls.x,
+        this.camera.position.y + this.previewControls.y,
+        this.previewControls.z,
       );
+      this.previewPose.rotation.set(this.previewControls.tiltX, 0, 0);
       const pose = getPreviewPose({
         mode: this.previewTransition.direction === 'fromPreview' ? 'preview-return' : 'preview',
         time: performance.now(),

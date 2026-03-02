@@ -6,7 +6,95 @@ const cardList = document.getElementById('user-card-list');
 const cardLibraryCanvas = document.getElementById('user-card-library-canvas');
 const cardLibraryStage = document.getElementById('user-card-library-stage');
 const deckStatus = document.getElementById('user-deck-status');
+const previewXSlider = document.getElementById('preview-x-slider');
+const previewYSlider = document.getElementById('preview-y-slider');
+const previewZSlider = document.getElementById('preview-z-slider');
+const previewTiltSlider = document.getElementById('preview-tilt-slider');
+const previewXValue = document.getElementById('preview-x-value');
+const previewYValue = document.getElementById('preview-y-value');
+const previewZValue = document.getElementById('preview-z-value');
+const previewTiltValue = document.getElementById('preview-tilt-value');
+const previewExportOutput = document.getElementById('preview-export-output');
+const previewExportCopyButton = document.getElementById('preview-export-copy');
+const previewExportDownloadButton = document.getElementById('preview-export-download');
 let deckBuilderScene;
+
+const previewControls = {
+  x: 0,
+  y: 1.52,
+  z: 2.52,
+  tiltX: -1.16,
+};
+
+function toFixedNumber(value) {
+  return Number.parseFloat(value).toFixed(2);
+}
+
+function getPreviewControlsJson() {
+  return JSON.stringify(previewControls, null, 2);
+}
+
+function syncPreviewControlsView() {
+  if (previewXSlider) previewXSlider.value = String(previewControls.x);
+  if (previewYSlider) previewYSlider.value = String(previewControls.y);
+  if (previewZSlider) previewZSlider.value = String(previewControls.z);
+  if (previewTiltSlider) previewTiltSlider.value = String(previewControls.tiltX);
+
+  if (previewXValue) previewXValue.textContent = toFixedNumber(previewControls.x);
+  if (previewYValue) previewYValue.textContent = toFixedNumber(previewControls.y);
+  if (previewZValue) previewZValue.textContent = toFixedNumber(previewControls.z);
+  if (previewTiltValue) previewTiltValue.textContent = `${toFixedNumber(previewControls.tiltX)} rad`;
+  if (previewExportOutput) previewExportOutput.value = getPreviewControlsJson();
+}
+
+function applyPreviewControls() {
+  deckBuilderScene?.setPreviewControls(previewControls);
+  syncPreviewControlsView();
+}
+
+function bindSlider(slider, key) {
+  if (!slider) return;
+  slider.addEventListener('input', () => {
+    previewControls[key] = Number.parseFloat(slider.value);
+    applyPreviewControls();
+  });
+}
+
+bindSlider(previewXSlider, 'x');
+bindSlider(previewYSlider, 'y');
+bindSlider(previewZSlider, 'z');
+bindSlider(previewTiltSlider, 'tiltX');
+
+previewExportCopyButton?.addEventListener('click', async () => {
+  const json = getPreviewControlsJson();
+  previewExportOutput.value = json;
+  try {
+    await navigator.clipboard.writeText(json);
+    previewExportCopyButton.textContent = 'Copied!';
+    window.setTimeout(() => {
+      previewExportCopyButton.textContent = 'Copy JSON';
+    }, 1200);
+  } catch {
+    previewExportCopyButton.textContent = 'Copy failed';
+    window.setTimeout(() => {
+      previewExportCopyButton.textContent = 'Copy JSON';
+    }, 1200);
+  }
+});
+
+previewExportDownloadButton?.addEventListener('click', () => {
+  const blob = new Blob([getPreviewControlsJson()], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'deck-preview-tuning.json';
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+});
+
+syncPreviewControlsView();
 
 function loadSession() {
   try {
@@ -69,6 +157,7 @@ function renderCards(cards) {
     canvas: cardLibraryCanvas,
     interactionTarget: cardList,
     onDeckChange: updateDeckStatus,
+    previewControls,
   });
   deckBuilderScene.setCards(cards);
   deckBuilderScene.setDeckCardIds(session.user.deck?.cards || []);
