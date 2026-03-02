@@ -28,6 +28,9 @@ const MIN_PANE_GAP = 0.36;
 const BASE_CAMERA_Z = 11.2;
 const BASE_TITLE_Y = 1.2;
 const TITLE_TOP_MARGIN = 0.4;
+const FILTER_PANEL_WIDTH = 7.8;
+const FILTER_PANEL_HEIGHT = 0.96;
+const FILTER_PANEL_GAP_FROM_TITLE = 0.7;
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
   x: 0,
   y: 0.01,
@@ -63,6 +66,17 @@ function createTitleSprite(text) {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
   sprite.scale.set(3.4, 0.74, 1);
   return sprite;
+}
+
+function createFilterPanelSprite() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 460;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+  sprite.scale.set(FILTER_PANEL_WIDTH, FILTER_PANEL_HEIGHT, 1);
+  return { sprite, canvas, texture };
 }
 
 function createCountSprite(count) {
@@ -141,8 +155,12 @@ export class DeckBuilderScene {
 
     this.titleLibrary = createTitleSprite('All Cards');
     this.titleDeck = createTitleSprite('Deck');
+    this.filterPanel = createFilterPanelSprite();
+    this.filterHitAreas = [];
     if (this.titleLibrary) this.scene.add(this.titleLibrary);
     if (this.titleDeck) this.scene.add(this.titleDeck);
+    this.scene.add(this.filterPanel.sprite);
+    this.redrawFilterPanel();
 
     const hemi = new THREE.HemisphereLight(0xdce8ff, 0x1a1f2c, 1.1);
     hemi.position.set(0, 18, 4);
@@ -175,6 +193,8 @@ export class DeckBuilderScene {
     window.removeEventListener('resize', this.onResize);
     this.clearEntries(this.libraryPane);
     this.clearEntries(this.deckPane);
+    this.filterPanel.texture.dispose();
+    this.filterPanel.sprite.material?.dispose?.();
     this.renderer.dispose();
   }
 
@@ -196,6 +216,102 @@ export class DeckBuilderScene {
       types: readSet(filters.types, this.libraryFilters.types),
     };
     this.applyLibraryFilters();
+    this.redrawFilterPanel();
+  }
+
+  toggleLibraryFilter(group, value) {
+    const nextSet = new Set(this.libraryFilters[group]);
+    if (nextSet.has(value)) nextSet.delete(value);
+    else nextSet.add(value);
+    this.setLibraryFilters({ ...this.libraryFilters, [group]: nextSet });
+  }
+
+  redrawFilterPanel() {
+    const { canvas, texture } = this.filterPanel;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = 'rgba(7, 13, 26, 0.92)';
+    context.strokeStyle = 'rgba(148, 176, 255, 0.58)';
+    context.lineWidth = 5;
+    context.beginPath();
+    context.roundRect(30, 30, canvas.width - 60, canvas.height - 60, 32);
+    context.fill();
+    context.stroke();
+
+    context.fillStyle = '#e8efff';
+    context.font = '700 56px "Trebuchet MS", "Segoe UI", sans-serif';
+    context.textAlign = 'left';
+    context.textBaseline = 'middle';
+    context.fillText('All Cards Filters', 90, 92);
+
+    const groups = [
+      {
+        label: 'Card kind',
+        key: 'kinds',
+        options: [
+          { value: 'creature', label: 'Creature' },
+          { value: 'spell', label: 'Spell' },
+        ],
+        startX: 90,
+      },
+      {
+        label: 'Type',
+        key: 'types',
+        options: [
+          { value: 'fire', label: 'Fire' },
+          { value: 'water', label: 'Water' },
+          { value: 'nature', label: 'Nature' },
+          { value: 'arcane', label: 'Arcane' },
+        ],
+        startX: 910,
+      },
+    ];
+
+    this.filterHitAreas = [];
+    groups.forEach((group) => {
+      context.fillStyle = '#a8bee7';
+      context.font = '600 38px "Trebuchet MS", "Segoe UI", sans-serif';
+      context.fillText(group.label, group.startX, 162);
+      const boxSize = 52;
+      const spacingX = 260;
+      const y = 242;
+      group.options.forEach((option, index) => {
+        const x = group.startX + (index * spacingX);
+        const checked = this.libraryFilters[group.key].has(option.value);
+        context.fillStyle = 'rgba(20, 30, 54, 0.95)';
+        context.strokeStyle = checked ? '#98c0ff' : '#6f7c95';
+        context.lineWidth = 4;
+        context.beginPath();
+        context.roundRect(x, y, boxSize, boxSize, 12);
+        context.fill();
+        context.stroke();
+
+        if (checked) {
+          context.strokeStyle = '#d8e7ff';
+          context.lineWidth = 6;
+          context.beginPath();
+          context.moveTo(x + 12, y + 28);
+          context.lineTo(x + 24, y + 40);
+          context.lineTo(x + 42, y + 14);
+          context.stroke();
+        }
+
+        context.fillStyle = '#eef4ff';
+        context.font = '600 36px "Trebuchet MS", "Segoe UI", sans-serif';
+        context.fillText(option.label, x + boxSize + 14, y + (boxSize * 0.5));
+        this.filterHitAreas.push({
+          x,
+          y,
+          width: boxSize,
+          height: boxSize,
+          group: group.key,
+          value: option.value,
+        });
+      });
+    });
+
+    texture.needsUpdate = true;
   }
 
   applyLibraryFilters() {
@@ -420,6 +536,24 @@ export class DeckBuilderScene {
     this.camera.updateProjectionMatrix();
     if (this.titleLibrary) this.titleLibrary.position.set(this.libraryPane.centerX, BASE_TITLE_Y + this.paneVerticalOffset, 0.4);
     if (this.titleDeck) this.titleDeck.position.set(this.deckPane.centerX, BASE_TITLE_Y + this.paneVerticalOffset, 0.4);
+    this.filterPanel.sprite.position.set(0, (BASE_TITLE_Y + this.paneVerticalOffset) + FILTER_PANEL_GAP_FROM_TITLE, 0.5);
+  }
+
+  hitFilterControl(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const [hit] = this.raycaster.intersectObject(this.filterPanel.sprite, true);
+    if (!hit?.uv) return null;
+    const panelX = hit.uv.x * this.filterPanel.canvas.width;
+    const panelY = (1 - hit.uv.y) * this.filterPanel.canvas.height;
+    return this.filterHitAreas.find((area) => (
+      panelX >= area.x
+      && panelX <= area.x + area.width
+      && panelY >= area.y
+      && panelY <= area.y + area.height
+    )) || null;
   }
 
   raycastEntry(event) {
@@ -443,6 +577,11 @@ export class DeckBuilderScene {
   }
 
   onPointerDown(event) {
+    const filterHit = this.hitFilterControl(event);
+    if (filterHit) {
+      this.toggleLibraryFilter(filterHit.group, filterHit.value);
+      return;
+    }
     this.activePointerId = event.pointerId;
     this.interactionTarget.setPointerCapture(event.pointerId);
     this.pointerDown = { x: event.clientX, y: event.clientY };
