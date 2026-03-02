@@ -697,6 +697,15 @@ export class PhaseManagerClient {
   positionReadyButtonDisplay() {
     if (!this.readyButtonDisplay || !this.client?.camera) return;
     const { panelMesh, textMesh } = this.readyButtonDisplay;
+    const viewport = this.getUpkeepViewportSize();
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches === true;
+    const shouldApplyMobileSafeArea = coarsePointer || viewport.width <= 900;
+    const safeRightInsetPx = shouldApplyMobileSafeArea ? 14 : 0;
+    const safeBottomInsetPx = shouldApplyMobileSafeArea ? 90 : 0;
+    const maxSafeX = THREE.MathUtils.clamp((viewport.width - safeRightInsetPx) / Math.max(viewport.width, 1), 0, 1);
+    const maxSafeY = THREE.MathUtils.clamp((viewport.height - safeBottomInsetPx) / Math.max(viewport.height, 1), 0, 1);
+    const safeX = Math.min(this.readyButtonPosition.x, maxSafeX);
+    const safeY = Math.min(this.readyButtonPosition.y, maxSafeY);
     const depth = Math.max(Math.abs(this.readyButtonPosition.z), 0.001);
     const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
     const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
@@ -707,8 +716,8 @@ export class PhaseManagerClient {
     const panelWorldHeight = DEFAULT_READY_BUTTON_PANEL_SIZE.height * scaleFactor * heightScale;
     const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
     const panelHalfNormalizedY = panelWorldHeight / Math.max(currentFrustum.halfHeight * 2, 0.001);
-    const targetNormalizedX = THREE.MathUtils.clamp((this.readyButtonPosition.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
-    const targetNormalizedY = THREE.MathUtils.clamp(1 - (this.readyButtonPosition.y * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
+    const targetNormalizedX = THREE.MathUtils.clamp((safeX * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
+    const targetNormalizedY = THREE.MathUtils.clamp(1 - (safeY * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
     const x = targetNormalizedX * currentFrustum.halfWidth;
     const y = targetNormalizedY * currentFrustum.halfHeight;
     panelMesh.position.set(x, y, this.readyButtonPosition.z);
