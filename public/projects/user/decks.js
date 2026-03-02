@@ -11,28 +11,57 @@ const previewExportCopyButton = document.getElementById('preview-export-copy');
 const previewExportDownloadButton = document.getElementById('preview-export-download');
 let deckBuilderScene;
 
-const previewControls = {
+const filterPanelControls = {
+  width: 7.8,
+  height: 0.96,
   x: 0,
-  y: 0.01,
-  z: 8,
-  tiltX: 0,
+  y: 0,
+  fontScale: 1,
+  opacity: 0.92,
 };
 
-function getPreviewControlsJson() {
-  return JSON.stringify(previewControls, null, 2);
+const sliderConfig = {
+  width: { elementId: 'filter-panel-width', outputId: 'filter-panel-width-value', decimals: 2 },
+  height: { elementId: 'filter-panel-height', outputId: 'filter-panel-height-value', decimals: 2 },
+  x: { elementId: 'filter-panel-x', outputId: 'filter-panel-x-value', decimals: 2 },
+  y: { elementId: 'filter-panel-y', outputId: 'filter-panel-y-value', decimals: 2 },
+  fontScale: { elementId: 'filter-panel-font-scale', outputId: 'filter-panel-font-scale-value', decimals: 2 },
+  opacity: { elementId: 'filter-panel-opacity', outputId: 'filter-panel-opacity-value', decimals: 2 },
+};
+
+function getExportJson() {
+  return JSON.stringify({ filterPanel: filterPanelControls }, null, 2);
 }
 
-function syncPreviewControlsView() {
-  if (previewExportOutput) previewExportOutput.value = getPreviewControlsJson();
+function syncExportView() {
+  if (previewExportOutput) previewExportOutput.value = getExportJson();
 }
 
-function applyPreviewControls() {
-  deckBuilderScene?.setPreviewControls(previewControls);
-  syncPreviewControlsView();
+function applyFilterPanelControls() {
+  deckBuilderScene?.setFilterPanelControls(filterPanelControls);
+  syncExportView();
 }
+
+function bindSlider(controlKey, config) {
+  const input = document.getElementById(config.elementId);
+  const output = document.getElementById(config.outputId);
+  if (!input || !output) return;
+  const update = () => {
+    const value = Number.parseFloat(input.value);
+    if (!Number.isFinite(value)) return;
+    filterPanelControls[controlKey] = value;
+    output.textContent = value.toFixed(config.decimals);
+    applyFilterPanelControls();
+  };
+  output.textContent = Number(filterPanelControls[controlKey]).toFixed(config.decimals);
+  input.value = String(filterPanelControls[controlKey]);
+  input.addEventListener('input', update);
+}
+
+Object.entries(sliderConfig).forEach(([controlKey, config]) => bindSlider(controlKey, config));
 
 previewExportCopyButton?.addEventListener('click', async () => {
-  const json = getPreviewControlsJson();
+  const json = getExportJson();
   previewExportOutput.value = json;
   try {
     await navigator.clipboard.writeText(json);
@@ -49,18 +78,18 @@ previewExportCopyButton?.addEventListener('click', async () => {
 });
 
 previewExportDownloadButton?.addEventListener('click', () => {
-  const blob = new Blob([getPreviewControlsJson()], { type: 'application/json' });
+  const blob = new Blob([getExportJson()], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = 'deck-preview-tuning.json';
+  anchor.download = 'deck-filter-panel-layout.json';
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
 });
 
-syncPreviewControlsView();
+syncExportView();
 
 function loadSession() {
   try {
@@ -123,10 +152,11 @@ function renderCards(cards) {
     canvas: cardLibraryCanvas,
     interactionTarget: cardList,
     onDeckChange: updateDeckStatus,
-    previewControls,
+    filterPanelControls,
   });
   deckBuilderScene.setCards(cards);
   deckBuilderScene.setDeckCardIds(session.user.deck?.cards || []);
+  applyFilterPanelControls();
 }
 
 async function loadCards() {

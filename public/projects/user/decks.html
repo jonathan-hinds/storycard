@@ -11,6 +11,28 @@
       <h1>Deck Builder</h1>
       <p class="cards-library-caption">Drag cards from the left library into the right deck panel. Drag back out to remove one copy at a time.</p>
       <p id="user-deck-status" class="cards-library-caption user-deck-status"></p>
+      <div class="deck-builder-tuning-panel" aria-label="Filter panel tuning controls">
+        <h2>Filter panel layout tuning</h2>
+        <div class="deck-builder-slider-grid">
+          <label>Panel width <input id="filter-panel-width" type="range" min="3" max="14" step="0.1" value="7.8" /></label>
+          <output id="filter-panel-width-value" for="filter-panel-width">7.80</output>
+          <label>Panel height <input id="filter-panel-height" type="range" min="0.4" max="3" step="0.02" value="0.96" /></label>
+          <output id="filter-panel-height-value" for="filter-panel-height">0.96</output>
+          <label>Panel X position <input id="filter-panel-x" type="range" min="-6" max="6" step="0.05" value="0" /></label>
+          <output id="filter-panel-x-value" for="filter-panel-x">0.00</output>
+          <label>Panel Y position <input id="filter-panel-y" type="range" min="-2" max="2" step="0.02" value="0" /></label>
+          <output id="filter-panel-y-value" for="filter-panel-y">0.00</output>
+          <label>All panel font size <input id="filter-panel-font-scale" type="range" min="0.45" max="2.4" step="0.01" value="1" /></label>
+          <output id="filter-panel-font-scale-value" for="filter-panel-font-scale">1.00</output>
+          <label>Panel opacity <input id="filter-panel-opacity" type="range" min="0" max="1" step="0.01" value="0.92" /></label>
+          <output id="filter-panel-opacity-value" for="filter-panel-opacity">0.92</output>
+        </div>
+        <div class="deck-builder-export-row">
+          <button id="preview-export-copy" type="button">Copy JSON</button>
+          <button id="preview-export-download" type="button">Download JSON</button>
+        </div>
+        <textarea id="preview-export-output" class="deck-builder-export-output" readonly aria-label="Deck builder export JSON"></textarea>
+      </div>
       <div id="user-card-list" class="cards-list">
         <div id="user-card-library-stage" class="cards-library-stage-wrap">
           <canvas id="user-card-library-canvas" class="cards-library-canvas" aria-label="Deck builder 3D card library scene"></canvas>

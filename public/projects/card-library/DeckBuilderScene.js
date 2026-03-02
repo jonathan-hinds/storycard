@@ -31,6 +31,14 @@ const FILTER_PANEL_WIDTH = 7.8;
 const FILTER_PANEL_HEIGHT = 0.96;
 const FILTER_PANEL_TOP_MARGIN = 0.18;
 const FILTER_PANEL_GAP_FROM_TITLE = 0.22;
+const DEFAULT_FILTER_PANEL_CONTROLS = Object.freeze({
+  width: FILTER_PANEL_WIDTH,
+  height: FILTER_PANEL_HEIGHT,
+  x: 0,
+  y: 0,
+  fontScale: 1,
+  opacity: 0.92,
+});
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
   x: 0,
   y: 0.01,
@@ -45,6 +53,18 @@ function normalizePreviewControls(previewControls = {}, fallback = DEFAULT_PREVI
     y: read(previewControls.y, 'y'),
     z: read(previewControls.z, 'z'),
     tiltX: read(previewControls.tiltX, 'tiltX'),
+  };
+}
+
+function normalizeFilterPanelControls(filterPanelControls = {}, fallback = DEFAULT_FILTER_PANEL_CONTROLS) {
+  const read = (value, key) => (Number.isFinite(value) ? value : fallback[key]);
+  return {
+    width: Math.max(2.8, read(filterPanelControls.width, 'width')),
+    height: Math.max(0.4, read(filterPanelControls.height, 'height')),
+    x: read(filterPanelControls.x, 'x'),
+    y: read(filterPanelControls.y, 'y'),
+    fontScale: THREE.MathUtils.clamp(read(filterPanelControls.fontScale, 'fontScale'), 0.45, 2.4),
+    opacity: THREE.MathUtils.clamp(read(filterPanelControls.opacity, 'opacity'), 0, 1),
   };
 }
 
@@ -77,7 +97,7 @@ function createFilterPanelSprite() {
   texture.needsUpdate = true;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
   sprite.scale.set(FILTER_PANEL_WIDTH, FILTER_PANEL_HEIGHT, 1);
-  return { sprite, canvas, texture };
+  return { sprite, canvas, texture, texturePixelsPerUnit };
 }
 
 function createCountSprite(count) {
@@ -106,7 +126,7 @@ function makePane(name, centerX) {
 }
 
 export class DeckBuilderScene {
-  constructor({ canvas, interactionTarget, onDeckChange, previewControls = null }) {
+  constructor({ canvas, interactionTarget, onDeckChange, previewControls = null, filterPanelControls = null }) {
     this.canvas = canvas;
     this.interactionTarget = interactionTarget;
     this.onDeckChange = onDeckChange;
@@ -134,6 +154,7 @@ export class DeckBuilderScene {
     this.previewTransition = { isActive: false, direction: 'toPreview', startedAt: 0, durationMs: 0 };
     this.previewStartedAt = 0;
     this.previewControls = normalizePreviewControls(previewControls || {}, DEFAULT_PREVIEW_CONTROLS);
+    this.filterPanelControls = normalizeFilterPanelControls(filterPanelControls || {}, DEFAULT_FILTER_PANEL_CONTROLS);
 
     this.libraryPane = makePane('library', -3.2);
     this.deckPane = makePane('deck', 3.2);
@@ -203,6 +224,12 @@ export class DeckBuilderScene {
     this.previewControls = normalizePreviewControls(nextControls, this.previewControls);
   }
 
+  setFilterPanelControls(nextControls = {}) {
+    this.filterPanelControls = normalizeFilterPanelControls(nextControls, this.filterPanelControls);
+    this.redrawFilterPanel();
+    this.onResize();
+  }
+
   setCards(cards) {
     this.libraryCards = Array.isArray(cards) ? [...cards] : [];
     this.applyLibraryFilters();
@@ -228,26 +255,36 @@ export class DeckBuilderScene {
   }
 
   redrawFilterPanel() {
-    const { canvas, texture } = this.filterPanel;
+    const { canvas, texture, texturePixelsPerUnit } = this.filterPanel;
+    const { width, height, opacity, fontScale } = this.filterPanelControls;
+    const nextCanvasWidth = Math.max(2, Math.round(width * texturePixelsPerUnit));
+    const nextCanvasHeight = Math.max(2, Math.round(height * texturePixelsPerUnit));
+    if (canvas.width !== nextCanvasWidth || canvas.height !== nextCanvasHeight) {
+      canvas.width = nextCanvasWidth;
+      canvas.height = nextCanvasHeight;
+    }
     const context = canvas.getContext('2d');
     if (!context) return;
     const designWidth = 2048;
     const designHeight = 460;
-    const scaleX = canvas.width / designWidth;
-    const scaleY = canvas.height / designHeight;
-    const toPanelX = (x) => x * scaleX;
-    const toPanelY = (y) => y * scaleY;
+    const uniformScale = Math.min(canvas.width / designWidth, canvas.height / designHeight);
+    const contentWidth = designWidth * uniformScale;
+    const contentHeight = designHeight * uniformScale;
+    const xOffset = (canvas.width - contentWidth) * 0.5;
+    const yOffset = (canvas.height - contentHeight) * 0.5;
+    const toPanelX = (x) => xOffset + (x * uniformScale);
+    const toPanelY = (y) => yOffset + (y * uniformScale);
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = 'rgba(7, 13, 26, 0.92)';
+    context.fillStyle = `rgba(7, 13, 26, ${opacity})`;
     context.strokeStyle = 'rgba(148, 176, 255, 0.58)';
-    context.lineWidth = 5 * scaleY;
+    context.lineWidth = 5 * uniformScale;
     context.beginPath();
-    context.roundRect(toPanelX(30), toPanelY(30), toPanelX(designWidth - 60), toPanelY(designHeight - 60), 32 * scaleY);
+    context.roundRect(toPanelX(30), toPanelY(30), (designWidth - 60) * uniformScale, (designHeight - 60) * uniformScale, 32 * uniformScale);
     context.fill();
     context.stroke();
 
     context.fillStyle = '#e8efff';
-    context.font = `700 ${56 * scaleY}px "Trebuchet MS", "Segoe UI", sans-serif`;
+    context.font = `700 ${56 * uniformScale * fontScale}px "Trebuchet MS", "Segoe UI", sans-serif`;
     context.textAlign = 'left';
     context.textBaseline = 'middle';
     context.fillText('All Cards Filters', toPanelX(90), toPanelY(92));
@@ -278,35 +315,35 @@ export class DeckBuilderScene {
     this.filterHitAreas = [];
     groups.forEach((group) => {
       context.fillStyle = '#a8bee7';
-      context.font = `600 ${38 * scaleY}px "Trebuchet MS", "Segoe UI", sans-serif`;
+      context.font = `600 ${38 * uniformScale * fontScale}px "Trebuchet MS", "Segoe UI", sans-serif`;
       context.fillText(group.label, toPanelX(group.startX), toPanelY(162));
-      const boxSize = toPanelY(52);
-      const spacingX = toPanelX(260);
+      const boxSize = 52 * uniformScale;
+      const spacingX = 260 * uniformScale;
       const y = toPanelY(242);
       group.options.forEach((option, index) => {
-        const x = toPanelX(group.startX) + (index * spacingX);
+        const x = toPanelX(group.startX + (index * 260));
         const checked = this.libraryFilters[group.key].has(option.value);
         context.fillStyle = 'rgba(20, 30, 54, 0.95)';
         context.strokeStyle = checked ? '#98c0ff' : '#6f7c95';
-        context.lineWidth = 4 * scaleY;
+        context.lineWidth = 4 * uniformScale;
         context.beginPath();
-        context.roundRect(x, y, boxSize, boxSize, 12 * scaleY);
+        context.roundRect(x, y, boxSize, boxSize, 12 * uniformScale);
         context.fill();
         context.stroke();
 
         if (checked) {
           context.strokeStyle = '#d8e7ff';
-          context.lineWidth = 6 * scaleY;
+          context.lineWidth = 6 * uniformScale;
           context.beginPath();
-          context.moveTo(x + toPanelX(12), y + toPanelY(28));
-          context.lineTo(x + toPanelX(24), y + toPanelY(40));
-          context.lineTo(x + toPanelX(42), y + toPanelY(14));
+          context.moveTo(x + (12 * uniformScale), y + (28 * uniformScale));
+          context.lineTo(x + (24 * uniformScale), y + (40 * uniformScale));
+          context.lineTo(x + (42 * uniformScale), y + (14 * uniformScale));
           context.stroke();
         }
 
         context.fillStyle = '#eef4ff';
-        context.font = `600 ${36 * scaleY}px "Trebuchet MS", "Segoe UI", sans-serif`;
-        context.fillText(option.label, x + boxSize + toPanelX(14), y + (boxSize * 0.5));
+        context.font = `600 ${36 * uniformScale * fontScale}px "Trebuchet MS", "Segoe UI", sans-serif`;
+        context.fillText(option.label, x + boxSize + (14 * uniformScale), y + (boxSize * 0.5));
         this.filterHitAreas.push({
           x,
           y,
@@ -526,8 +563,8 @@ export class DeckBuilderScene {
 
     const visibleWorldHeight = 2 * Math.tan(verticalFovRadians / 2) * cameraZ;
     const visibleWorldTop = this.camera.position.y + (visibleWorldHeight * 0.5);
-    const filterPanelY = visibleWorldTop - FILTER_PANEL_TOP_MARGIN - (FILTER_PANEL_HEIGHT * 0.5);
-    const headerY = filterPanelY - (FILTER_PANEL_HEIGHT * 0.5) - FILTER_PANEL_GAP_FROM_TITLE;
+    const filterPanelY = visibleWorldTop - FILTER_PANEL_TOP_MARGIN - (this.filterPanelControls.height * 0.5) + this.filterPanelControls.y;
+    const headerY = filterPanelY - (this.filterPanelControls.height * 0.5) - FILTER_PANEL_GAP_FROM_TITLE;
     this.paneVerticalOffset = headerY - BASE_TITLE_Y;
     const visibleWorldWidth = visibleWorldHeight * this.camera.aspect;
     const maxPaneCenterX = Math.max(0, (visibleWorldWidth * 0.5) - paneHalfWidth - MIN_PANE_EDGE_PADDING);
@@ -544,7 +581,8 @@ export class DeckBuilderScene {
     this.camera.updateProjectionMatrix();
     if (this.titleLibrary) this.titleLibrary.position.set(this.libraryPane.centerX, headerY, 0.4);
     if (this.titleDeck) this.titleDeck.position.set(this.deckPane.centerX, headerY, 0.4);
-    this.filterPanel.sprite.position.set(0, filterPanelY, 0.5);
+    this.filterPanel.sprite.scale.set(this.filterPanelControls.width, this.filterPanelControls.height, 1);
+    this.filterPanel.sprite.position.set(this.filterPanelControls.x, filterPanelY, 0.5);
   }
 
   hitFilterControl(event) {
