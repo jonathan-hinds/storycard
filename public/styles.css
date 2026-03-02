@@ -819,6 +819,71 @@ button {
 }
 
 
+
+.deck-builder-tuning-panel {
+  margin: 0.8rem 1rem 0;
+  padding: 0.75rem;
+  border: 1px solid #33405f;
+  border-radius: 0.6rem;
+  background: #121a2b;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.deck-builder-tuning-panel h2 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.deck-builder-slider-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.2rem;
+  gap: 0.5rem 0.7rem;
+  align-items: center;
+}
+
+.deck-builder-slider-grid label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: #d2dbf2;
+}
+
+.deck-builder-slider-grid input[type='range'] {
+  width: 100%;
+}
+
+.deck-builder-slider-grid output {
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  color: #9ab0d8;
+}
+
+.deck-builder-export-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.deck-builder-export-row button {
+  border: 1px solid #33405f;
+  background: #1a253d;
+  color: #d2dbf2;
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+}
+
+.deck-builder-export-output {
+  width: 100%;
+  min-height: 180px;
+  border: 1px solid #33405f;
+  border-radius: 0.45rem;
+  background: #0e1526;
+  color: #d2dbf2;
+  padding: 0.45rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  resize: vertical;
+}
 .user-deck-status {
   margin-top: 0.35rem;
   font-weight: 600;
