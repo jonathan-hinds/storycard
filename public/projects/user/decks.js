@@ -153,8 +153,11 @@ function renderCards(cards) {
     onBack: navigateBackHome,
     filterPanelControls,
   });
+  const initialDeckCardIds = Array.isArray(session.user.deck?.cards)
+    ? [...session.user.deck.cards]
+    : [];
   deckBuilderScene.setCards(cards);
-  deckBuilderScene.setDeckCardIds(session.user.deck?.cards || []);
+  deckBuilderScene.setDeckCardIds(initialDeckCardIds);
   applyFilterPanelControls();
 }
 
