@@ -1,6 +1,8 @@
 import { PhaseManagerClient } from '/public/phase-manager/index.js';
 
 const USER_SESSION_KEY = 'storycard-user-session';
+const backButton = document.getElementById('user-match-back-button');
+let hasRequestedExit = false;
 
 function loadSession() {
   try {
@@ -76,14 +78,34 @@ function createPhaseManagerElements() {
   };
 }
 
+async function requestMatchExit(playerId) {
+  if (!playerId || hasRequestedExit) return;
+  hasRequestedExit = true;
+
+  const payload = JSON.stringify({ playerId });
+  if (navigator.sendBeacon) {
+    const blob = new Blob([payload], { type: 'application/json' });
+    navigator.sendBeacon('/api/phase-manager/matchmaking/reset', blob);
+    return;
+  }
+
+  await fetch('/api/phase-manager/matchmaking/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: payload,
+    keepalive: true,
+  }).catch(() => {});
+}
+
 const session = loadSession();
 if (!session) {
   window.location.replace('/public/projects/user/index.html');
 } else {
+  const playerId = session.user.id;
   const phaseManager = new PhaseManagerClient({
     elements: createPhaseManagerElements(),
     options: {
-      playerId: session.user.id,
+      playerId,
       matchmakingPayload: {
         deckCardIds: Array.isArray(session.user.deck?.cards) ? session.user.deck.cards : [],
       },
@@ -96,4 +118,14 @@ if (!session) {
   if (shouldAutostart) {
     phaseManager.beginMatchmaking();
   }
+
+  const exitToHome = () => {
+    requestMatchExit(playerId);
+    window.location.href = '/public/projects/user/home.html';
+  };
+
+  backButton?.addEventListener('click', exitToHome);
+  window.addEventListener('pagehide', () => {
+    requestMatchExit(playerId);
+  });
 }

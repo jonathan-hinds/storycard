@@ -967,22 +967,49 @@ body[data-page='user-matchmaking'] {
 
 .user-match-stage-layout {
   min-height: 100vh;
+  padding: 0.8rem;
+  position: relative;
+}
+
+.user-match-back-button {
+  position: absolute;
+  top: 1.15rem;
+  left: 1.15rem;
+  z-index: 6;
 }
 
 .user-match-stage-wrap {
-  padding: 0;
-  min-height: 100vh;
-}
-
-.user-match-stage-wrap .phase-manager-turn-overlay {
-  inset: 0;
-  border-radius: 0;
-  border-left: 0;
-  border-right: 0;
+  min-height: calc(100vh - 1.6rem);
 }
 
 .user-match-canvas {
-  min-height: 100vh;
-  border-radius: 0;
-  border: 0;
+  min-height: calc(100vh - 1.6rem);
+}
+
+@media (max-width: 900px) {
+  .user-match-stage-layout {
+    padding: 0;
+  }
+
+  .user-match-stage-wrap {
+    min-height: 100vh;
+  }
+
+  .user-match-canvas {
+    min-height: 100vh;
+    border-radius: 0;
+    border: 0;
+  }
+
+  .user-match-stage-wrap .phase-manager-turn-overlay {
+    inset: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .user-match-back-button {
+    top: 0.7rem;
+    left: 0.7rem;
+  }
 }
