@@ -26,6 +26,8 @@ const VIEWPORT_RESERVED_HEIGHT_PX = 140;
 const MIN_PANE_EDGE_PADDING = 0.2;
 const MIN_PANE_GAP = 0.36;
 const BASE_CAMERA_Z = 11.2;
+const BASE_TITLE_Y = 1.2;
+const TITLE_TOP_MARGIN = 0.4;
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
   x: 0,
   y: 0.01,
@@ -128,6 +130,7 @@ export class DeckBuilderScene {
     this.pointerEntry = null;
     this.activePane = null;
     this.viewportHeight = MIN_VIEWPORT_HEIGHT_PX;
+    this.paneVerticalOffset = 0;
     this.dragging = null;
     this.draggingScroll = null;
 
@@ -338,7 +341,7 @@ export class DeckBuilderScene {
       const col = index % CARD_COLUMNS;
       entry.basePosition = new THREE.Vector3(
         pane.centerX + ((col - 0.5) * this.layout.xSpacing),
-        -((row * this.layout.ySpacing) + this.layout.cardHeight * 0.5),
+        -((row * this.layout.ySpacing) + this.layout.cardHeight * 0.5) + this.paneVerticalOffset,
         0,
       );
       entry.root.position.copy(entry.basePosition);
@@ -373,6 +376,9 @@ export class DeckBuilderScene {
     this.camera.lookAt(0, -2.6, 0);
 
     const visibleWorldHeight = 2 * Math.tan(verticalFovRadians / 2) * cameraZ;
+    const visibleWorldTop = this.camera.position.y + (visibleWorldHeight * 0.5);
+    const titleY = visibleWorldTop - TITLE_TOP_MARGIN;
+    this.paneVerticalOffset = compactViewport ? (titleY - BASE_TITLE_Y) : 0;
     const visibleWorldWidth = visibleWorldHeight * this.camera.aspect;
     const maxPaneCenterX = Math.max(0, (visibleWorldWidth * 0.5) - paneHalfWidth - MIN_PANE_EDGE_PADDING);
     const preferredPaneCenterX = 3.2;
@@ -386,8 +392,8 @@ export class DeckBuilderScene {
     this.layoutPane(this.deckPane);
 
     this.camera.updateProjectionMatrix();
-    if (this.titleLibrary) this.titleLibrary.position.set(this.libraryPane.centerX, 1.2, 0.4);
-    if (this.titleDeck) this.titleDeck.position.set(this.deckPane.centerX, 1.2, 0.4);
+    if (this.titleLibrary) this.titleLibrary.position.set(this.libraryPane.centerX, BASE_TITLE_Y + this.paneVerticalOffset, 0.4);
+    if (this.titleDeck) this.titleDeck.position.set(this.deckPane.centerX, BASE_TITLE_Y + this.paneVerticalOffset, 0.4);
   }
 
   raycastEntry(event) {
