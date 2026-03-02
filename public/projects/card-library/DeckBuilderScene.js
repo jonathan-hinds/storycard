@@ -534,9 +534,10 @@ export class DeckBuilderScene {
     this.layoutPane(this.deckPane);
 
     this.camera.updateProjectionMatrix();
-    if (this.titleLibrary) this.titleLibrary.position.set(this.libraryPane.centerX, BASE_TITLE_Y + this.paneVerticalOffset, 0.4);
-    if (this.titleDeck) this.titleDeck.position.set(this.deckPane.centerX, BASE_TITLE_Y + this.paneVerticalOffset, 0.4);
-    this.filterPanel.sprite.position.set(0, (BASE_TITLE_Y + this.paneVerticalOffset) + FILTER_PANEL_GAP_FROM_TITLE, 0.5);
+    const headerY = BASE_TITLE_Y + this.paneVerticalOffset;
+    if (this.titleLibrary) this.titleLibrary.position.set(this.libraryPane.centerX, headerY, 0.4);
+    if (this.titleDeck) this.titleDeck.position.set(this.deckPane.centerX, headerY, 0.4);
+    this.filterPanel.sprite.position.set(0, headerY - FILTER_PANEL_GAP_FROM_TITLE, 0.5);
   }
 
   hitFilterControl(event) {
