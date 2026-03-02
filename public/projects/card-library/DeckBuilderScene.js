@@ -37,8 +37,8 @@ const DEFAULT_FILTER_PANEL_CONTROLS = Object.freeze({
   x: 0,
   y: 0,
   fontScale: 1,
-  opacity: 0.3,
-  checkboxScale: 1,
+  opacity: 0.15,
+  checkboxScale: 1.8,
 });
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
   x: 0,
