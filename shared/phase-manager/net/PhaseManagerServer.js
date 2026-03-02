@@ -300,6 +300,37 @@ class PhaseManagerServer {
     });
   }
 
+  shuffleCards(cards = []) {
+    const shuffled = [...cards];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      const current = shuffled[index];
+      shuffled[index] = shuffled[swapIndex];
+      shuffled[swapIndex] = current;
+    }
+    return shuffled;
+  }
+
+  buildOpeningZones(deckCards = []) {
+    const shuffledDeck = this.shuffleCards(deckCards);
+    const openingHandSize = Math.min(this.options.startingHandSize, shuffledDeck.length);
+    const hand = shuffledDeck.slice(0, openingHandSize);
+    const deck = shuffledDeck.slice(openingHandSize);
+    const handHasCreature = hand.some((card) => card?.catalogCard?.cardKind === 'Creature');
+
+    if (!handHasCreature) {
+      const creatureIndexInDeck = deck.findIndex((card) => card?.catalogCard?.cardKind === 'Creature');
+      if (creatureIndexInDeck !== -1 && hand.length) {
+        const [creatureCard] = deck.splice(creatureIndexInDeck, 1);
+        const displacedCard = hand[0];
+        hand[0] = creatureCard;
+        deck.unshift(displacedCard);
+      }
+    }
+
+    return { hand, deck };
+  }
+
   serializeMatchForPlayer(match, playerId) {
     const opponentId = match.players.find((id) => id !== playerId) || null;
     const playerState = match.cardsByPlayer.get(playerId);
@@ -1363,12 +1394,13 @@ class PhaseManagerServer {
       players.forEach((id) => {
         const preferredDeck = preferredDeckByPlayer.get(id) || [];
         const cards = this.buildDeckFromCatalog(id, catalogCards, preferredDeck);
+        const openingZones = this.buildOpeningZones(cards);
         cardsByPlayer.set(id, {
           allCards: cards,
-          hand: cards.slice(0, this.options.startingHandSize),
+          hand: openingZones.hand,
           board: [],
           discard: [],
-          deck: cards.slice(this.options.startingHandSize),
+          deck: openingZones.deck,
         });
       });
 
