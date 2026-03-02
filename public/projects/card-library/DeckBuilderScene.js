@@ -38,6 +38,7 @@ const DEFAULT_FILTER_PANEL_CONTROLS = Object.freeze({
   y: 0,
   fontScale: 1,
   opacity: 0.3,
+  checkboxScale: 1,
 });
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
   x: 0,
@@ -65,6 +66,7 @@ function normalizeFilterPanelControls(filterPanelControls = {}, fallback = DEFAU
     y: read(filterPanelControls.y, 'y'),
     fontScale: THREE.MathUtils.clamp(read(filterPanelControls.fontScale, 'fontScale'), 0.45, 2.4),
     opacity: THREE.MathUtils.clamp(read(filterPanelControls.opacity, 'opacity'), 0, 1),
+    checkboxScale: THREE.MathUtils.clamp(read(filterPanelControls.checkboxScale, 'checkboxScale'), 0.7, 1.8),
   };
 }
 
@@ -257,7 +259,7 @@ export class DeckBuilderScene {
 
   redrawFilterPanel() {
     const { canvas, texture } = this.filterPanel;
-    const { opacity, fontScale } = this.filterPanelControls;
+    const { opacity, fontScale, checkboxScale } = this.filterPanelControls;
     const context = canvas.getContext('2d');
     if (!context) return;
     const designWidth = 2048;
@@ -309,7 +311,7 @@ export class DeckBuilderScene {
       context.fillStyle = '#a8bee7';
       context.font = `600 ${38 * uniformScale * fontScale}px "Trebuchet MS", "Segoe UI", sans-serif`;
       context.fillText(group.label, toPanelX(group.startX), toPanelY(162));
-      const boxSize = 52 * uniformScale;
+      const boxSize = 52 * uniformScale * checkboxScale;
       const spacingX = 260 * uniformScale;
       const y = toPanelY(242);
       group.options.forEach((option, index) => {
@@ -329,9 +331,9 @@ export class DeckBuilderScene {
           context.strokeStyle = `rgba(216, 231, 255, ${panelOpacity})`;
           context.lineWidth = 6 * uniformScale;
           context.beginPath();
-          context.moveTo(x + (12 * uniformScale), y + (28 * uniformScale));
-          context.lineTo(x + (24 * uniformScale), y + (40 * uniformScale));
-          context.lineTo(x + (42 * uniformScale), y + (14 * uniformScale));
+          context.moveTo(x + (12 * uniformScale * checkboxScale), y + (28 * uniformScale * checkboxScale));
+          context.lineTo(x + (24 * uniformScale * checkboxScale), y + (40 * uniformScale * checkboxScale));
+          context.lineTo(x + (42 * uniformScale * checkboxScale), y + (14 * uniformScale * checkboxScale));
           context.stroke();
         }
 

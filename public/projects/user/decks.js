@@ -18,6 +18,7 @@ const filterPanelControls = {
   y: 0,
   fontScale: 1,
   opacity: 0.3,
+  checkboxScale: 1,
 };
 
 const sliderConfig = {
@@ -27,6 +28,7 @@ const sliderConfig = {
   y: { elementId: 'filter-panel-y', outputId: 'filter-panel-y-value', decimals: 2 },
   fontScale: { elementId: 'filter-panel-font-scale', outputId: 'filter-panel-font-scale-value', decimals: 2 },
   opacity: { elementId: 'filter-panel-opacity', outputId: 'filter-panel-opacity-value', decimals: 2 },
+  checkboxScale: { elementId: 'filter-panel-checkbox-scale', outputId: 'filter-panel-checkbox-scale-value', decimals: 2 },
 };
 
 function getExportJson() {
