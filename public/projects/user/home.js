@@ -2,6 +2,7 @@ const USER_SESSION_KEY = 'storycard-user-session';
 
 const decksButton = document.getElementById('decks-button');
 const welcomeTitle = document.getElementById('welcome-title');
+const findMatchButton = document.getElementById('find-match-button');
 
 function loadSession() {
   try {
@@ -24,4 +25,9 @@ if (!session) {
 
 decksButton.addEventListener('click', () => {
   window.location.href = '/public/projects/user/decks.html';
+});
+
+
+findMatchButton.addEventListener('click', () => {
+  window.location.href = '/public/projects/user/match.html';
 });

@@ -124,12 +124,12 @@ class PhaseManagerServer {
   }
 
   getQueuePosition(playerId) {
-    const index = this.phaseQueue.indexOf(playerId);
+    const index = this.phaseQueue.findIndex((entry) => entry.playerId === playerId);
     return index === -1 ? null : index + 1;
   }
 
   removeFromQueue(playerId) {
-    const index = this.phaseQueue.indexOf(playerId);
+    const index = this.phaseQueue.findIndex((entry) => entry.playerId === playerId);
     if (index !== -1) {
       this.phaseQueue.splice(index, 1);
     }
@@ -224,7 +224,7 @@ class PhaseManagerServer {
     };
   }
 
-  buildDeckFromCatalog(playerId, catalogCards = []) {
+  buildDeckFromCatalog(playerId, catalogCards = [], preferredDeckCardIds = []) {
     if (!Array.isArray(catalogCards) || catalogCards.length === 0) {
       return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => ({
         id: `${playerId}-card-${index + 1}`,
@@ -259,9 +259,26 @@ class PhaseManagerServer {
       }));
     }
 
-    return Array.from({ length: this.options.deckSizePerPlayer }, (_, index) => {
-      const randomCard = catalogCards[Math.floor(Math.random() * catalogCards.length)] || {};
-      const normalizedCard = normalizeCatalogCardDesign(randomCard);
+    const cardPool = catalogCards
+      .map((catalogCard) => normalizeCatalogCardDesign(catalogCard))
+      .filter((catalogCard) => catalogCard && typeof catalogCard === 'object');
+    const cardById = new Map(cardPool.map((catalogCard) => [String(catalogCard.id || ''), catalogCard]));
+
+    const preferredCards = preferredDeckCardIds
+      .map((cardId) => cardById.get(cardId))
+      .filter(Boolean);
+
+    const deckCards = [];
+    preferredCards.slice(0, this.options.deckSizePerPlayer).forEach((catalogCard) => {
+      deckCards.push(catalogCard);
+    });
+
+    while (deckCards.length < this.options.deckSizePerPlayer) {
+      const randomCard = cardPool[Math.floor(Math.random() * cardPool.length)] || {};
+      deckCards.push(randomCard);
+    }
+
+    return deckCards.map((normalizedCard, index) => {
       return {
         id: `${playerId}-card-${index + 1}`,
         color: this.colorFromHexString(normalizedCard.meshColor),
@@ -1314,16 +1331,25 @@ class PhaseManagerServer {
     return { status: 'idle', queueCount: this.phaseQueue.length };
   }
 
-  async findMatch(playerId) {
+  async findMatch(playerId, options = {}) {
     const existing = this.getPlayerPhaseStatus(playerId);
     if (existing.status === 'matched' || existing.status === 'searching') {
       return existing;
     }
 
-    const opponentId = this.phaseQueue.shift();
-    if (opponentId && opponentId !== playerId) {
+    const preferredDeckCardIds = Array.isArray(options.deckCardIds)
+      ? options.deckCardIds.filter((cardId) => typeof cardId === 'string' && cardId.trim()).map((cardId) => cardId.trim())
+      : [];
+
+    const opponentEntry = this.phaseQueue.shift();
+    if (opponentEntry && opponentEntry.playerId && opponentEntry.playerId !== playerId) {
+      const opponentId = opponentEntry.playerId;
       const matchId = `match-${randomUUID().slice(0, 8)}`;
       const players = [opponentId, playerId];
+      const preferredDeckByPlayer = new Map([
+        [opponentId, Array.isArray(opponentEntry.deckCardIds) ? opponentEntry.deckCardIds : []],
+        [playerId, preferredDeckCardIds],
+      ]);
       const cardsByPlayer = new Map();
       let catalogCards = [];
 
@@ -1335,7 +1361,8 @@ class PhaseManagerServer {
       }
 
       players.forEach((id) => {
-        const cards = this.buildDeckFromCatalog(id, catalogCards);
+        const preferredDeck = preferredDeckByPlayer.get(id) || [];
+        const cards = this.buildDeckFromCatalog(id, catalogCards, preferredDeck);
         cardsByPlayer.set(id, {
           allCards: cards,
           hand: cards.slice(0, this.options.startingHandSize),
@@ -1372,7 +1399,7 @@ class PhaseManagerServer {
       return this.getPlayerPhaseStatus(playerId);
     }
 
-    this.phaseQueue.push(playerId);
+    this.phaseQueue.push({ playerId, deckCardIds: preferredDeckCardIds });
     this.phaseMatchmakingState.set(playerId, { status: 'searching' });
     return this.getPlayerPhaseStatus(playerId);
   }

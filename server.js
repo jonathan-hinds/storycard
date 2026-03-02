@@ -490,7 +490,9 @@ async function handleApi(req, res, pathname) {
       return true;
     }
 
-    sendJson(res, 200, await phaseManagerServer.findMatch(body.playerId));
+    sendJson(res, 200, await phaseManagerServer.findMatch(body.playerId, {
+      deckCardIds: Array.isArray(body.deckCardIds) ? body.deckCardIds : [],
+    }));
     return true;
   }
 
