@@ -27,10 +27,10 @@ const MIN_PANE_EDGE_PADDING = 0.2;
 const MIN_PANE_GAP = 0.36;
 const BASE_CAMERA_Z = 11.2;
 const BASE_TITLE_Y = 1.2;
-const TITLE_TOP_MARGIN = 0.4;
 const FILTER_PANEL_WIDTH = 7.8;
 const FILTER_PANEL_HEIGHT = 0.96;
-const FILTER_PANEL_GAP_FROM_TITLE = 0.7;
+const FILTER_PANEL_TOP_MARGIN = 0.18;
+const FILTER_PANEL_GAP_FROM_TITLE = 0.22;
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
   x: 0,
   y: 0.01,
@@ -519,8 +519,9 @@ export class DeckBuilderScene {
 
     const visibleWorldHeight = 2 * Math.tan(verticalFovRadians / 2) * cameraZ;
     const visibleWorldTop = this.camera.position.y + (visibleWorldHeight * 0.5);
-    const titleY = visibleWorldTop - TITLE_TOP_MARGIN;
-    this.paneVerticalOffset = compactViewport ? (titleY - BASE_TITLE_Y) : 0;
+    const filterPanelY = visibleWorldTop - FILTER_PANEL_TOP_MARGIN - (FILTER_PANEL_HEIGHT * 0.5);
+    const headerY = filterPanelY - (FILTER_PANEL_HEIGHT * 0.5) - FILTER_PANEL_GAP_FROM_TITLE;
+    this.paneVerticalOffset = headerY - BASE_TITLE_Y;
     const visibleWorldWidth = visibleWorldHeight * this.camera.aspect;
     const maxPaneCenterX = Math.max(0, (visibleWorldWidth * 0.5) - paneHalfWidth - MIN_PANE_EDGE_PADDING);
     const preferredPaneCenterX = 3.2;
@@ -534,10 +535,9 @@ export class DeckBuilderScene {
     this.layoutPane(this.deckPane);
 
     this.camera.updateProjectionMatrix();
-    const headerY = BASE_TITLE_Y + this.paneVerticalOffset;
     if (this.titleLibrary) this.titleLibrary.position.set(this.libraryPane.centerX, headerY, 0.4);
     if (this.titleDeck) this.titleDeck.position.set(this.deckPane.centerX, headerY, 0.4);
-    this.filterPanel.sprite.position.set(0, headerY - FILTER_PANEL_GAP_FROM_TITLE, 0.5);
+    this.filterPanel.sprite.position.set(0, filterPanelY, 0.5);
   }
 
   hitFilterControl(event) {
