@@ -963,6 +963,7 @@ button {
 
 .user-match-stage-layout {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 0;
   position: relative;
 }
@@ -977,12 +978,16 @@ button {
 .user-match-stage-wrap {
   min-height: 100vh;
   height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
   padding: 0;
 }
 
 .user-match-canvas {
   min-height: 100vh;
   height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
   border-radius: 0;
   border: 0;
 }
@@ -1001,11 +1006,15 @@ button {
   .user-match-stage-wrap {
     min-height: 100vh;
     height: 100vh;
+    min-height: 100dvh;
+    height: 100dvh;
   }
 
   .user-match-canvas {
     min-height: 100vh;
     height: 100vh;
+    min-height: 100dvh;
+    height: 100dvh;
   }
 
   .user-match-back-button {
