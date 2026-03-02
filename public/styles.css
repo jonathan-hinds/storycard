@@ -839,6 +839,15 @@ button {
   padding: 0 1rem;
 }
 
+.user-preview-controls {
+  margin: 0.8rem 1rem;
+}
+
+.user-preview-controls output {
+  color: #9ab0d8;
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .user-decks-layout {
     grid-template-rows: auto auto auto minmax(320px, 1fr);
