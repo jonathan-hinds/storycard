@@ -29,5 +29,5 @@ decksButton.addEventListener('click', () => {
 
 
 findMatchButton.addEventListener('click', () => {
-  window.location.href = '/public/projects/user/match.html';
+  window.location.href = '/public/projects/user/match.html?autostart=1';
 });
