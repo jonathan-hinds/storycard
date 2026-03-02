@@ -3,11 +3,9 @@ import { CardMeshFactory } from '/public/card-game/render/CardMeshFactory.js';
 import { createCardLabelTexture } from '/public/card-game/render/cardLabelTexture.js';
 import { resolveCardKind, CARD_KINDS } from '/public/card-game/render/cardStyleConfig.js';
 import {
-  PREVIEW_BASE_POSITION,
   beginPreviewTransition,
   beginPreviewReturnTransition,
   getPreviewPose,
-  loadPreviewTuning,
 } from '/public/card-game/index.js';
 
 const BASE_CARD_WIDTH = 1.8;
@@ -29,10 +27,10 @@ const MIN_PANE_EDGE_PADDING = 0.2;
 const MIN_PANE_GAP = 0.36;
 const BASE_CAMERA_Z = 11.2;
 const DEFAULT_PREVIEW_CONTROLS = Object.freeze({
-  x: PREVIEW_BASE_POSITION.x,
-  y: PREVIEW_BASE_POSITION.y,
-  z: PREVIEW_BASE_POSITION.z + 1.44,
-  tiltX: -1.16,
+  x: 0,
+  y: 0.01,
+  z: 8,
+  tiltX: 0,
 });
 
 function normalizePreviewControls(previewControls = {}, fallback = DEFAULT_PREVIEW_CONTROLS) {
@@ -112,20 +110,13 @@ export class DeckBuilderScene {
       ySpacing: (BASE_CARD_HEIGHT * CARD_SCALE) + ROW_PADDING,
     };
 
-    this.previewTuning = loadPreviewTuning();
     this.previewCard = null;
     this.previewEntry = null;
     this.previewPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
     this.previewOriginPose = { position: new THREE.Vector3(), rotation: new THREE.Euler() };
     this.previewTransition = { isActive: false, direction: 'toPreview', startedAt: 0, durationMs: 0 };
     this.previewStartedAt = 0;
-    this.previewControls = normalizePreviewControls({
-      x: PREVIEW_BASE_POSITION.x,
-      y: PREVIEW_BASE_POSITION.y,
-      z: PREVIEW_BASE_POSITION.z + this.previewTuning.cameraDistanceOffset,
-      tiltX: this.previewTuning.rotationX,
-      ...(previewControls || {}),
-    });
+    this.previewControls = normalizePreviewControls(previewControls || {}, DEFAULT_PREVIEW_CONTROLS);
 
     this.libraryPane = makePane('library', -3.2);
     this.deckPane = makePane('deck', 3.2);
