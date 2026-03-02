@@ -54,10 +54,8 @@ function createTitleSprite(text) {
   canvas.height = 220;
   const context = canvas.getContext('2d');
   if (!context) return null;
-  context.fillStyle = 'rgba(8, 14, 28, 0.85)';
-  context.fillRect(32, 30, canvas.width - 64, canvas.height - 60);
   context.fillStyle = '#dce7ff';
-  context.font = '700 112px "Trebuchet MS", "Segoe UI", sans-serif';
+  context.font = '700 56px "Trebuchet MS", "Segoe UI", sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillText(text, canvas.width / 2, canvas.height / 2);
