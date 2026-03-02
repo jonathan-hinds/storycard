@@ -80,6 +80,9 @@ export class CardGameClient {
     this.zoneFramework = this.template.zoneFramework;
     validateZoneTemplate(this.template, this.zoneFramework);
     this.options = options;
+    this.viewportHeightOffset = Number.isFinite(options.viewportHeightOffset) ? options.viewportHeightOffset : 140;
+    this.minViewportHeightMobile = Number.isFinite(options.minViewportHeightMobile) ? options.minViewportHeightMobile : 320;
+    this.minViewportHeightDesktop = Number.isFinite(options.minViewportHeightDesktop) ? options.minViewportHeightDesktop : 460;
     this.previewTuning = sanitizePreviewTuning(options.previewTuning || DEFAULT_PREVIEW_TUNING);
     this.onCardStateCommitted = options.onCardStateCommitted;
     this.onSpellResolutionRequested = options.onSpellResolutionRequested;
@@ -553,8 +556,8 @@ export class CardGameClient {
     const width = this.canvas.parentElement.clientWidth;
     const compactViewport = window.innerWidth <= 900;
     this.state.previewViewportVariant = compactViewport ? 'mobile' : 'desktop';
-    const minHeight = compactViewport ? 320 : 460;
-    const height = Math.max(minHeight, window.innerHeight - 140);
+    const minHeight = compactViewport ? this.minViewportHeightMobile : this.minViewportHeightDesktop;
+    const height = Math.max(minHeight, window.innerHeight - this.viewportHeightOffset);
     const aspect = width / height;
     const portraitIntensity = THREE.MathUtils.clamp((1 - aspect) / 0.45, 0, 1);
     this.state.portraitIntensity = portraitIntensity;

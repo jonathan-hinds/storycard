@@ -963,7 +963,7 @@ button {
 
 .user-match-stage-layout {
   min-height: 100vh;
-  padding: 1rem;
+  padding: 0;
   position: relative;
 }
 
@@ -975,24 +975,37 @@ button {
 }
 
 .user-match-stage-wrap {
-  min-height: 0;
+  min-height: 100vh;
+  height: 100vh;
+  padding: 0;
 }
 
 .user-match-canvas {
-  min-height: 560px;
+  min-height: 100vh;
+  height: 100vh;
+  border-radius: 0;
+  border: 0;
+}
+
+
+.user-match-stage-wrap .phase-manager-turn-overlay {
+  inset: 0;
+  border-radius: 0;
 }
 
 @media (max-width: 900px) {
   .user-match-stage-layout {
-    padding: 1rem;
+    padding: 0;
   }
 
   .user-match-stage-wrap {
-    min-height: 0;
+    min-height: 100vh;
+    height: 100vh;
   }
 
   .user-match-canvas {
-    min-height: 320px;
+    min-height: 100vh;
+    height: 100vh;
   }
 
   .user-match-back-button {

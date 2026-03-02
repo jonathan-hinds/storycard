@@ -133,6 +133,9 @@ if (!session) {
       matchmakingPayload: {
         deckCardIds: Array.isArray(session.user.deck?.cards) ? session.user.deck.cards : [],
       },
+      cardGameOptions: {
+        viewportHeightOffset: 0,
+      },
     },
   });
 
