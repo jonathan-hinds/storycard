@@ -6,6 +6,12 @@ const cardList = document.getElementById('user-card-list');
 const cardLibraryCanvas = document.getElementById('user-card-library-canvas');
 const cardLibraryStage = document.getElementById('user-card-library-stage');
 const deckStatus = document.getElementById('user-deck-status');
+const filterKindCreature = document.getElementById('filter-kind-creature');
+const filterKindSpell = document.getElementById('filter-kind-spell');
+const filterTypeFire = document.getElementById('filter-type-fire');
+const filterTypeWater = document.getElementById('filter-type-water');
+const filterTypeNature = document.getElementById('filter-type-nature');
+const filterTypeArcane = document.getElementById('filter-type-arcane');
 const previewExportOutput = document.getElementById('preview-export-output');
 const previewExportCopyButton = document.getElementById('preview-export-copy');
 const previewExportDownloadButton = document.getElementById('preview-export-download');
@@ -29,6 +35,38 @@ function syncPreviewControlsView() {
 function applyPreviewControls() {
   deckBuilderScene?.setPreviewControls(previewControls);
   syncPreviewControlsView();
+}
+
+function buildLibraryFilters() {
+  return {
+    kinds: new Set([
+      filterKindCreature?.checked ? 'creature' : null,
+      filterKindSpell?.checked ? 'spell' : null,
+    ].filter(Boolean)),
+    types: new Set([
+      filterTypeFire?.checked ? 'fire' : null,
+      filterTypeWater?.checked ? 'water' : null,
+      filterTypeNature?.checked ? 'nature' : null,
+      filterTypeArcane?.checked ? 'arcane' : null,
+    ].filter(Boolean)),
+  };
+}
+
+function applyLibraryFilters() {
+  deckBuilderScene?.setLibraryFilters(buildLibraryFilters());
+}
+
+function bindFilterEvents() {
+  [
+    filterKindCreature,
+    filterKindSpell,
+    filterTypeFire,
+    filterTypeWater,
+    filterTypeNature,
+    filterTypeArcane,
+  ].forEach((input) => {
+    input?.addEventListener('change', applyLibraryFilters);
+  });
 }
 
 previewExportCopyButton?.addEventListener('click', async () => {
@@ -127,6 +165,7 @@ function renderCards(cards) {
   });
   deckBuilderScene.setCards(cards);
   deckBuilderScene.setDeckCardIds(session.user.deck?.cards || []);
+  applyLibraryFilters();
 }
 
 async function loadCards() {
@@ -137,6 +176,8 @@ async function loadCards() {
   }
   renderCards(Array.isArray(payload.cards) ? payload.cards : []);
 }
+
+bindFilterEvents();
 
 loadCards().catch((error) => {
   if (cardLibraryStage) cardLibraryStage.hidden = true;

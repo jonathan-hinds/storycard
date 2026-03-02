@@ -123,6 +123,11 @@ export class DeckBuilderScene {
     this.libraryPane = makePane('library', -3.2);
     this.deckPane = makePane('deck', 3.2);
     this.libraryCards = [];
+    this.filteredLibraryCards = [];
+    this.libraryFilters = {
+      kinds: new Set(['creature', 'spell']),
+      types: new Set(['fire', 'water', 'nature', 'arcane']),
+    };
     this.deckCounts = new Map();
     this.activePointerId = null;
     this.pointerDown = { x: 0, y: 0 };
@@ -179,9 +184,30 @@ export class DeckBuilderScene {
 
   setCards(cards) {
     this.libraryCards = Array.isArray(cards) ? [...cards] : [];
-    this.rebuildLibraryPane();
+    this.applyLibraryFilters();
     this.rebuildDeckPane();
     this.emitDeckChange();
+  }
+
+  setLibraryFilters(filters = {}) {
+    const readSet = (value, fallback) => (value instanceof Set ? value : fallback);
+    this.libraryFilters = {
+      kinds: readSet(filters.kinds, this.libraryFilters.kinds),
+      types: readSet(filters.types, this.libraryFilters.types),
+    };
+    this.applyLibraryFilters();
+  }
+
+  applyLibraryFilters() {
+    const normalize = (value) => String(value || '').trim().toLowerCase();
+    this.filteredLibraryCards = this.libraryCards.filter((card) => {
+      const kind = normalize(resolveCardKind(card?.cardKind));
+      const type = normalize(card?.type);
+      const kindMatch = this.libraryFilters.kinds.has(kind);
+      const typeMatch = this.libraryFilters.types.has(type);
+      return kindMatch && typeMatch;
+    });
+    this.rebuildLibraryPane();
   }
 
   setDeckCardIds(cardIds = []) {
@@ -219,7 +245,7 @@ export class DeckBuilderScene {
   rebuildLibraryPane() {
     this.closePreview({ immediate: true });
     this.clearEntries(this.libraryPane);
-    this.libraryCards.forEach((card) => {
+    this.filteredLibraryCards.forEach((card) => {
       const entry = this.createEntry(card, this.libraryPane, 1);
       this.libraryPane.entries.push(entry);
       this.scene.add(entry.root);
