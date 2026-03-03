@@ -1970,6 +1970,16 @@ export class CardGameClient {
       card.userData.fireStacks = Number.isInteger(cfg.fireStacks) ? cfg.fireStacks : 0;
       card.userData.frostbiteTurnsRemaining = Number.isInteger(cfg.frostbiteTurnsRemaining) ? cfg.frostbiteTurnsRemaining : 0;
       card.userData.frostbiteStacks = Number.isInteger(cfg.frostbiteStacks) ? cfg.frostbiteStacks : 0;
+      card.userData.disruptionDebuffTurnsRemaining = Number.isInteger(cfg.disruptionDebuffTurnsRemaining)
+        ? cfg.disruptionDebuffTurnsRemaining
+        : 0;
+      card.userData.disruptionDebuffs = cfg.disruptionDebuffs && typeof cfg.disruptionDebuffs === 'object'
+        ? {
+          damage: Number.isFinite(Number(cfg.disruptionDebuffs.damage)) ? Math.max(0, Math.floor(Number(cfg.disruptionDebuffs.damage))) : 0,
+          speed: Number.isFinite(Number(cfg.disruptionDebuffs.speed)) ? Math.max(0, Math.floor(Number(cfg.disruptionDebuffs.speed))) : 0,
+          defense: Number.isFinite(Number(cfg.disruptionDebuffs.defense)) ? Math.max(0, Math.floor(Number(cfg.disruptionDebuffs.defense))) : 0,
+        }
+        : { damage: 0, speed: 0, defense: 0 };
       card.userData.catalogCard = cfg.catalogCard ?? null;
       card.userData.statDisplayOverrides = null;
       card.userData.isAttackHover = false;
@@ -2417,9 +2427,9 @@ export class CardGameClient {
             || animation.disruptionTargetStat === 'defense';
           if (canShowDisruptionImpact
             && Number.isFinite(animation.disruptionAdjustedOutcome)
-            && animation.defenderCard?.userData?.cardId) {
+            && card?.userData?.cardId) {
             this.setCardStatDisplayOverride(
-              animation.defenderCard.userData.cardId,
+              card.userData.cardId,
               animation.disruptionTargetStat,
               animation.disruptionAdjustedOutcome,
             );
