@@ -880,6 +880,16 @@ export class PhaseManagerClient {
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
+        disruptionDebuffTurnsRemaining: Number.isInteger(card.disruptionDebuffTurnsRemaining)
+          ? card.disruptionDebuffTurnsRemaining
+          : 0,
+        disruptionDebuffs: card.disruptionDebuffs && typeof card.disruptionDebuffs === 'object'
+          ? {
+            damage: Number.isFinite(Number(card.disruptionDebuffs.damage)) ? Math.max(0, Math.floor(Number(card.disruptionDebuffs.damage))) : 0,
+            speed: Number.isFinite(Number(card.disruptionDebuffs.speed)) ? Math.max(0, Math.floor(Number(card.disruptionDebuffs.speed))) : 0,
+            defense: Number.isFinite(Number(card.disruptionDebuffs.defense)) ? Math.max(0, Math.floor(Number(card.disruptionDebuffs.defense))) : 0,
+          }
+          : { damage: 0, speed: 0, defense: 0 },
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });
@@ -912,6 +922,16 @@ export class PhaseManagerClient {
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
+        disruptionDebuffTurnsRemaining: Number.isInteger(card.disruptionDebuffTurnsRemaining)
+          ? card.disruptionDebuffTurnsRemaining
+          : 0,
+        disruptionDebuffs: card.disruptionDebuffs && typeof card.disruptionDebuffs === 'object'
+          ? {
+            damage: Number.isFinite(Number(card.disruptionDebuffs.damage)) ? Math.max(0, Math.floor(Number(card.disruptionDebuffs.damage))) : 0,
+            speed: Number.isFinite(Number(card.disruptionDebuffs.speed)) ? Math.max(0, Math.floor(Number(card.disruptionDebuffs.speed))) : 0,
+            defense: Number.isFinite(Number(card.disruptionDebuffs.defense)) ? Math.max(0, Math.floor(Number(card.disruptionDebuffs.defense))) : 0,
+          }
+          : { damage: 0, speed: 0, defense: 0 },
         catalogCard: this.withBuffBadgeLayout(card.catalogCard || null),
       });
     });

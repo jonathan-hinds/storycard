@@ -2260,6 +2260,41 @@ export class CardGameClient {
       return;
     }
 
+    attackPlan.forEach((step) => {
+      const attackerSide = step?.attackerSide === 'opponent' ? 'opponent' : 'player';
+      const attackerSlotIndex = Number.isInteger(step?.attackerSlotIndex) ? step.attackerSlotIndex : null;
+      if (attackerSlotIndex == null) return;
+
+      const attackCard = this.getCardByZoneAndSlot({
+        zone: CARD_ZONE_TYPES.BOARD,
+        slotIndex: attackerSide === 'player' ? attackerSlotIndex + 3 : attackerSlotIndex,
+        owner: attackerSide,
+      });
+      if (!attackCard?.userData?.cardId) return;
+
+      const canShowDisruptionImpact = step?.disruptionTargetStat === 'damage'
+        || step?.disruptionTargetStat === 'speed'
+        || step?.disruptionTargetStat === 'defense';
+      if (canShowDisruptionImpact && Number.isFinite(step?.disruptionAdjustedOutcome)) {
+        this.setCardStatDisplayOverride(
+          attackCard.userData.cardId,
+          step.disruptionTargetStat,
+          Math.max(0, Math.floor(step.disruptionAdjustedOutcome)),
+        );
+      }
+
+      const hasAdjustedSpeed = Number.isFinite(step?.adjustedSpeedOutcome)
+        && Number.isFinite(step?.speedOutcome)
+        && step.adjustedSpeedOutcome !== step.speedOutcome;
+      if (hasAdjustedSpeed) {
+        this.setCardStatDisplayOverride(
+          attackCard.userData.cardId,
+          'speed',
+          Math.max(0, Math.floor(step.adjustedSpeedOutcome)),
+        );
+      }
+    });
+
     const now = performance.now();
     attackPlan.forEach((step, index) => {
       this.combatAnimations.push({
