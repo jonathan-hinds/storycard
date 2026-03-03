@@ -1348,7 +1348,12 @@ export class CardGameClient {
     const resolvedSlotIndex = targetSide === this.template.playerSide
       ? targetSlotIndex + boardSlotsPerSide
       : targetSlotIndex;
-    return this.cards.find((entry) => entry.userData.zone === CARD_ZONE_TYPES.BOARD && entry.userData.slotIndex === resolvedSlotIndex) || null;
+    return this.getCardByZoneAndSlot(CARD_ZONE_TYPES.BOARD, resolvedSlotIndex);
+  }
+
+  getCardByZoneAndSlot(zone, slotIndex) {
+    if (!Number.isInteger(slotIndex)) return null;
+    return this.cards.find((entry) => entry.userData.zone === zone && entry.userData.slotIndex === slotIndex) || null;
   }
 
   selectRandomFriendlyBoardCard(owner = this.template.playerSide) {
@@ -2267,13 +2272,16 @@ export class CardGameClient {
 
       const attackCard = this.resolveBoardCardFromSideSlot(attackerSide, attackerSlotIndex);
       if (!attackCard?.userData?.cardId) return;
+      const targetCard = this.resolveBoardCardFromSideSlot(step?.targetSide, step?.targetSlotIndex);
 
       const canShowDisruptionImpact = step?.disruptionTargetStat === 'damage'
         || step?.disruptionTargetStat === 'speed'
         || step?.disruptionTargetStat === 'defense';
-      if (canShowDisruptionImpact && Number.isFinite(step?.disruptionAdjustedOutcome)) {
+      if (canShowDisruptionImpact
+        && Number.isFinite(step?.disruptionAdjustedOutcome)
+        && targetCard?.userData?.cardId) {
         this.setCardStatDisplayOverride(
-          attackCard.userData.cardId,
+          targetCard.userData.cardId,
           step.disruptionTargetStat,
           Math.max(0, Math.floor(step.disruptionAdjustedOutcome)),
         );
@@ -2458,9 +2466,9 @@ export class CardGameClient {
             || animation.disruptionTargetStat === 'defense';
           if (canShowDisruptionImpact
             && Number.isFinite(animation.disruptionAdjustedOutcome)
-            && card?.userData?.cardId) {
+            && animation.defenderCard?.userData?.cardId) {
             this.setCardStatDisplayOverride(
-              card.userData.cardId,
+              animation.defenderCard.userData.cardId,
               animation.disruptionTargetStat,
               animation.disruptionAdjustedOutcome,
             );
