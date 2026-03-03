@@ -279,10 +279,11 @@ class PhaseManagerServer {
     }
 
     return deckCards.map((normalizedCard, index) => {
+      const cardInstance = normalizeCatalogCardDesign(normalizedCard);
       return {
         id: `${playerId}-card-${index + 1}`,
-        color: this.colorFromHexString(normalizedCard.meshColor),
-        catalogCard: normalizedCard,
+        color: this.colorFromHexString(cardInstance.meshColor),
+        catalogCard: cardInstance,
         summonedTurn: null,
         attackCommitted: false,
         targetSlotIndex: null,
