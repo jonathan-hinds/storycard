@@ -217,6 +217,68 @@ assert.deepEqual(
 );
 
 
+
+const immediateSpellRollMatch = {
+  turnNumber: 1,
+  upkeep: 1,
+  phase: 2,
+  readyPlayers: new Set(),
+  commitCompletedPlayers: new Set(),
+  commitAnimationCompletedPlayers: new Set(),
+  lastDrawnCardsByPlayer: new Map(),
+  lastDotDamageEvents: [],
+  id: 'match-spell-disruption-immediate-roll',
+  players: ['p1', 'p2'],
+  cardsByPlayer: new Map([
+    ['p1', { board: [buildCard({ id: 'ally', slotIndex: 0, ability: damageAbility })], hand: [], deck: [], discard: [] }],
+    ['p2', {
+      board: [buildCard({ id: 'enemy', slotIndex: 0, ability: damageAbility })],
+      hand: [], deck: [], discard: [],
+    }],
+  ]),
+  pendingCommitAttacksByPlayer: new Map([
+    ['p1', [{ id: 'p1:0:opponent:0', attackerSlotIndex: 0, targetSide: 'opponent', targetSlotIndex: 0, selectedAbilityIndex: 0 }]],
+    ['p2', [{ id: 'p2:0:opponent:0', attackerSlotIndex: 0, targetSide: 'opponent', targetSlotIndex: 0, selectedAbilityIndex: 0 }]],
+  ]),
+  commitRollsByAttackId: new Map([
+    ['p2:0:opponent:0:damage', { roll: { outcome: 6 }, submittedAt: 1 }],
+    ['p2:0:opponent:0:speed', { roll: { outcome: 6 }, submittedAt: 1 }],
+    ['p2:0:opponent:0:defense', { roll: { outcome: 6 }, submittedAt: 1 }],
+  ]),
+};
+
+server.applySpellDisruptionDebuff({
+  match: immediateSpellRollMatch,
+  casterId: 'p1',
+  targetSide: 'opponent',
+  targetSlotIndex: 0,
+  enemyValueSourceStat: 'SPD',
+  resolvedValue: 6,
+});
+
+server.applySpellDisruptionDebuffToCommitRoll({
+  match: immediateSpellRollMatch,
+  attackerId: 'p2',
+  attackId: 'p2:0:opponent:0',
+  rollType: 'speed',
+});
+
+assert.equal(
+  immediateSpellRollMatch.commitRollsByAttackId.get('p2:0:opponent:0:speed').roll.outcome,
+  0,
+  'spell disruption should immediately adjust the targeted roll outcome as soon as that roll resolves',
+);
+assert.equal(
+  immediateSpellRollMatch.commitRollsByAttackId.get('p2:0:opponent:0:damage').roll.outcome,
+  6,
+  'spell disruption should not alter non-target damage rolls',
+);
+assert.equal(
+  immediateSpellRollMatch.commitRollsByAttackId.get('p2:0:opponent:0:defense').roll.outcome,
+  6,
+  'spell disruption should not alter non-target defense rolls',
+);
+
 const serializedSpell = server.serializeMatchForPlayer(spellDisruptionMatch, 'p1');
 const spellDisruptedStep = (serializedSpell.meta.commitAttacks || []).find((step) => step.id === 'p2:0:opponent:0');
 assert.equal(
