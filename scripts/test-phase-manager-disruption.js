@@ -225,4 +225,30 @@ assert.equal(
   'spell disruption should publish adjusted speed roll outcomes for impacted attacks',
 );
 
+
+const liveDebuffServer = new PhaseManagerServer();
+const liveDebuffMatch = {
+  ...spellDisruptionMatch,
+  id: 'match-spell-disruption-live-roll',
+  commitRollsByAttackId: new Map(),
+  commitCompletedPlayers: new Set(),
+};
+liveDebuffServer.phaseMatches.set(liveDebuffMatch.id, liveDebuffMatch);
+liveDebuffServer.phaseMatchmakingState.set('p1', { status: 'matched', matchId: liveDebuffMatch.id });
+liveDebuffServer.phaseMatchmakingState.set('p2', { status: 'matched', matchId: liveDebuffMatch.id });
+
+const submitResult = liveDebuffServer.submitCommitRoll({
+  playerId: 'p2',
+  attackId: 'p2:0:opponent:0',
+  rollType: 'speed',
+  sides: 6,
+  roll: { outcome: 6, frames: [] },
+});
+assert.equal(submitResult.statusCode, 200, 'commit roll submission should succeed for matched players');
+assert.equal(
+  liveDebuffMatch.commitRollsByAttackId.get('p2:0:opponent:0:speed')?.roll?.outcome,
+  3,
+  'spell disruption debuff should be applied as soon as the targeted roll is submitted',
+);
+
 console.log('phase manager disruption checks passed');

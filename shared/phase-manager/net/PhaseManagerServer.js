@@ -695,6 +695,31 @@ class PhaseManagerServer {
     }
   }
 
+  getPendingSpellDisruptionPenalty({ match, attackerId, attackId, rollType }) {
+    if (!match || !attackerId || !attackId || !DISRUPTION_ROLL_STATS.includes(rollType)) {
+      return 0;
+    }
+
+    const attacks = match.pendingCommitAttacksByPlayer?.get(attackerId) || [];
+    const pendingAttack = attacks.find((attack) => attack?.id === attackId) || null;
+    if (!pendingAttack || !Number.isInteger(pendingAttack.attackerSlotIndex)) return 0;
+
+    const playerState = match.cardsByPlayer?.get(attackerId);
+    const attackerCard = playerState?.board?.find((card) => card?.slotIndex === pendingAttack.attackerSlotIndex) || null;
+    if (!attackerCard) return 0;
+
+    const turnsRemaining = Number.isInteger(attackerCard.disruptionDebuffTurnsRemaining)
+      ? attackerCard.disruptionDebuffTurnsRemaining
+      : 0;
+    if (turnsRemaining < 1) return 0;
+
+    const debuffValue = Number(attackerCard?.disruptionDebuffs?.[rollType]);
+    const normalizedDebuffValue = Number.isFinite(debuffValue)
+      ? Math.max(0, Math.floor(debuffValue))
+      : 0;
+    return normalizedDebuffValue;
+  }
+
 
   getAttackAbilityForCard(card, selectedAbilityIndex = 0) {
     const catalogCard = card?.catalogCard || {};
@@ -728,6 +753,16 @@ class PhaseManagerServer {
     const currentOutcome = normalizeRollOutcome(Number(rollEntry?.roll?.outcome));
     if (!rollEntry?.roll || !Number.isFinite(currentOutcome)) return null;
 
+    const normalizedTargetStat = targetStat || rollType;
+    if (
+      typeof source === 'string'
+      && source
+      && rollEntry.disruptionSource === source
+      && rollEntry.disruptionTargetStat === normalizedTargetStat
+    ) {
+      return currentOutcome;
+    }
+
     if (!Number.isFinite(rollEntry.originalOutcome)) {
       rollEntry.originalOutcome = currentOutcome;
     }
@@ -735,7 +770,7 @@ class PhaseManagerServer {
     const adjustedOutcome = Math.max(0, currentOutcome - normalizedPenalty);
     rollEntry.roll = { ...rollEntry.roll, outcome: adjustedOutcome };
     rollEntry.disruptionAmount = normalizedPenalty;
-    rollEntry.disruptionTargetStat = targetStat || rollType;
+    rollEntry.disruptionTargetStat = normalizedTargetStat;
     if (typeof source === 'string' && source) {
       rollEntry.disruptionSource = source;
     }
@@ -1438,6 +1473,23 @@ class PhaseManagerServer {
       roll,
       submittedAt: Date.now(),
     });
+
+    const spellDisruptionPenalty = this.getPendingSpellDisruptionPenalty({
+      match,
+      attackerId: playerId,
+      attackId,
+      rollType: normalizedRollType,
+    });
+    if (spellDisruptionPenalty > 0) {
+      this.applyCommitRollPenalty({
+        match,
+        attackId,
+        rollType: normalizedRollType,
+        penaltyValue: spellDisruptionPenalty,
+        source: 'spell',
+        targetStat: normalizedRollType,
+      });
+    }
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
