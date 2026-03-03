@@ -152,44 +152,13 @@ export class CardRollerOverlay {
     return rollSequence;
   }
 
-  getDisplayedOutcome(card, rollType, outcome) {
-    if (!Number.isFinite(outcome)) return outcome;
-    let adjustedOutcome = outcome;
-
-    if (rollType === 'speed') {
-      const frostbiteStacks = Number.isInteger(card?.userData?.frostbiteStacks)
-        ? Math.max(0, card.userData.frostbiteStacks)
-        : 0;
-      adjustedOutcome = Math.max(0, adjustedOutcome - frostbiteStacks);
-    }
-
-    const disruptionTurnsRemaining = Number.isInteger(card?.userData?.disruptionDebuffTurnsRemaining)
-      ? Math.max(0, card.userData.disruptionDebuffTurnsRemaining)
-      : 0;
-    const disruptionDebuffs = card?.userData?.disruptionDebuffs && typeof card.userData.disruptionDebuffs === 'object'
-      ? card.userData.disruptionDebuffs
-      : null;
-    if (disruptionTurnsRemaining > 0 && disruptionDebuffs) {
-      const disruptionPenalty = Number(disruptionDebuffs[rollType]);
-      const normalizedPenalty = Number.isFinite(disruptionPenalty)
-        ? Math.max(0, Math.floor(disruptionPenalty))
-        : 0;
-      if (normalizedPenalty > 0) {
-        adjustedOutcome = Math.max(0, adjustedOutcome - normalizedPenalty);
-      }
-    }
-
-    return adjustedOutcome;
-  }
-
   applyOutcomeToCard(card, rollType, outcome) {
     const statKey = ROLL_TYPE_TO_STAT_KEY[rollType] || rollType;
     const cardId = card?.userData?.cardId;
     if (!cardId) return;
 
-    const displayedOutcome = this.getDisplayedOutcome(card, rollType, outcome);
-    if (typeof displayedOutcome === 'number') {
-      this.cardGameClient?.setCardStatDisplayOverride(cardId, statKey, displayedOutcome);
+    if (typeof outcome === 'number') {
+      this.cardGameClient?.setCardStatDisplayOverride(cardId, statKey, outcome);
     }
   }
 
@@ -210,20 +179,24 @@ export class CardRollerOverlay {
         ? settledValue
         : (Number.isFinite(rolled?.outcome) ? rolled.outcome : null);
 
+      let displayedOutcome = normalizedOutcome;
       if (rolled && typeof onAttackRoll === 'function') {
         const normalizedRoll = Number.isFinite(normalizedOutcome)
           ? { ...rolled, outcome: normalizedOutcome }
           : rolled;
-        await onAttackRoll({
+        const rollSubmission = await onAttackRoll({
           attack: attackStep,
           rollType,
           sides,
           roll: normalizedRoll,
         });
+        if (Number.isFinite(rollSubmission?.outcome)) {
+          displayedOutcome = rollSubmission.outcome;
+        }
       }
 
       await this.pause(this.postSettleDelayMs);
-      this.applyOutcomeToCard(card, rollType, normalizedOutcome);
+      this.applyOutcomeToCard(card, rollType, displayedOutcome);
       await this.pause(this.postUpdateDelayMs);
       outcomes.push({
         cardId: card.userData.cardId,
@@ -231,7 +204,7 @@ export class CardRollerOverlay {
         rollType,
         statValue,
         sides,
-        outcome: normalizedOutcome,
+        outcome: displayedOutcome,
       });
     }
     return outcomes;

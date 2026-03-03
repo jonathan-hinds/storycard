@@ -1344,13 +1344,27 @@ export class PhaseManagerClient {
   }
 
   async submitCommitRoll({ attackId, rollType, sides, roll }) {
-    await this.postJson('/api/phase-manager/match/commit-roll', {
+    const status = await this.postJson('/api/phase-manager/match/commit-roll', {
       playerId: this.playerId,
       attackId,
       rollType,
       sides,
       roll,
     });
+
+    if (status?.matchState) {
+      this.applyMatchmakingStatus(status);
+    }
+
+    const normalizedRollType = typeof rollType === 'string' ? rollType.toLowerCase() : null;
+    const commitRolls = Array.isArray(status?.matchState?.meta?.commitRolls) ? status.matchState.meta.commitRolls : [];
+    const submittedRoll = commitRolls.find((entry) => entry?.attackId === attackId && entry?.rollType === normalizedRollType);
+    const outcome = Number(submittedRoll?.roll?.outcome);
+    if (Number.isFinite(outcome)) {
+      return { outcome };
+    }
+
+    return null;
   }
 
   async waitForRemoteAttackRoll(attackId, rollType = null) {
