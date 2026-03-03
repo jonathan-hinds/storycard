@@ -2265,11 +2265,7 @@ export class CardGameClient {
       const attackerSlotIndex = Number.isInteger(step?.attackerSlotIndex) ? step.attackerSlotIndex : null;
       if (attackerSlotIndex == null) return;
 
-      const attackCard = this.getCardByZoneAndSlot({
-        zone: CARD_ZONE_TYPES.BOARD,
-        slotIndex: attackerSide === 'player' ? attackerSlotIndex + 3 : attackerSlotIndex,
-        owner: attackerSide,
-      });
+      const attackCard = this.resolveBoardCardFromSideSlot(attackerSide, attackerSlotIndex);
       if (!attackCard?.userData?.cardId) return;
 
       const canShowDisruptionImpact = step?.disruptionTargetStat === 'damage'
