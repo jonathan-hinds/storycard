@@ -367,8 +367,11 @@ async function showDecks() {
     },
   });
 
+  const initialDeckCardIds = Array.isArray(session.user.deck?.cards)
+    ? [...session.user.deck.cards]
+    : [];
   deckBuilderScene.setCards(cards);
-  deckBuilderScene.setDeckCardIds(Array.isArray(session.user.deck?.cards) ? [...session.user.deck.cards] : []);
+  deckBuilderScene.setDeckCardIds(initialDeckCardIds);
 }
 
 function showMatch() {
