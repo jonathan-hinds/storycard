@@ -25,6 +25,8 @@ function buildCard({ id, slotIndex, health = 10, ability }) {
     fireStacks: 0,
     frostbiteTurnsRemaining: 0,
     frostbiteStacks: 0,
+    disruptionDebuffTurnsRemaining: 0,
+    disruptionDebuffs: { damage: 0, speed: 0, defense: 0 },
   };
 }
 
@@ -117,6 +119,59 @@ assert.equal(
   fallbackMatch.cardsByPlayer.get('p2').board[0].catalogCard.health,
   7,
   'disruption should deal normal damage when the target has no committed attack',
+);
+
+
+
+const spellDisruptionMatch = {
+  id: 'match-spell-disruption-debuff',
+  players: ['p1', 'p2'],
+  cardsByPlayer: new Map([
+    ['p1', { board: [buildCard({ id: 'ally', slotIndex: 0, ability: damageAbility })], hand: [], deck: [], discard: [] }],
+    ['p2', {
+      board: [buildCard({ id: 'enemy', slotIndex: 0, ability: damageAbility })],
+      hand: [], deck: [], discard: [],
+    }],
+  ]),
+  pendingCommitAttacksByPlayer: new Map([
+    ['p1', [{ id: 'p1:0:opponent:0', attackerSlotIndex: 0, targetSide: 'opponent', targetSlotIndex: 0, selectedAbilityIndex: 0 }]],
+    ['p2', [{ id: 'p2:0:opponent:0', attackerSlotIndex: 0, targetSide: 'opponent', targetSlotIndex: 0, selectedAbilityIndex: 0 }]],
+  ]),
+  commitRollsByAttackId: new Map([
+    ['p1:0:opponent:0:damage', { roll: { outcome: 2 }, submittedAt: 1 }],
+    ['p1:0:opponent:0:speed', { roll: { outcome: 4 }, submittedAt: 1 }],
+    ['p2:0:opponent:0:damage', { roll: { outcome: 5 }, submittedAt: 2 }],
+    ['p2:0:opponent:0:speed', { roll: { outcome: 6 }, submittedAt: 2 }],
+  ]),
+};
+
+const debuffResult = server.applySpellDisruptionDebuff({
+  match: spellDisruptionMatch,
+  casterId: 'p1',
+  targetSide: 'opponent',
+  targetSlotIndex: 0,
+  enemyValueSourceStat: 'speed',
+  resolvedValue: 3,
+});
+assert.equal(debuffResult.executed, true, 'spell disruption should create a pending debuff on the target card');
+assert.equal(
+  spellDisruptionMatch.cardsByPlayer.get('p2').board[0].disruptionDebuffTurnsRemaining,
+  1,
+  'spell disruption debuff should last exactly one upcoming commit phase',
+);
+
+server.applyPendingSpellDisruptionDebuffsToCommitRolls(spellDisruptionMatch);
+assert.equal(
+  spellDisruptionMatch.commitRollsByAttackId.get('p2:0:opponent:0:speed').roll.outcome,
+  3,
+  'spell disruption should reduce the enemy speed roll before attacks are ordered',
+);
+
+const spellOrder = server.getOrderedCommitAttacks(spellDisruptionMatch).map((entry) => entry.attack.id);
+assert.deepEqual(
+  spellOrder,
+  ['p1:0:opponent:0', 'p2:0:opponent:0'],
+  'spell disruption speed debuff should update attack ordering before animations resolve',
 );
 
 console.log('phase manager disruption checks passed');

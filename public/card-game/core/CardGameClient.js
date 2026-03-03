@@ -68,6 +68,7 @@ const BUFF_SILENCE = 'silence';
 const BUFF_POISON = 'poison';
 const BUFF_FIRE = 'fire';
 const BUFF_FROSTBITE = 'frostbite';
+const BUFF_DISRUPTION = 'disruption';
 
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
@@ -240,6 +241,9 @@ export class CardGameClient {
     if (Number.isInteger(card?.userData?.frostbiteTurnsRemaining) && card.userData.frostbiteTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FROSTBITE)) {
       activeBuffs.push(BUFF_FROSTBITE);
     }
+    if (Number.isInteger(card?.userData?.disruptionDebuffTurnsRemaining) && card.userData.disruptionDebuffTurnsRemaining > 0 && !activeBuffs.includes(BUFF_DISRUPTION)) {
+      activeBuffs.push(BUFF_DISRUPTION);
+    }
     return activeBuffs;
   }
 
@@ -389,6 +393,9 @@ export class CardGameClient {
     }
     if (buffId === BUFF_FROSTBITE) {
       return Number.isInteger(card.userData.frostbiteTurnsRemaining) ? Math.max(0, card.userData.frostbiteTurnsRemaining) : 0;
+    }
+    if (buffId === BUFF_DISRUPTION) {
+      return Number.isInteger(card.userData.disruptionDebuffTurnsRemaining) ? Math.max(0, card.userData.disruptionDebuffTurnsRemaining) : 0;
     }
     return 0;
   }

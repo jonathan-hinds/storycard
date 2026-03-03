@@ -2,6 +2,8 @@ const fs = require('fs/promises');
 const path = require('path');
 const { ABILITY_BUFFS } = require('../abilities-catalog/mongoStore');
 
+const BUFF_ICON_IDS = [...ABILITY_BUFFS.filter((buffId) => buffId !== 'none'), 'disruption'];
+
 const DEFAULT_MONGO_URI = 'mongodb+srv://jonathandhd:Bluecow3@cluster0.fwdtteo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
 const COLLECTION_NAME = process.env.BUFF_ICONS_COLLECTION_NAME || 'buff_icons';
@@ -54,9 +56,7 @@ function normalizeAssetPath(value) {
 
 function normalizeBuffIcons(input = {}) {
   const icons = {};
-  ABILITY_BUFFS
-    .filter((buffId) => buffId !== 'none')
-    .forEach((buffId) => {
+  BUFF_ICON_IDS.forEach((buffId) => {
       icons[buffId] = normalizeAssetPath(input[buffId]);
     });
   return icons;
@@ -115,7 +115,7 @@ async function updateBuffIcons(input = {}) {
   const next = { ...current };
 
   Object.entries(input).forEach(([buffId, assetPath]) => {
-    if (!ABILITY_BUFFS.includes(buffId) || buffId === 'none') return;
+    if (!BUFF_ICON_IDS.includes(buffId)) return;
     next[buffId] = normalizeAssetPath(assetPath);
   });
 

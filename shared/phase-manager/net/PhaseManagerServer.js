@@ -111,6 +111,16 @@ const DOT_HANDLERS = {
   },
 };
 
+const DISRUPTION_ROLL_STATS = Object.freeze(['damage', 'speed', 'defense']);
+
+function createEmptyDisruptionDebuffs() {
+  return {
+    damage: 0,
+    speed: 0,
+    defense: 0,
+  };
+}
+
 class PhaseManagerServer {
   constructor(options = {}) {
     this.options = {
@@ -256,6 +266,8 @@ class PhaseManagerServer {
         fireStacks: 0,
         frostbiteTurnsRemaining: 0,
         frostbiteStacks: 0,
+        disruptionDebuffTurnsRemaining: 0,
+        disruptionDebuffs: createEmptyDisruptionDebuffs(),
       }));
     }
 
@@ -297,6 +309,8 @@ class PhaseManagerServer {
         fireStacks: 0,
         frostbiteTurnsRemaining: 0,
         frostbiteStacks: 0,
+        disruptionDebuffTurnsRemaining: 0,
+        disruptionDebuffs: createEmptyDisruptionDebuffs(),
       };
     });
   }
@@ -385,6 +399,16 @@ class PhaseManagerServer {
       resolvedAttack.frostbiteStacks = Number.isFinite(executionState?.frostbiteStacks)
         ? executionState.frostbiteStacks
         : (Number.isFinite(defaultOrdered?.frostbiteStacks) ? defaultOrdered.frostbiteStacks : 0);
+
+      const disruptionRollEntry = ['damage', 'speed', 'defense']
+        .map((rollType) => match.commitRollsByAttackId?.get(`${attack.id}:${rollType}`))
+        .find((rollEntry) => Number.isFinite(rollEntry?.disruptionAmount) && typeof rollEntry?.disruptionTargetStat === 'string');
+      resolvedAttack.disruptionTargetStat = typeof disruptionRollEntry?.disruptionTargetStat === 'string'
+        ? disruptionRollEntry.disruptionTargetStat
+        : null;
+      resolvedAttack.disruptionAdjustedOutcome = Number.isFinite(disruptionRollEntry?.roll?.outcome)
+        ? Math.max(0, Math.floor(disruptionRollEntry.roll.outcome))
+        : null;
 
       if (executionState) {
         resolvedAttack.resolvedLifeStealHealing = Number.isFinite(executionState.lifeStealHealing)
@@ -567,9 +591,92 @@ class PhaseManagerServer {
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
+        disruptionDebuffTurnsRemaining: Math.max(0, (Number.isInteger(card.disruptionDebuffTurnsRemaining) ? card.disruptionDebuffTurnsRemaining : 0) - 1),
+        disruptionDebuffs: createEmptyDisruptionDebuffs(),
       }));
     });
     this.applyDecisionPhaseStartDraw(match);
+  }
+
+
+  applySpellDisruptionDebuff({ match, casterId, targetSide, targetSlotIndex, enemyValueSourceStat, resolvedValue }) {
+    if (!match || !casterId || targetSide !== 'opponent' || !Number.isInteger(targetSlotIndex)) {
+      return { executed: false, reason: 'target_missing' };
+    }
+    const disruptionTargetStat = DISRUPTION_ROLL_STATS.includes(enemyValueSourceStat)
+      ? enemyValueSourceStat
+      : 'damage';
+    const normalizedValue = Number.isFinite(resolvedValue)
+      ? Math.max(0, Math.floor(resolvedValue))
+      : 0;
+    if (normalizedValue < 1) {
+      return { executed: false, reason: 'no_value' };
+    }
+
+    const defenderId = match.players.find((id) => id !== casterId);
+    if (!defenderId) return { executed: false, reason: 'target_missing' };
+    const defenderState = match.cardsByPlayer.get(defenderId);
+    const defenderCard = defenderState?.board?.find((card) => card.slotIndex === targetSlotIndex) || null;
+    if (!defenderCard) return { executed: false, reason: 'target_missing' };
+
+    const existingDebuffs = defenderCard.disruptionDebuffs && typeof defenderCard.disruptionDebuffs === 'object'
+      ? defenderCard.disruptionDebuffs
+      : createEmptyDisruptionDebuffs();
+    const nextDebuffs = {
+      ...createEmptyDisruptionDebuffs(),
+      ...existingDebuffs,
+    };
+    const currentStatDebuff = Number(nextDebuffs[disruptionTargetStat]);
+    nextDebuffs[disruptionTargetStat] = (Number.isFinite(currentStatDebuff) ? Math.max(0, Math.floor(currentStatDebuff)) : 0) + normalizedValue;
+
+    defenderCard.disruptionDebuffTurnsRemaining = 1;
+    defenderCard.disruptionDebuffs = nextDebuffs;
+    return {
+      executed: true,
+      reason: 'spell_disruption_debuff_applied',
+      appliedValue: normalizedValue,
+      disruptionTargetStat,
+      disruptionAdjustedOutcome: null,
+    };
+  }
+
+  applyPendingSpellDisruptionDebuffsToCommitRolls(match) {
+    if (!match?.cardsByPlayer || !match?.pendingCommitAttacksByPlayer || !match?.commitRollsByAttackId) return;
+
+    for (const playerId of match.players || []) {
+      const playerState = match.cardsByPlayer.get(playerId);
+      if (!playerState) continue;
+      for (const card of playerState.board || []) {
+        const turnsRemaining = Number.isInteger(card?.disruptionDebuffTurnsRemaining) ? card.disruptionDebuffTurnsRemaining : 0;
+        if (turnsRemaining < 1) continue;
+        const disruptionDebuffs = card?.disruptionDebuffs && typeof card.disruptionDebuffs === 'object'
+          ? card.disruptionDebuffs
+          : null;
+        if (!disruptionDebuffs) continue;
+
+        const attack = this.findPendingAttackBySlot(match, playerId, card.slotIndex);
+        if (!attack?.id) continue;
+
+        DISRUPTION_ROLL_STATS.forEach((rollStat) => {
+          const debuffValue = Number(disruptionDebuffs[rollStat]);
+          const normalizedDebuffValue = Number.isFinite(debuffValue)
+            ? Math.max(0, Math.floor(debuffValue))
+            : 0;
+          if (normalizedDebuffValue < 1) return;
+
+          const rollKey = `${attack.id}:${rollStat}`;
+          const rollEntry = match.commitRollsByAttackId.get(rollKey);
+          const outcome = Number(rollEntry?.roll?.outcome);
+          if (!rollEntry?.roll || !Number.isFinite(outcome)) return;
+
+          const adjustedOutcome = Math.max(0, Math.floor(outcome) - normalizedDebuffValue);
+          rollEntry.roll = { ...rollEntry.roll, outcome: adjustedOutcome };
+          rollEntry.disruptionAmount = normalizedDebuffValue;
+          rollEntry.disruptionTargetStat = rollStat;
+          rollEntry.disruptionSource = 'spell';
+        });
+      }
+    }
   }
 
 
@@ -1211,6 +1318,7 @@ class PhaseManagerServer {
 
     match.commitCompletedPlayers.add(playerId);
     if (match.commitCompletedPlayers.size === match.players.length && !match.commitAllRolledAt) {
+      this.applyPendingSpellDisruptionDebuffsToCommitRolls(match);
       this.applyCommitEffects(match);
       match.commitAllRolledAt = Date.now();
     }
@@ -1367,6 +1475,13 @@ class PhaseManagerServer {
         fireStacks: Number.isInteger(knownCard?.fireStacks) ? knownCard.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(knownCard?.frostbiteTurnsRemaining) ? knownCard.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(knownCard?.frostbiteStacks) ? knownCard.frostbiteStacks : 0,
+        disruptionDebuffTurnsRemaining: Number.isInteger(knownCard?.disruptionDebuffTurnsRemaining) ? knownCard.disruptionDebuffTurnsRemaining : 0,
+        disruptionDebuffs: knownCard?.disruptionDebuffs && typeof knownCard.disruptionDebuffs === 'object'
+          ? {
+            ...createEmptyDisruptionDebuffs(),
+            ...knownCard.disruptionDebuffs,
+          }
+          : createEmptyDisruptionDebuffs(),
       });
     }
 
@@ -1696,6 +1811,8 @@ class PhaseManagerServer {
       resolvedLifeStealHealing: 0,
       lifeStealHealingTargetSlotIndex: null,
       lifeStealHealingTargetSide: null,
+      disruptionTargetStat: null,
+      disruptionAdjustedOutcome: null,
       startedAt: Date.now(),
       completedAt: null,
     };
@@ -1818,18 +1935,41 @@ class PhaseManagerServer {
       sourceType: spellCard?.type,
       enemyValueSourceStat: spellAbility?.enemyValueSourceStat || null,
     });
-    const executionResult = this.applyResolvedAbilityEffect({
-      match,
-      casterId: playerId,
-      targetSide: active.targetSide,
-      targetSlotIndex: active.targetSlotIndex,
-      effectId,
-      resolvedValue: baseResolvedValue,
-      sourceType: spellCard?.type,
-    });
+    const spellDisruptionResult = effectId === 'disruption'
+      ? this.applySpellDisruptionDebuff({
+        match,
+        casterId: playerId,
+        targetSide: active.targetSide,
+        targetSlotIndex: active.targetSlotIndex,
+        enemyValueSourceStat: spellAbility?.enemyValueSourceStat || null,
+        resolvedValue,
+      })
+      : null;
+    const executionResult = effectId === 'disruption'
+      ? {
+        executed: spellDisruptionResult?.executed !== false,
+        appliedValue: Number.isFinite(spellDisruptionResult?.appliedValue) ? spellDisruptionResult.appliedValue : resolvedValue,
+        reason: spellDisruptionResult?.reason || 'spell_disruption_debuff_applied',
+      }
+      : this.applyResolvedAbilityEffect({
+        match,
+        casterId: playerId,
+        targetSide: active.targetSide,
+        targetSlotIndex: active.targetSlotIndex,
+        effectId,
+        resolvedValue: baseResolvedValue,
+        sourceType: spellCard?.type,
+        enemyValueSourceStat: spellAbility?.enemyValueSourceStat || null,
+      });
 
     active.effectId = effectId;
     active.resolvedValue = resolvedValue;
+    active.disruptionTargetStat = typeof spellDisruptionResult?.disruptionTargetStat === 'string'
+      ? spellDisruptionResult.disruptionTargetStat
+      : null;
+    active.disruptionAdjustedOutcome = Number.isFinite(spellDisruptionResult?.disruptionAdjustedOutcome)
+      ? spellDisruptionResult.disruptionAdjustedOutcome
+      : null;
     active.resolvedDamage = (effectId === 'damage_enemy' || effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback') && executionResult.executed !== false ? resolvedValue : 0;
     active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false ? resolvedValue : 0;
     if (effectId === 'life_steal' && executionResult.executed !== false) {
