@@ -2258,6 +2258,10 @@ export class CardGameClient {
         retaliationDamage: Number.isFinite(step?.retaliationDamage) ? step.retaliationDamage : 0,
         retaliationAppliedDamage: Number.isFinite(step?.retaliationAppliedDamage) ? step.retaliationAppliedDamage : 0,
         defenseRemaining: Number.isFinite(step?.defenseRemaining) ? step.defenseRemaining : null,
+        disruptionTargetStat: typeof step?.disruptionTargetStat === 'string' ? step.disruptionTargetStat : null,
+        disruptionAdjustedOutcome: Number.isFinite(step?.disruptionAdjustedOutcome)
+          ? Math.max(0, Math.floor(step.disruptionAdjustedOutcome))
+          : null,
         buffId: typeof step?.buffId === 'string' ? step.buffId : 'none',
         buffTarget: typeof step?.buffTarget === 'string' ? step.buffTarget : 'none',
         buffDurationTurns: Number.isInteger(step?.buffDurationTurns) ? step.buffDurationTurns : 0,
@@ -2399,6 +2403,19 @@ export class CardGameClient {
             if (Number.isFinite(animation.defenseRemaining) && card?.userData?.cardId) {
               this.setCardStatDisplayOverride(card.userData.cardId, 'defense', Math.max(0, Math.floor(animation.defenseRemaining)));
             }
+          }
+
+          const canShowDisruptionImpact = animation.disruptionTargetStat === 'damage'
+            || animation.disruptionTargetStat === 'speed'
+            || animation.disruptionTargetStat === 'defense';
+          if (canShowDisruptionImpact
+            && Number.isFinite(animation.disruptionAdjustedOutcome)
+            && animation.defenderCard?.userData?.cardId) {
+            this.setCardStatDisplayOverride(
+              animation.defenderCard.userData.cardId,
+              animation.disruptionTargetStat,
+              animation.disruptionAdjustedOutcome,
+            );
           }
 
           if (Number.isFinite(animation.resolvedLifeStealHealing) && animation.resolvedLifeStealHealing > 0) {
