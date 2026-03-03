@@ -88,32 +88,73 @@ async function verifyPassword(password, passwordHash, passwordSalt) {
   return crypto.timingSafeEqual(storedKey, derivedKey);
 }
 
-function toPublicUser(document) {
-  const normalizeCardId = (cardId) => {
-    if (typeof cardId === 'string') {
-      const normalized = cardId.trim();
+function normalizeCardId(cardId) {
+  if (typeof cardId === 'string') {
+    const normalized = cardId.trim();
+    return normalized || null;
+  }
+
+  if (cardId && typeof cardId === 'object') {
+    if (typeof cardId.toHexString === 'function') {
+      return cardId.toHexString();
+    }
+
+    if (typeof cardId.$oid === 'string') {
+      const normalized = cardId.$oid.trim();
       return normalized || null;
     }
-    if (cardId && typeof cardId === 'object') {
-      if (typeof cardId.toHexString === 'function') {
-        return cardId.toHexString();
-      }
-      if (typeof cardId.$oid === 'string') {
-        const normalized = cardId.$oid.trim();
-        return normalized || null;
-      }
+
+    if (typeof cardId.id === 'string') {
+      const normalized = cardId.id.trim();
+      return normalized || null;
     }
-    return null;
+
+    if (typeof cardId.cardId === 'string') {
+      const normalized = cardId.cardId.trim();
+      return normalized || null;
+    }
+  }
+
+  return null;
+}
+
+function normalizeDeckFromDocument(document = {}) {
+  const legacyCards = Array.isArray(document.deck)
+    ? document.deck
+    : Array.isArray(document.deckCardIds)
+      ? document.deckCardIds
+      : Array.isArray(document.cards)
+        ? document.cards
+        : [];
+
+  const deckSource = document.deck && typeof document.deck === 'object' && !Array.isArray(document.deck)
+    ? document.deck
+    : {};
+
+  const cardsSource = Array.isArray(deckSource.cards) ? deckSource.cards : legacyCards;
+  const cards = cardsSource.map(normalizeCardId).filter((cardId) => typeof cardId === 'string');
+
+  const creatureCount = Number.isInteger(deckSource.creatureCount)
+    ? deckSource.creatureCount
+    : Number.isInteger(document.deckCreatureCount)
+      ? document.deckCreatureCount
+      : 0;
+
+  const updatedAt = typeof deckSource.updatedAt === 'string'
+    ? deckSource.updatedAt
+    : typeof document.deckUpdatedAt === 'string'
+      ? document.deckUpdatedAt
+      : null;
+
+  return {
+    cards,
+    creatureCount,
+    updatedAt,
   };
-  const deck = document.deck && typeof document.deck === 'object'
-    ? {
-      cards: Array.isArray(document.deck.cards)
-        ? document.deck.cards.map(normalizeCardId).filter((cardId) => typeof cardId === 'string')
-        : [],
-      creatureCount: Number.isInteger(document.deck.creatureCount) ? document.deck.creatureCount : 0,
-      updatedAt: typeof document.deck.updatedAt === 'string' ? document.deck.updatedAt : null,
-    }
-    : { cards: [], creatureCount: 0, updatedAt: null };
+}
+
+function toPublicUser(document) {
+  const deck = normalizeDeckFromDocument(document);
   return {
     id: document._id.toString(),
     username: document.username,
@@ -248,6 +289,8 @@ module.exports = {
   createUser,
   getUserById,
   loginUser,
+  normalizeDeckFromDocument,
+  normalizeCardId,
   updateUserDeck,
   normalizeUsername,
   normalizePassword,
