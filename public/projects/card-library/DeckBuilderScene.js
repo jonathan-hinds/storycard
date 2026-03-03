@@ -147,6 +147,47 @@ function makePane(name, centerX) {
   return { name, centerX, entries: [], scrollY: 0, scrollTargetY: 0, maxScrollY: 0 };
 }
 
+function normalizeCardId(value) {
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized || null;
+  }
+
+  if (value && typeof value === 'object') {
+    if (typeof value.toHexString === 'function') {
+      return value.toHexString();
+    }
+    if (typeof value.$oid === 'string') {
+      const normalized = value.$oid.trim();
+      return normalized || null;
+    }
+    if (typeof value.id === 'string') {
+      const normalized = value.id.trim();
+      return normalized || null;
+    }
+    if (typeof value.cardId === 'string') {
+      const normalized = value.cardId.trim();
+      return normalized || null;
+    }
+    if (typeof value._id === 'string') {
+      const normalized = value._id.trim();
+      return normalized || null;
+    }
+    if (value._id && typeof value._id === 'object') {
+      return normalizeCardId(value._id);
+    }
+  }
+
+  return null;
+}
+
+function getCardRecordId(card = {}) {
+  return normalizeCardId(card.id)
+    || normalizeCardId(card.cardId)
+    || normalizeCardId(card._id)
+    || null;
+}
+
 export class DeckBuilderScene {
   constructor({
     canvas,
@@ -275,7 +316,14 @@ export class DeckBuilderScene {
   }
 
   setCards(cards) {
-    this.libraryCards = Array.isArray(cards) ? [...cards] : [];
+    this.libraryCards = Array.isArray(cards)
+      ? cards
+        .map((card) => {
+          const id = getCardRecordId(card);
+          return id ? { ...card, id } : null;
+        })
+        .filter((card) => card)
+      : [];
     this.applyLibraryFilters();
     this.rebuildDeckPane();
     this.emitDeckChange();
@@ -445,8 +493,9 @@ export class DeckBuilderScene {
   setDeckCardIds(cardIds = []) {
     this.deckCounts.clear();
     cardIds.forEach((id) => {
-      if (typeof id !== 'string') return;
-      this.deckCounts.set(id, (this.deckCounts.get(id) || 0) + 1);
+      const normalizedId = normalizeCardId(id);
+      if (!normalizedId) return;
+      this.deckCounts.set(normalizedId, (this.deckCounts.get(normalizedId) || 0) + 1);
     });
     this.rebuildDeckPane();
     this.emitDeckChange();
@@ -458,7 +507,7 @@ export class DeckBuilderScene {
       for (let i = 0; i < count; i += 1) deckCardIds.push(id);
     });
     const creatureCount = deckCardIds
-      .map((id) => this.libraryCards.find((card) => card.id === id))
+      .map((id) => this.libraryCards.find((card) => getCardRecordId(card) === id))
       .filter((card) => resolveCardKind(card?.cardKind) === CARD_KINDS.CREATURE).length;
     const violations = [];
     if (deckCardIds.length > 10) violations.push('Deck cannot exceed 10 cards.');
@@ -493,7 +542,7 @@ export class DeckBuilderScene {
     this.closePreview({ immediate: true });
     this.clearEntries(this.deckPane);
     const cards = [...this.deckCounts.entries()]
-      .map(([id, count]) => ({ card: this.libraryCards.find((candidate) => candidate.id === id), count }))
+      .map(([id, count]) => ({ card: this.libraryCards.find((candidate) => getCardRecordId(candidate) === id), count }))
       .filter(({ card }) => card);
     cards.forEach(({ card, count }) => {
       const entry = this.createEntry(card, this.deckPane, count);
