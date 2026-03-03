@@ -178,6 +178,9 @@ export class CardGameClient {
     this.updateSize = this.updateSize.bind(this);
     this.animate = this.animate.bind(this);
     this.resetDemo = this.resetDemo.bind(this);
+    this.playCommitPhaseAnimations = this.playCommitPhaseAnimations.bind(this);
+    this.resolveBoardCardFromSideSlot = this.resolveBoardCardFromSideSlot.bind(this);
+    this.getCardByZoneAndSlot = this.getCardByZoneAndSlot.bind(this);
 
     this.canvasContainer.addEventListener('pointerdown', this.handlePointerDown);
     this.canvasContainer.addEventListener('pointermove', this.handlePointerMove);
@@ -1348,7 +1351,13 @@ export class CardGameClient {
     const resolvedSlotIndex = targetSide === this.template.playerSide
       ? targetSlotIndex + boardSlotsPerSide
       : targetSlotIndex;
-    return this.getCardByZoneAndSlot(CARD_ZONE_TYPES.BOARD, resolvedSlotIndex);
+    if (typeof this.getCardByZoneAndSlot === 'function') {
+      return this.getCardByZoneAndSlot(CARD_ZONE_TYPES.BOARD, resolvedSlotIndex);
+    }
+    return this.cards.find((entry) => (
+      entry?.userData?.zone === CARD_ZONE_TYPES.BOARD
+      && entry?.userData?.slotIndex === resolvedSlotIndex
+    )) || null;
   }
 
   getCardByZoneAndSlot(zone, slotIndex) {
