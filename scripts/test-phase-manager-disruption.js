@@ -50,6 +50,14 @@ const damageAbility = {
 };
 
 const match = {
+  turnNumber: 1,
+  upkeep: 1,
+  phase: 2,
+  readyPlayers: new Set(),
+  commitCompletedPlayers: new Set(),
+  commitAnimationCompletedPlayers: new Set(),
+  lastDrawnCardsByPlayer: new Map(),
+  lastDotDamageEvents: [],
   id: 'match-disruption-order',
   players: ['p1', 'p2'],
   cardsByPlayer: new Map([
@@ -97,7 +105,24 @@ assert.deepEqual(
   'speed disruption should reorder remaining attacks when initiative changes mid-resolution',
 );
 
+
+const serializedForP1 = server.serializeMatchForPlayer(match, 'p1');
+const disruptedEnemyStep = (serializedForP1.meta.commitAttacks || []).find((step) => step.id === 'p2:0:opponent:0');
+assert.equal(
+  disruptedEnemyStep?.adjustedRollOutcomes?.speed,
+  1,
+  'disruption should publish adjusted roll outcomes for affected attacks so UI can display them',
+);
+
 const fallbackMatch = {
+  turnNumber: 1,
+  upkeep: 1,
+  phase: 2,
+  readyPlayers: new Set(),
+  commitCompletedPlayers: new Set(),
+  commitAnimationCompletedPlayers: new Set(),
+  lastDrawnCardsByPlayer: new Map(),
+  lastDotDamageEvents: [],
   id: 'match-disruption-fallback',
   players: ['p1', 'p2'],
   cardsByPlayer: new Map([
@@ -122,8 +147,25 @@ assert.equal(
 );
 
 
+const serializedFallback = server.serializeMatchForPlayer(fallbackMatch, 'p1');
+const disruptedFallbackStep = (serializedFallback.meta.commitAttacks || []).find((step) => step.id === 'p1:0:opponent:0');
+assert.equal(
+  disruptedFallbackStep?.adjustedRollOutcomes?.damage,
+  undefined,
+  'fallback damage disruption should not report a roll adjustment when no enemy roll was modified',
+);
+
+
 
 const spellDisruptionMatch = {
+  turnNumber: 1,
+  upkeep: 1,
+  phase: 2,
+  readyPlayers: new Set(),
+  commitCompletedPlayers: new Set(),
+  commitAnimationCompletedPlayers: new Set(),
+  lastDrawnCardsByPlayer: new Map(),
+  lastDotDamageEvents: [],
   id: 'match-spell-disruption-debuff',
   players: ['p1', 'p2'],
   cardsByPlayer: new Map([
@@ -172,6 +214,15 @@ assert.deepEqual(
   spellOrder,
   ['p1:0:opponent:0', 'p2:0:opponent:0'],
   'spell disruption speed debuff should update attack ordering before animations resolve',
+);
+
+
+const serializedSpell = server.serializeMatchForPlayer(spellDisruptionMatch, 'p1');
+const spellDisruptedStep = (serializedSpell.meta.commitAttacks || []).find((step) => step.id === 'p2:0:opponent:0');
+assert.equal(
+  spellDisruptedStep?.adjustedRollOutcomes?.speed,
+  3,
+  'spell disruption should publish adjusted speed roll outcomes for impacted attacks',
 );
 
 console.log('phase manager disruption checks passed');

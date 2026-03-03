@@ -121,6 +121,10 @@ function createEmptyDisruptionDebuffs() {
   };
 }
 
+function normalizeRollOutcome(outcome) {
+  return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : null;
+}
+
 class PhaseManagerServer {
   constructor(options = {}) {
     this.options = {
@@ -400,7 +404,21 @@ class PhaseManagerServer {
         ? executionState.frostbiteStacks
         : (Number.isFinite(defaultOrdered?.frostbiteStacks) ? defaultOrdered.frostbiteStacks : 0);
 
-      const disruptionRollEntry = ['damage', 'speed', 'defense']
+      const adjustedRollOutcomes = {};
+      DISRUPTION_ROLL_STATS.forEach((rollType) => {
+        const rollEntry = match.commitRollsByAttackId?.get(`${attack.id}:${rollType}`);
+        const currentOutcome = normalizeRollOutcome(Number(rollEntry?.roll?.outcome));
+        const originalOutcome = Number.isFinite(rollEntry?.originalOutcome)
+          ? normalizeRollOutcome(rollEntry.originalOutcome)
+          : currentOutcome;
+        if (!Number.isFinite(currentOutcome) || !Number.isFinite(originalOutcome)) return;
+        if (currentOutcome !== originalOutcome || Number.isFinite(rollEntry?.disruptionAmount)) {
+          adjustedRollOutcomes[rollType] = currentOutcome;
+        }
+      });
+      resolvedAttack.adjustedRollOutcomes = Object.keys(adjustedRollOutcomes).length ? adjustedRollOutcomes : null;
+
+      const disruptionRollEntry = DISRUPTION_ROLL_STATS
         .map((rollType) => match.commitRollsByAttackId?.get(`${attack.id}:${rollType}`))
         .find((rollEntry) => Number.isFinite(rollEntry?.disruptionAmount) && typeof rollEntry?.disruptionTargetStat === 'string');
       resolvedAttack.disruptionTargetStat = typeof disruptionRollEntry?.disruptionTargetStat === 'string'
@@ -664,16 +682,14 @@ class PhaseManagerServer {
             : 0;
           if (normalizedDebuffValue < 1) return;
 
-          const rollKey = `${attack.id}:${rollStat}`;
-          const rollEntry = match.commitRollsByAttackId.get(rollKey);
-          const outcome = Number(rollEntry?.roll?.outcome);
-          if (!rollEntry?.roll || !Number.isFinite(outcome)) return;
-
-          const adjustedOutcome = Math.max(0, Math.floor(outcome) - normalizedDebuffValue);
-          rollEntry.roll = { ...rollEntry.roll, outcome: adjustedOutcome };
-          rollEntry.disruptionAmount = normalizedDebuffValue;
-          rollEntry.disruptionTargetStat = rollStat;
-          rollEntry.disruptionSource = 'spell';
+          this.applyCommitRollPenalty({
+            match,
+            attackId: attack.id,
+            rollType: rollStat,
+            penaltyValue: normalizedDebuffValue,
+            source: 'spell',
+            targetStat: rollStat,
+          });
         });
       }
     }
@@ -699,8 +715,31 @@ class PhaseManagerServer {
 
     const rollType = ability.valueSourceStat === 'efct' ? 'damage' : (ability.valueSourceStat || 'damage');
     const rollEntry = commitRollsByAttackId.get(`${attackId}:${rollType}`);
-    const outcome = Number(rollEntry?.roll?.outcome);
-    return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : 0;
+    const outcome = normalizeRollOutcome(Number(rollEntry?.roll?.outcome));
+    return Number.isFinite(outcome) ? outcome : 0;
+  }
+
+  applyCommitRollPenalty({ match, attackId, rollType, penaltyValue, source = null, targetStat = null }) {
+    if (!match?.commitRollsByAttackId || typeof attackId !== 'string' || typeof rollType !== 'string') return null;
+    const normalizedPenalty = normalizeRollOutcome(Number(penaltyValue));
+    if (!Number.isFinite(normalizedPenalty) || normalizedPenalty < 1) return null;
+
+    const rollEntry = match.commitRollsByAttackId.get(`${attackId}:${rollType}`);
+    const currentOutcome = normalizeRollOutcome(Number(rollEntry?.roll?.outcome));
+    if (!rollEntry?.roll || !Number.isFinite(currentOutcome)) return null;
+
+    if (!Number.isFinite(rollEntry.originalOutcome)) {
+      rollEntry.originalOutcome = currentOutcome;
+    }
+
+    const adjustedOutcome = Math.max(0, currentOutcome - normalizedPenalty);
+    rollEntry.roll = { ...rollEntry.roll, outcome: adjustedOutcome };
+    rollEntry.disruptionAmount = normalizedPenalty;
+    rollEntry.disruptionTargetStat = targetStat || rollType;
+    if (typeof source === 'string' && source) {
+      rollEntry.disruptionSource = source;
+    }
+    return adjustedOutcome;
   }
 
   resolveAbilityValue({ ability, rollValue = null }) {
@@ -911,15 +950,17 @@ class PhaseManagerServer {
         : 'damage';
       const defenderAttack = this.findPendingAttackBySlot(match, defenderId, targetSlotIndex);
       if (defenderAttack?.id) {
-        const rollKey = `${defenderAttack.id}:${disruptionTargetStat}`;
-        const rollEntry = match.commitRollsByAttackId?.get(rollKey);
-        const currentOutcome = Number(rollEntry?.roll?.outcome);
-        if (rollEntry?.roll && Number.isFinite(currentOutcome)) {
-          const adjustedOutcome = Math.max(0, Math.floor(currentOutcome) - adjustedResolvedValue);
-          rollEntry.roll = { ...rollEntry.roll, outcome: adjustedOutcome };
-          rollEntry.disruptedByAttackId = defenderAttack.id;
-          rollEntry.disruptionAmount = adjustedResolvedValue;
-          rollEntry.disruptionTargetStat = disruptionTargetStat;
+        const adjustedOutcome = this.applyCommitRollPenalty({
+          match,
+          attackId: defenderAttack.id,
+          rollType: disruptionTargetStat,
+          penaltyValue: adjustedResolvedValue,
+          source: 'attack',
+          targetStat: disruptionTargetStat,
+        });
+        if (Number.isFinite(adjustedOutcome)) {
+          const rollEntry = match.commitRollsByAttackId?.get(`${defenderAttack.id}:${disruptionTargetStat}`);
+          if (rollEntry) rollEntry.disruptedByAttackId = defenderAttack.id;
           return {
             executed: true,
             appliedValue: adjustedResolvedValue,

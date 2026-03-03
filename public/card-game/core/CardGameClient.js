@@ -2288,12 +2288,28 @@ export class CardGameClient {
         || step?.disruptionTargetStat === 'defense';
       if (canShowDisruptionImpact
         && Number.isFinite(step?.disruptionAdjustedOutcome)
-        && targetCard?.userData?.cardId) {
+        && targetCard?.userData?.cardId
+        && (step?.effectId === 'disruption' || step?.disruptionSource !== 'spell')) {
         this.setCardStatDisplayOverride(
           targetCard.userData.cardId,
           step.disruptionTargetStat,
           Math.max(0, Math.floor(step.disruptionAdjustedOutcome)),
         );
+      }
+
+      const adjustedRollOutcomes = step?.adjustedRollOutcomes && typeof step.adjustedRollOutcomes === 'object'
+        ? step.adjustedRollOutcomes
+        : null;
+      if (adjustedRollOutcomes && attackCard?.userData?.cardId) {
+        ['damage', 'speed', 'defense'].forEach((rollStat) => {
+          const adjustedValue = Number(adjustedRollOutcomes[rollStat]);
+          if (!Number.isFinite(adjustedValue)) return;
+          this.setCardStatDisplayOverride(
+            attackCard.userData.cardId,
+            rollStat,
+            Math.max(0, Math.floor(adjustedValue)),
+          );
+        });
       }
 
       const hasAdjustedSpeed = Number.isFinite(step?.adjustedSpeedOutcome)
@@ -2332,6 +2348,13 @@ export class CardGameClient {
         buffDurationTurns: Number.isInteger(step?.buffDurationTurns) ? step.buffDurationTurns : 0,
         speedOutcome: Number.isFinite(step?.speedOutcome) ? Math.max(0, Math.floor(step.speedOutcome)) : null,
         adjustedSpeedOutcome: Number.isFinite(step?.adjustedSpeedOutcome) ? Math.max(0, Math.floor(step.adjustedSpeedOutcome)) : null,
+        adjustedRollOutcomes: step?.adjustedRollOutcomes && typeof step.adjustedRollOutcomes === 'object'
+          ? {
+            damage: Number.isFinite(Number(step.adjustedRollOutcomes.damage)) ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.damage))) : null,
+            speed: Number.isFinite(Number(step.adjustedRollOutcomes.speed)) ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.speed))) : null,
+            defense: Number.isFinite(Number(step.adjustedRollOutcomes.defense)) ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.defense))) : null,
+          }
+          : null,
         didHit: false,
         initialized: false,
       });
@@ -2361,6 +2384,16 @@ export class CardGameClient {
           animation.defenderCard = resolved.defenderSlot.card;
           animation.originPosition = new THREE.Vector3(resolved.attackerSlot.x, 0, resolved.attackerSlot.z);
           animation.defenderPosition = new THREE.Vector3(resolved.defenderSlot.x, 0, resolved.defenderSlot.z);
+          const adjustedRollOutcomes = animation.adjustedRollOutcomes && typeof animation.adjustedRollOutcomes === 'object'
+            ? animation.adjustedRollOutcomes
+            : null;
+          if (adjustedRollOutcomes && animation.attackerCard?.userData?.cardId) {
+            ['damage', 'speed', 'defense'].forEach((rollStat) => {
+              const adjustedValue = Number(adjustedRollOutcomes[rollStat]);
+              if (!Number.isFinite(adjustedValue)) return;
+              this.setCardStatDisplayOverride(animation.attackerCard.userData.cardId, rollStat, Math.max(0, Math.floor(adjustedValue)));
+            });
+          }
           const hasAdjustedSpeed = Number.isFinite(animation.adjustedSpeedOutcome)
             && Number.isFinite(animation.speedOutcome)
             && animation.adjustedSpeedOutcome !== animation.speedOutcome;
