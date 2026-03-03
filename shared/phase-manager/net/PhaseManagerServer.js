@@ -407,6 +407,12 @@ class PhaseManagerServer {
         resolvedAttack.defenseRemaining = Number.isFinite(executionState.defenseRemaining)
           ? executionState.defenseRemaining
           : 0;
+        resolvedAttack.disruptionTargetStat = typeof executionState.disruptionTargetStat === 'string'
+          ? executionState.disruptionTargetStat
+          : null;
+        resolvedAttack.disruptionAdjustedOutcome = Number.isFinite(executionState.disruptionAdjustedOutcome)
+          ? executionState.disruptionAdjustedOutcome
+          : null;
       }
 
       commitAttacks.push(resolvedAttack);
