@@ -3,11 +3,12 @@ const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
 const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
-const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus', 'life_steal'];
+const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus', 'life_steal', 'disruption'];
 const ABILITY_BUFFS = ['none', 'taunt', 'silence', 'poison', 'fire', 'frostbite'];
 const ABILITY_BUFF_TARGETS = ['none', 'self', 'friendly', 'enemy'];
 const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
 const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense', 'efct'];
+const ABILITY_ENEMY_ROLL_STATS = ['damage', 'speed', 'defense'];
 const ABILITY_ROLL_STATS_BY_KIND = Object.freeze({
   Creature: ['damage', 'speed', 'defense'],
   Spell: ['efct'],
@@ -190,6 +191,7 @@ function toAbilityRecord(document) {
     valueSourceType: document.valueSourceType || 'none',
     valueSourceStat: document.valueSourceStat || null,
     valueSourceFixed: Number.isFinite(document.valueSourceFixed) ? document.valueSourceFixed : null,
+    enemyValueSourceStat: document.enemyValueSourceStat ? String(document.enemyValueSourceStat).trim().toLowerCase() : null,
     durationTurns: Number.isInteger(document.durationTurns) ? document.durationTurns : null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
@@ -207,6 +209,7 @@ function normalizeAbilityInput(input = {}) {
   const buffTarget = typeof input.buffTarget === 'string' ? input.buffTarget.trim().toLowerCase() : 'none';
   const valueSourceType = typeof input.valueSourceType === 'string' ? input.valueSourceType.trim().toLowerCase() : 'none';
   const valueSourceStat = typeof input.valueSourceStat === 'string' ? input.valueSourceStat.trim().toLowerCase() : null;
+  const enemyValueSourceStat = typeof input.enemyValueSourceStat === 'string' ? input.enemyValueSourceStat.trim().toLowerCase() : null;
   const fixedRaw = input.valueSourceFixed;
   const valueSourceFixed = fixedRaw === '' || fixedRaw == null ? null : Number(fixedRaw);
   const durationRaw = input.durationTurns;
@@ -251,6 +254,14 @@ function normalizeAbilityInput(input = {}) {
   const allowedRollStats = ABILITY_ROLL_STATS_BY_KIND[abilityKind] || ABILITY_ROLL_STATS;
   if (valueSourceType === 'roll' && !allowedRollStats.includes(valueSourceStat || '')) {
     throw new Error(`valueSourceStat must be one of: ${allowedRollStats.join(', ')}`);
+  }
+
+  if (effectId === 'disruption' && !ABILITY_ENEMY_ROLL_STATS.includes(enemyValueSourceStat || '')) {
+    throw new Error(`enemyValueSourceStat must be one of: ${ABILITY_ENEMY_ROLL_STATS.join(', ')}`);
+  }
+
+  if (effectId === 'disruption' && target !== 'enemy') {
+    throw new Error('disruption abilities must target enemy');
   }
 
   if (valueSourceType === 'fixed') {
@@ -322,6 +333,7 @@ function normalizeAbilityInput(input = {}) {
     valueSourceType,
     valueSourceStat: valueSourceType === 'roll' ? valueSourceStat : null,
     valueSourceFixed: valueSourceType === 'fixed' ? valueSourceFixed : null,
+    enemyValueSourceStat: effectId === 'disruption' ? enemyValueSourceStat : null,
     durationTurns: buffId === 'taunt' || buffId === 'silence' || buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' ? durationTurns : null,
   };
 }
@@ -405,6 +417,7 @@ module.exports = {
   ABILITY_BUFF_TARGETS,
   ABILITY_VALUE_SOURCE_TYPES,
   ABILITY_ROLL_STATS,
+  ABILITY_ENEMY_ROLL_STATS,
   ABILITY_ROLL_STATS_BY_KIND,
   listAbilities,
   listAbilitiesByIds,

@@ -12,6 +12,7 @@ const valueSourceTypeSelect = document.getElementById('ability-value-source-type
 const buffSelect = document.getElementById('ability-buff');
 const buffTargetSelect = document.getElementById('ability-buff-target');
 const valueSourceStatSelect = document.getElementById('ability-value-source-stat');
+const enemyValueSourceStatSelect = document.getElementById('ability-enemy-value-source-stat');
 const valueSourceFixedInput = document.getElementById('ability-value-source-fixed');
 const durationTurnsInput = document.getElementById('ability-duration-turns');
 
@@ -22,6 +23,7 @@ let abilitiesCache = [];
 let abilityOptionCatalog = {
   buffs: ['none'],
   buffTargets: ['none'],
+  enemyRollStats: ['damage', 'speed', 'defense'],
 };
 
 function setStatus(message, isError = false) {
@@ -89,6 +91,16 @@ function updateValueSourceVisibility() {
   valueSourceFixedInput.previousElementSibling.hidden = !showFixed;
 }
 
+
+function updateDisruptionVisibility() {
+  const isDisruption = (effectSelect?.value || 'none') === 'disruption';
+  if (!enemyValueSourceStatSelect) return;
+  enemyValueSourceStatSelect.hidden = !isDisruption;
+  if (enemyValueSourceStatSelect.previousElementSibling) enemyValueSourceStatSelect.previousElementSibling.hidden = !isDisruption;
+  enemyValueSourceStatSelect.required = isDisruption;
+  if (!isDisruption) enemyValueSourceStatSelect.value = '';
+}
+
 function updateDurationVisibility() {
   const needsDuration = buffSelect?.value === 'taunt'
     || buffSelect?.value === 'silence'
@@ -103,6 +115,9 @@ function updateDurationVisibility() {
 }
 
 function validateAbilityInput(abilityInput) {
+  if (abilityInput.effectId === 'disruption' && !abilityInput.enemyValueSourceStat) {
+    return 'Disruption abilities must choose an enemy roll stat target.';
+  }
   if (abilityInput.target === 'enemy'
     && abilityInput.buffId !== 'none'
     && abilityInput.buffId !== 'silence'
@@ -148,6 +163,7 @@ function resetFormToCreateMode() {
   valueSourceFixedInput.value = '';
   if (durationTurnsInput) durationTurnsInput.value = '';
   updateValueSourceVisibility();
+  updateDisruptionVisibility();
   updateDurationVisibility();
 }
 
@@ -184,7 +200,10 @@ function renderAbilities(abilities) {
     const valueSource = ability.valueSourceType === 'roll'
       ? `roll ${ability.valueSourceStat || 'damage'}`
       : (ability.valueSourceType === 'fixed' ? `fixed ${ability.valueSourceFixed ?? 0}` : 'none');
-    effect.textContent = `Effect: ${toTitle(ability.effectId || 'none')} (${valueSource})`;
+    const disruptionSuffix = ability.effectId === 'disruption'
+      ? ` → enemy ${ability.enemyValueSourceStat || 'damage'}`
+      : '';
+    effect.textContent = `Effect: ${toTitle(ability.effectId || 'none')} (${valueSource}${disruptionSuffix})`;
 
     const buff = document.createElement('p');
     buff.className = 'catalog-card-type';
@@ -208,10 +227,12 @@ function renderAbilities(abilities) {
       });
       form.elements.valueSourceStat.value = ability.valueSourceStat ?? 'damage';
       form.elements.valueSourceFixed.value = Number.isFinite(ability.valueSourceFixed) ? ability.valueSourceFixed : '';
+      form.elements.enemyValueSourceStat.value = ability.enemyValueSourceStat ?? '';
       form.elements.durationTurns.value = Number.isInteger(ability.durationTurns) ? ability.durationTurns : '';
       abilityKindInput.value = ability.abilityKind ?? configuredAbilityKind;
       saveAbilityButton.disabled = false;
       updateValueSourceVisibility();
+      updateDisruptionVisibility();
       updateDurationVisibility();
       setStatus(`Editing "${ability.name}".`);
     });
@@ -237,13 +258,16 @@ async function fetchAbilities() {
     abilityOptionCatalog = {
       buffs: payload.abilityBuffs || ['none'],
       buffTargets: payload.abilityBuffTargets || ['none'],
+      enemyRollStats: payload.abilityEnemyRollStats || ['damage', 'speed', 'defense'],
     };
 
     setOptions(effectSelect, payload.abilityEffects || ['none'], 'none');
     setOptions(valueSourceTypeSelect, payload.abilityValueSourceTypes || ['none'], 'none');
     syncBuffOptionsForTarget({ preferredBuffId: 'none', preferredBuffTarget: 'none' });
     setOptions(valueSourceStatSelect, payload.abilityRollStats || ['damage'], 'damage');
+    setOptions(enemyValueSourceStatSelect, abilityOptionCatalog.enemyRollStats, 'damage');
     updateValueSourceVisibility();
+    updateDisruptionVisibility();
     updateDurationVisibility();
 
     renderAbilities(Array.isArray(payload.abilities) ? payload.abilities : []);
@@ -331,9 +355,11 @@ saveAbilityButton.addEventListener('click', async () => {
       });
       form.elements.valueSourceStat.value = updatedAbility.valueSourceStat ?? 'damage';
       form.elements.valueSourceFixed.value = Number.isFinite(updatedAbility.valueSourceFixed) ? updatedAbility.valueSourceFixed : '';
+      form.elements.enemyValueSourceStat.value = updatedAbility.enemyValueSourceStat ?? '';
       form.elements.durationTurns.value = Number.isInteger(updatedAbility.durationTurns) ? updatedAbility.durationTurns : '';
       abilityKindInput.value = updatedAbility.abilityKind ?? configuredAbilityKind;
       updateValueSourceVisibility();
+      updateDisruptionVisibility();
       updateDurationVisibility();
     }
   } catch (error) {
@@ -351,6 +377,7 @@ form?.elements?.target?.addEventListener('change', () => {
   updateDurationVisibility();
 });
 valueSourceTypeSelect?.addEventListener('change', updateValueSourceVisibility);
+effectSelect?.addEventListener('change', updateDisruptionVisibility);
 buffSelect?.addEventListener('change', () => {
   syncBuffOptionsForTarget();
   updateDurationVisibility();
