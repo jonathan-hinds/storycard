@@ -1,4 +1,5 @@
 import { PhaseManagerClient } from '/public/phase-manager/index.js';
+import { createPhaseManagerElements } from '/public/projects/user/canvasShared.js';
 
 const USER_SESSION_KEY = 'storycard-user-session';
 
@@ -40,68 +41,6 @@ function loadSession() {
   }
 }
 
-function createHiddenButton() {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.hidden = true;
-  return button;
-}
-
-function createHiddenOutput() {
-  const output = document.createElement('output');
-  output.hidden = true;
-  return output;
-}
-
-function createHiddenInput(type = 'text') {
-  const input = document.createElement('input');
-  input.type = type;
-  input.hidden = true;
-  return input;
-}
-
-function createPhaseManagerElements() {
-  return {
-    canvas: document.getElementById('phase-manager-canvas'),
-    overlayEl: document.getElementById('phase-manager-turn-overlay'),
-    matchmakingBtn: createHiddenButton(),
-    readyBtn: createHiddenButton(),
-    resetBtn: createHiddenButton(),
-    statusEl: document.createElement('p'),
-    matchLabelEl: document.createElement('p'),
-    playerSummaryEl: document.createElement('p'),
-    opponentSummaryEl: document.createElement('p'),
-    queueSummaryEl: document.createElement('p'),
-    badgeSlotsVisibleInput: createHiddenInput('checkbox'),
-    badgeSlotsCountInput: createHiddenInput('range'),
-    badgeSlotsCountNumberInput: createHiddenInput('number'),
-    badgeSlotsCountValueEl: createHiddenOutput(),
-    badgeSlotsXInput: createHiddenInput('range'),
-    badgeSlotsXNumberInput: createHiddenInput('number'),
-    badgeSlotsXValueEl: createHiddenOutput(),
-    badgeSlotsYInput: createHiddenInput('range'),
-    badgeSlotsYNumberInput: createHiddenInput('number'),
-    badgeSlotsYValueEl: createHiddenOutput(),
-    badgeSlotsZInput: createHiddenInput('range'),
-    badgeSlotsZNumberInput: createHiddenInput('number'),
-    badgeSlotsZValueEl: createHiddenOutput(),
-    badgeSlotsGapInput: createHiddenInput('range'),
-    badgeSlotsGapNumberInput: createHiddenInput('number'),
-    badgeSlotsGapValueEl: createHiddenOutput(),
-    badgeSlotsSizeInput: createHiddenInput('range'),
-    badgeSlotsSizeNumberInput: createHiddenInput('number'),
-    badgeSlotsSizeValueEl: createHiddenOutput(),
-    badgeSlotsBevelInput: createHiddenInput('range'),
-    badgeSlotsBevelNumberInput: createHiddenInput('number'),
-    badgeSlotsBevelValueEl: createHiddenOutput(),
-    badgeSlotsThicknessInput: createHiddenInput('range'),
-    badgeSlotsThicknessNumberInput: createHiddenInput('number'),
-    badgeSlotsThicknessValueEl: createHiddenOutput(),
-    layoutExportBtn: createHiddenButton(),
-    layoutExportOutputEl: createHiddenOutput(),
-  };
-}
-
 async function requestMatchExit(playerId) {
   if (!playerId || hasRequestedExit) return;
   hasRequestedExit = true;
@@ -127,7 +66,10 @@ if (!session) {
 } else {
   const playerId = session.user.id;
   const phaseManager = new PhaseManagerClient({
-    elements: createPhaseManagerElements(),
+    elements: createPhaseManagerElements({
+      canvas: document.getElementById('phase-manager-canvas'),
+      overlayEl: document.getElementById('phase-manager-turn-overlay'),
+    }),
     options: {
       playerId,
       matchmakingPayload: {

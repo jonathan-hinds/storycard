@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>User Home</title>
+    <title>Player Home</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
   <body data-page="user-home">
-    <main class="user-home-layout">
-      <section class="user-home-card">
-        <h1 id="welcome-title">Welcome</h1>
-        <p>You are logged in. Open Decks to browse the read-only card library.</p>
-        <button id="decks-button" type="button">Decks</button>
-        <button id="find-match-button" type="button" class="secondary-action">Find Match</button>
+    <main class="user-module-canvas-layout">
+      <button id="user-module-back-button" class="user-match-back-button secondary-action" type="button" hidden>Back to Home</button>
+      <p id="user-module-status" class="cards-library-caption user-module-status" aria-live="polite"></p>
+      <section id="user-module-stage" class="single-card-stage-wrap phase-manager-stage-wrap user-module-stage-wrap">
+        <div id="phase-manager-turn-overlay" class="phase-manager-turn-overlay" hidden>Start matchmaking to begin a match.</div>
+        <canvas id="user-module-canvas" class="single-card-canvas user-module-canvas" aria-label="User gameplay canvas"></canvas>
       </section>
     </main>
 
