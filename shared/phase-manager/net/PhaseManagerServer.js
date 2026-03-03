@@ -606,6 +606,37 @@ class PhaseManagerServer {
     return attacks.find((attack) => attack?.attackerSlotIndex === slotIndex) || null;
   }
 
+  findCommittedRollEntryBySlotStat(match, attackerId, slotIndex, rollStat) {
+    if (!match || !attackerId || !Number.isInteger(slotIndex) || typeof rollStat !== 'string' || !rollStat) {
+      return null;
+    }
+
+    const attackPrefix = `${attackerId}:${slotIndex}:`;
+    const statSuffix = `:${rollStat}`;
+    let matchedEntry = null;
+
+    for (const [rollKey, rollEntry] of match.commitRollsByAttackId?.entries() || []) {
+      if (typeof rollKey !== 'string' || !rollKey.startsWith(attackPrefix) || !rollKey.endsWith(statSuffix)) {
+        continue;
+      }
+
+      if (!matchedEntry) {
+        matchedEntry = { rollKey, rollEntry };
+        continue;
+      }
+
+      const matchedSubmittedAt = Number(matchedEntry.rollEntry?.submittedAt);
+      const candidateSubmittedAt = Number(rollEntry?.submittedAt);
+      const nextHasLaterSubmission = Number.isFinite(candidateSubmittedAt)
+        && (!Number.isFinite(matchedSubmittedAt) || candidateSubmittedAt > matchedSubmittedAt);
+      if (nextHasLaterSubmission) {
+        matchedEntry = { rollKey, rollEntry };
+      }
+    }
+
+    return matchedEntry;
+  }
+
   normalizeCardType(cardType) {
     return typeof cardType === 'string' ? cardType.trim() : '';
   }
@@ -796,25 +827,29 @@ class PhaseManagerServer {
         ? enemyValueSourceStat
         : 'damage';
       const defenderAttack = this.findPendingAttackBySlot(match, defenderId, targetSlotIndex);
-      if (defenderAttack?.id) {
-        const rollKey = `${defenderAttack.id}:${disruptionTargetStat}`;
-        const rollEntry = match.commitRollsByAttackId?.get(rollKey);
-        const currentOutcome = Number(rollEntry?.roll?.outcome);
-        if (rollEntry?.roll && Number.isFinite(currentOutcome)) {
-          const adjustedOutcome = Math.max(0, Math.floor(currentOutcome) - adjustedResolvedValue);
-          rollEntry.roll = { ...rollEntry.roll, outcome: adjustedOutcome };
-          rollEntry.disruptedByAttackId = defenderAttack.id;
-          rollEntry.disruptionAmount = adjustedResolvedValue;
-          rollEntry.disruptionTargetStat = disruptionTargetStat;
-          return {
-            executed: true,
-            appliedValue: adjustedResolvedValue,
-            reason: 'disruption_applied',
-            disruptedAttackId: defenderAttack.id,
-            disruptionTargetStat,
-            disruptionAdjustedOutcome: adjustedOutcome,
-          };
-        }
+      const pendingRollKey = defenderAttack?.id ? `${defenderAttack.id}:${disruptionTargetStat}` : null;
+      const pendingRollEntry = pendingRollKey ? match.commitRollsByAttackId?.get(pendingRollKey) : null;
+      const fallbackRollEntryByStat = pendingRollEntry
+        ? null
+        : this.findCommittedRollEntryBySlotStat(match, defenderId, targetSlotIndex, disruptionTargetStat);
+      const rollEntry = pendingRollEntry || fallbackRollEntryByStat?.rollEntry;
+      const disruptedAttackId = defenderAttack?.id || fallbackRollEntryByStat?.rollKey?.slice(0, -(`:${disruptionTargetStat}`.length));
+      const currentOutcome = Number(rollEntry?.roll?.outcome);
+      if (rollEntry?.roll && Number.isFinite(currentOutcome)) {
+        const adjustedOutcome = Math.max(0, Math.floor(currentOutcome) - adjustedResolvedValue);
+        rollEntry.roll = { ...rollEntry.roll, outcome: adjustedOutcome };
+        rollEntry.disruptedByAttackId = disruptedAttackId || null;
+        rollEntry.disruptionAmount = adjustedResolvedValue;
+        rollEntry.disruptionTargetStat = disruptionTargetStat;
+        defenderCard.catalogCard[disruptionTargetStat] = adjustedOutcome;
+        return {
+          executed: true,
+          appliedValue: adjustedResolvedValue,
+          reason: 'disruption_applied',
+          disruptedAttackId,
+          disruptionTargetStat,
+          disruptionAdjustedOutcome: adjustedOutcome,
+        };
       }
     }
 
