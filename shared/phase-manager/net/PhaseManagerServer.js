@@ -113,6 +113,14 @@ const DOT_HANDLERS = {
 
 const DISRUPTION_ROLL_STATS = Object.freeze(['damage', 'speed', 'defense']);
 
+function normalizeDisruptionTargetStat(stat) {
+  const normalized = typeof stat === 'string' ? stat.trim().toLowerCase() : '';
+  if (normalized === 'damage' || normalized === 'dmg' || normalized === 'efct') return 'damage';
+  if (normalized === 'speed' || normalized === 'spd') return 'speed';
+  if (normalized === 'defense' || normalized === 'def') return 'defense';
+  return 'damage';
+}
+
 function createEmptyDisruptionDebuffs() {
   return {
     damage: 0,
@@ -621,9 +629,7 @@ class PhaseManagerServer {
     if (!match || !casterId || targetSide !== 'opponent' || !Number.isInteger(targetSlotIndex)) {
       return { executed: false, reason: 'target_missing' };
     }
-    const disruptionTargetStat = DISRUPTION_ROLL_STATS.includes(enemyValueSourceStat)
-      ? enemyValueSourceStat
-      : 'damage';
+    const disruptionTargetStat = normalizeDisruptionTargetStat(enemyValueSourceStat);
     const normalizedValue = Number.isFinite(resolvedValue)
       ? Math.max(0, Math.floor(resolvedValue))
       : 0;
@@ -658,6 +664,48 @@ class PhaseManagerServer {
     };
   }
 
+  applySpellDisruptionDebuffToCommitRoll({ match, attackerId, attackId, rollType }) {
+    if (!match?.cardsByPlayer || !match?.pendingCommitAttacksByPlayer || !match?.commitRollsByAttackId) return;
+    if (!attackerId || typeof attackId !== 'string' || typeof rollType !== 'string') return;
+
+    const normalizedRollType = normalizeDisruptionTargetStat(rollType);
+    const rollEntry = match.commitRollsByAttackId.get(`${attackId}:${normalizedRollType}`);
+    if (!rollEntry?.roll || rollEntry.disruptionSource === 'spell') return;
+
+    const attack = (match.pendingCommitAttacksByPlayer.get(attackerId) || [])
+      .find((entry) => entry?.id === attackId);
+    if (!attack || !Number.isInteger(attack.attackerSlotIndex)) return;
+
+    const attackerState = match.cardsByPlayer.get(attackerId);
+    const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
+    if (!attackerCard) return;
+
+    const turnsRemaining = Number.isInteger(attackerCard.disruptionDebuffTurnsRemaining)
+      ? attackerCard.disruptionDebuffTurnsRemaining
+      : 0;
+    if (turnsRemaining < 1) return;
+
+    const disruptionDebuffs = attackerCard.disruptionDebuffs && typeof attackerCard.disruptionDebuffs === 'object'
+      ? attackerCard.disruptionDebuffs
+      : null;
+    if (!disruptionDebuffs) return;
+
+    const debuffValue = Number(disruptionDebuffs[normalizedRollType]);
+    const normalizedDebuffValue = Number.isFinite(debuffValue)
+      ? Math.max(0, Math.floor(debuffValue))
+      : 0;
+    if (normalizedDebuffValue < 1) return;
+
+    this.applyCommitRollPenalty({
+      match,
+      attackId,
+      rollType: normalizedRollType,
+      penaltyValue: normalizedDebuffValue,
+      source: 'spell',
+      targetStat: normalizedRollType,
+    });
+  }
+
   applyPendingSpellDisruptionDebuffsToCommitRolls(match) {
     if (!match?.cardsByPlayer || !match?.pendingCommitAttacksByPlayer || !match?.commitRollsByAttackId) return;
 
@@ -681,6 +729,9 @@ class PhaseManagerServer {
             ? Math.max(0, Math.floor(debuffValue))
             : 0;
           if (normalizedDebuffValue < 1) return;
+
+          const existingRollEntry = match.commitRollsByAttackId.get(`${attack.id}:${rollStat}`);
+          if (existingRollEntry?.disruptionSource === 'spell') return;
 
           this.applyCommitRollPenalty({
             match,
@@ -1427,7 +1478,7 @@ class PhaseManagerServer {
       return { error: 'a roll payload with frames and outcome is required', statusCode: 400 };
     }
 
-    const normalizedRollType = typeof rollType === 'string' && rollType.trim() ? rollType.trim() : 'damage';
+    const normalizedRollType = normalizeDisruptionTargetStat(rollType);
     const commitRollKey = `${attackId}:${normalizedRollType}`;
 
     match.commitRollsByAttackId.set(commitRollKey, {
@@ -1437,6 +1488,13 @@ class PhaseManagerServer {
       sides: Number.isFinite(sides) ? sides : null,
       roll,
       submittedAt: Date.now(),
+    });
+
+    this.applySpellDisruptionDebuffToCommitRoll({
+      match,
+      attackerId: playerId,
+      attackId,
+      rollType: normalizedRollType,
     });
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
