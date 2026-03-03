@@ -346,46 +346,68 @@ class PhaseManagerServer {
     }));
 
     const commitAttacks = [];
-    for (const orderedAttack of this.getOrderedCommitAttacks(match)) {
-      const { attackerId, attack } = orderedAttack;
+    const pendingAttackById = new Map();
+    for (const attackerId of match?.players || []) {
+      for (const attack of match.pendingCommitAttacksByPlayer?.get(attackerId) || []) {
+        pendingAttackById.set(attack.id, { attackerId, attack });
+      }
+    }
+
+    const orderedEntries = Array.isArray(match.executedCommitAttackIds) && match.executedCommitAttackIds.length
+      ? match.executedCommitAttackIds
+        .map((attackId) => pendingAttackById.get(attackId))
+        .filter(Boolean)
+      : this.getOrderedCommitAttacks(match).map((entry) => ({ attackerId: entry.attackerId, attack: entry.attack }));
+
+    const defaultOrderedByAttackId = new Map(this.getOrderedCommitAttacks(match).map((entry) => [entry.attack.id, entry]));
+
+    for (const { attackerId, attack } of orderedEntries) {
       const attackerSide = attackerId === playerId ? 'player' : 'opponent';
       const resolvedAttack = {
-          ...this.resolveCommitAttackStep(match, attackerId, attack),
-          attackerId,
-          attackerSide,
-          speedOutcome: Number.isFinite(orderedAttack.speedOutcome) ? orderedAttack.speedOutcome : 0,
-          adjustedSpeedOutcome: Number.isFinite(orderedAttack.adjustedSpeedOutcome) ? orderedAttack.adjustedSpeedOutcome : 0,
-          frostbiteStacks: Number.isFinite(orderedAttack.frostbiteStacks) ? orderedAttack.frostbiteStacks : 0,
-        };
+        ...this.resolveCommitAttackStep(match, attackerId, attack),
+        attackerId,
+        attackerSide,
+      };
 
       const executionState = match.commitExecutionByAttackId?.get(attack.id);
       if (executionState && executionState.executed === false) {
-          continue;
-        }
+        continue;
+      }
+
+      const defaultOrdered = defaultOrderedByAttackId.get(attack.id);
+      resolvedAttack.speedOutcome = Number.isFinite(executionState?.speedOutcome)
+        ? executionState.speedOutcome
+        : (Number.isFinite(defaultOrdered?.speedOutcome) ? defaultOrdered.speedOutcome : 0);
+      resolvedAttack.adjustedSpeedOutcome = Number.isFinite(executionState?.adjustedSpeedOutcome)
+        ? executionState.adjustedSpeedOutcome
+        : (Number.isFinite(defaultOrdered?.adjustedSpeedOutcome) ? defaultOrdered.adjustedSpeedOutcome : 0);
+      resolvedAttack.frostbiteStacks = Number.isFinite(executionState?.frostbiteStacks)
+        ? executionState.frostbiteStacks
+        : (Number.isFinite(defaultOrdered?.frostbiteStacks) ? defaultOrdered.frostbiteStacks : 0);
 
       if (executionState) {
-          resolvedAttack.resolvedLifeStealHealing = Number.isFinite(executionState.lifeStealHealing)
-            ? executionState.lifeStealHealing
-            : resolvedAttack.resolvedLifeStealHealing;
-          resolvedAttack.lifeStealNetHealing = Number.isFinite(executionState.lifeStealNetHealing)
-            ? executionState.lifeStealNetHealing
-            : 0;
-          resolvedAttack.retaliationDamage = Number.isFinite(executionState.retaliationDamage)
-            ? executionState.retaliationDamage
-            : 0;
-          resolvedAttack.retaliationBlockedByDefense = Number.isFinite(executionState.retaliationBlockedByDefense)
-            ? executionState.retaliationBlockedByDefense
-            : 0;
-          resolvedAttack.retaliationAppliedDamage = Number.isFinite(executionState.retaliationAppliedDamage)
-            ? executionState.retaliationAppliedDamage
-            : 0;
-          resolvedAttack.attackDefense = Number.isFinite(executionState.attackDefense)
-            ? executionState.attackDefense
-            : 0;
-          resolvedAttack.defenseRemaining = Number.isFinite(executionState.defenseRemaining)
-            ? executionState.defenseRemaining
-            : 0;
-        }
+        resolvedAttack.resolvedLifeStealHealing = Number.isFinite(executionState.lifeStealHealing)
+          ? executionState.lifeStealHealing
+          : resolvedAttack.resolvedLifeStealHealing;
+        resolvedAttack.lifeStealNetHealing = Number.isFinite(executionState.lifeStealNetHealing)
+          ? executionState.lifeStealNetHealing
+          : 0;
+        resolvedAttack.retaliationDamage = Number.isFinite(executionState.retaliationDamage)
+          ? executionState.retaliationDamage
+          : 0;
+        resolvedAttack.retaliationBlockedByDefense = Number.isFinite(executionState.retaliationBlockedByDefense)
+          ? executionState.retaliationBlockedByDefense
+          : 0;
+        resolvedAttack.retaliationAppliedDamage = Number.isFinite(executionState.retaliationAppliedDamage)
+          ? executionState.retaliationAppliedDamage
+          : 0;
+        resolvedAttack.attackDefense = Number.isFinite(executionState.attackDefense)
+          ? executionState.attackDefense
+          : 0;
+        resolvedAttack.defenseRemaining = Number.isFinite(executionState.defenseRemaining)
+          ? executionState.defenseRemaining
+          : 0;
+      }
 
       commitAttacks.push(resolvedAttack);
     }
@@ -516,6 +538,7 @@ class PhaseManagerServer {
     match.pendingCommitAttacksByPlayer = new Map();
     match.commitRollsByAttackId = new Map();
     match.commitExecutionByAttackId = new Map();
+    match.executedCommitAttackIds = [];
     match.commitAnimationCompletedPlayers = new Set();
     match.activeSpellResolution = null;
     match.lastDotDamageEvents = this.applyDamageOverTimeAtPhaseChange(match);
@@ -575,6 +598,12 @@ class PhaseManagerServer {
 
     const outcome = Number(rollValue);
     return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : 0;
+  }
+
+  findPendingAttackBySlot(match, attackerId, slotIndex) {
+    if (!match || !attackerId || !Number.isInteger(slotIndex)) return null;
+    const attacks = match.pendingCommitAttacksByPlayer?.get(attackerId) || [];
+    return attacks.find((attack) => attack?.attackerSlotIndex === slotIndex) || null;
   }
 
   normalizeCardType(cardType) {
@@ -705,9 +734,18 @@ class PhaseManagerServer {
     return friendlyBoardCards[selectedIndex] || null;
   }
 
-  applyResolvedAbilityEffect({ match, casterId, targetSide, targetSlotIndex, effectId, resolvedValue, sourceType }) {
+  applyResolvedAbilityEffect({
+    match,
+    casterId,
+    targetSide,
+    targetSlotIndex,
+    effectId,
+    resolvedValue,
+    sourceType,
+    enemyValueSourceStat = null,
+  }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus' && effectId !== 'life_steal') {
+    if (effectId !== 'damage_enemy' && effectId !== 'heal_target' && effectId !== 'retaliation_bonus' && effectId !== 'life_steal' && effectId !== 'disruption') {
       return { executed: true, reason: 'no_effect' };
     }
 
@@ -720,7 +758,7 @@ class PhaseManagerServer {
       resolvedValue,
       sourceType,
     });
-    const hasDamage = effectId === 'damage_enemy' && adjustedResolvedValue > 0;
+    const hasDamage = (effectId === 'damage_enemy' || effectId === 'disruption') && adjustedResolvedValue > 0;
     const hasLifeSteal = effectId === 'life_steal' && adjustedResolvedValue > 0;
     const hasHealing = effectId === 'heal_target' && adjustedResolvedValue > 0;
     const hasRetaliationBonus = effectId === 'retaliation_bonus' && adjustedResolvedValue > 0;
@@ -744,12 +782,7 @@ class PhaseManagerServer {
       return { executed: false, reason: 'target_missing' };
     }
 
-    const currentHealth = Number(defenderCard.catalogCard.health);
-    if (!Number.isFinite(currentHealth)) {
-      return { executed: false, reason: 'target_invalid' };
-    }
-
-    if (hasRetaliationBonus) {
+    if (effectId === 'retaliation_bonus') {
       const existingBonus = Number(defenderCard.retaliationBonus);
       const normalizedExistingBonus = Number.isFinite(existingBonus)
         ? Math.max(0, Math.floor(existingBonus))
@@ -758,7 +791,39 @@ class PhaseManagerServer {
       return { executed: true, appliedValue: adjustedResolvedValue };
     }
 
-    const nextHealth = (hasDamage || hasLifeSteal)
+    if (effectId === 'disruption') {
+      const disruptionTargetStat = ['damage', 'speed', 'defense'].includes(enemyValueSourceStat)
+        ? enemyValueSourceStat
+        : 'damage';
+      const defenderAttack = this.findPendingAttackBySlot(match, defenderId, targetSlotIndex);
+      if (defenderAttack?.id) {
+        const rollKey = `${defenderAttack.id}:${disruptionTargetStat}`;
+        const rollEntry = match.commitRollsByAttackId?.get(rollKey);
+        const currentOutcome = Number(rollEntry?.roll?.outcome);
+        if (rollEntry?.roll && Number.isFinite(currentOutcome)) {
+          const adjustedOutcome = Math.max(0, Math.floor(currentOutcome) - adjustedResolvedValue);
+          rollEntry.roll = { ...rollEntry.roll, outcome: adjustedOutcome };
+          rollEntry.disruptedByAttackId = defenderAttack.id;
+          rollEntry.disruptionAmount = adjustedResolvedValue;
+          rollEntry.disruptionTargetStat = disruptionTargetStat;
+          return {
+            executed: true,
+            appliedValue: adjustedResolvedValue,
+            reason: 'disruption_applied',
+            disruptedAttackId: defenderAttack.id,
+            disruptionTargetStat,
+            disruptionAdjustedOutcome: adjustedOutcome,
+          };
+        }
+      }
+    }
+
+    const currentHealth = Number(defenderCard.catalogCard.health);
+    if (!Number.isFinite(currentHealth)) {
+      return { executed: false, reason: 'target_invalid' };
+    }
+
+    const nextHealth = (effectId === 'damage_enemy' || effectId === 'life_steal' || effectId === 'disruption')
       ? currentHealth - adjustedResolvedValue
       : currentHealth + adjustedResolvedValue;
     defenderCard.catalogCard.health = nextHealth;
@@ -767,8 +832,13 @@ class PhaseManagerServer {
       defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
     }
 
-    return { executed: true, appliedValue: adjustedResolvedValue };
+    return {
+      executed: true,
+      appliedValue: adjustedResolvedValue,
+      reason: effectId === 'disruption' ? 'disruption_damage_fallback' : 'effect_applied',
+    };
   }
+
 
   applyRetaliationDamage({ match, attackerId, attackerSlotIndex, retaliationDamage = 0, attackDefense = 0 }) {
     if (!match || !attackerId || !Number.isInteger(attackerSlotIndex)) {
@@ -860,30 +930,38 @@ class PhaseManagerServer {
       buffId: ability?.buffId || 'none',
       buffTarget: ability?.buffTarget || 'none',
       buffDurationTurns: Number.isInteger(ability?.durationTurns) ? ability.durationTurns : null,
+      enemyValueSourceStat: typeof ability?.enemyValueSourceStat === 'string' ? ability.enemyValueSourceStat : null,
     };
   }
 
   applyCommitEffects(match) {
     const commitExecutionByAttackId = new Map();
-    const resolvedAttacksBySlotKey = new Map();
-    const orderedCommitAttacks = this.getOrderedCommitAttacks(match);
+    const remainingAttacks = this.getOrderedCommitAttacks(match).map((entry) => ({
+      attackerId: entry.attackerId,
+      attack: entry.attack,
+    }));
+    const executedCommitAttackIds = [];
 
-    for (const { attackerId, attack } of orderedCommitAttacks) {
-      const tauntAdjustedAttack = this.resolveAttackTargetForTaunt(match, attackerId, attack);
-      if (tauntAdjustedAttack?.redirectedByTaunt) {
-        attack.targetSlotIndex = tauntAdjustedAttack.targetSlotIndex;
-        attack.targetSide = tauntAdjustedAttack.targetSide;
-      }
-      const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, tauntAdjustedAttack);
-      resolvedAttacksBySlotKey.set(`${attackerId}:${attack.attackerSlotIndex}`, resolvedAttack);
-    }
+    while (remainingAttacks.length) {
+      const [nextAttack] = this.getOrderedCommitAttacks(match, remainingAttacks);
+      if (!nextAttack) break;
 
-    for (const { attackerId, attack } of orderedCommitAttacks) {
+      const removeIndex = remainingAttacks.findIndex((entry) => entry.attackerId === nextAttack.attackerId && entry.attack?.id === nextAttack.attack?.id);
+      if (removeIndex >= 0) remainingAttacks.splice(removeIndex, 1);
+
+      const attackerId = nextAttack.attackerId;
+      const attack = nextAttack.attack;
       const tauntAdjustedAttack = this.resolveAttackTargetForTaunt(match, attackerId, attack);
       const attackerState = match.cardsByPlayer.get(attackerId);
       const attackerCard = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
       if (!attackerCard?.catalogCard) {
-      commitExecutionByAttackId.set(attack.id, { executed: false, reason: 'attacker_missing' });
+        commitExecutionByAttackId.set(attack.id, {
+          executed: false,
+          reason: 'attacker_missing',
+          speedOutcome: nextAttack.speedOutcome,
+          adjustedSpeedOutcome: nextAttack.adjustedSpeedOutcome,
+          frostbiteStacks: nextAttack.frostbiteStacks,
+        });
         continue;
       }
 
@@ -898,26 +976,29 @@ class PhaseManagerServer {
           retaliationAppliedDamage: 0,
           attackDefense: 0,
           defenseRemaining: 0,
+          speedOutcome: nextAttack.speedOutcome,
+          adjustedSpeedOutcome: nextAttack.adjustedSpeedOutcome,
+          frostbiteStacks: nextAttack.frostbiteStacks,
         });
         continue;
       }
 
-      const resolvedAttack = resolvedAttacksBySlotKey.get(`${attackerId}:${attack.attackerSlotIndex}`)
-        || this.resolveCommitAttackStep(match, attackerId, tauntAdjustedAttack);
+      const resolvedAttack = this.resolveCommitAttackStep(match, attackerId, tauntAdjustedAttack);
       const executionResult = this.applyResolvedAbilityEffect({
-          match,
-          casterId: attackerId,
-          targetSide: tauntAdjustedAttack.targetSide,
-          targetSlotIndex: tauntAdjustedAttack.targetSlotIndex,
-          effectId: resolvedAttack.effectId,
-          resolvedValue: resolvedAttack.baseResolvedValue,
-          sourceType: attackerCard?.catalogCard?.type,
-        });
+        match,
+        casterId: attackerId,
+        targetSide: tauntAdjustedAttack.targetSide,
+        targetSlotIndex: tauntAdjustedAttack.targetSlotIndex,
+        effectId: resolvedAttack.effectId,
+        resolvedValue: resolvedAttack.baseResolvedValue,
+        sourceType: attackerCard?.catalogCard?.type,
+        enemyValueSourceStat: resolvedAttack.enemyValueSourceStat,
+      });
       const executedResolvedValue = Number.isFinite(executionResult.appliedValue)
-          ? executionResult.appliedValue
-          : resolvedAttack.resolvedValue;
+        ? executionResult.appliedValue
+        : resolvedAttack.resolvedValue;
       resolvedAttack.resolvedValue = executedResolvedValue;
-      resolvedAttack.resolvedDamage = resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal' ? executedResolvedValue : 0;
+      resolvedAttack.resolvedDamage = resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal' || resolvedAttack.effectId === 'disruption' ? executedResolvedValue : 0;
       resolvedAttack.resolvedHealing = resolvedAttack.effectId === 'heal_target' ? executedResolvedValue : 0;
       resolvedAttack.resolvedLifeStealHealing = resolvedAttack.effectId === 'life_steal' ? executedResolvedValue : 0;
 
@@ -933,41 +1014,44 @@ class PhaseManagerServer {
         });
 
       const retaliationResult = {
-          retaliationDamage: 0,
-          retaliationBlockedByDefense: 0,
-          retaliationAppliedDamage: 0,
-          attackDefense: 0,
-          defenseRemaining: 0,
-        };
+        retaliationDamage: 0,
+        retaliationBlockedByDefense: 0,
+        retaliationAppliedDamage: 0,
+        attackDefense: 0,
+        defenseRemaining: 0,
+      };
 
       const isEnemyDamageAttack = executionResult.executed !== false
-          && (resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal')
-          && tauntAdjustedAttack.targetSide === 'opponent'
-          && Number.isInteger(tauntAdjustedAttack.targetSlotIndex);
+        && (resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback')
+        && tauntAdjustedAttack.targetSide === 'opponent'
+        && Number.isInteger(tauntAdjustedAttack.targetSlotIndex);
 
       if (isEnemyDamageAttack) {
-          const defenderId = match.players.find((id) => id !== attackerId);
-          const defenderState = defenderId ? match.cardsByPlayer.get(defenderId) : null;
-          const defenderCard = defenderState?.board?.find((card) => card.slotIndex === tauntAdjustedAttack.targetSlotIndex) || null;
-          const defenderResolvedAttack = defenderId
-            ? resolvedAttacksBySlotKey.get(`${defenderId}:${attack.targetSlotIndex}`)
-            : null;
-          const baseRetaliationDamage = defenderResolvedAttack?.effectId === 'damage_enemy'
-            ? defenderResolvedAttack.resolvedValue
-            : 0;
-          const bonusRetaliationDamage = Number(defenderCard?.retaliationBonus);
-          const retaliationDamage = baseRetaliationDamage
-            + (Number.isFinite(bonusRetaliationDamage) ? Math.max(0, Math.floor(bonusRetaliationDamage)) : 0);
-          const defenseRoll = match.commitRollsByAttackId.get(`${attack.id}:defense`);
-          const attackDefense = Number(defenseRoll?.roll?.outcome);
-          Object.assign(retaliationResult, this.applyRetaliationDamage({
-            match,
-            attackerId,
-            attackerSlotIndex: attack.attackerSlotIndex,
-            retaliationDamage,
-            attackDefense,
-          }));
-        }
+        const defenderId = match.players.find((id) => id !== attackerId);
+        const defenderState = defenderId ? match.cardsByPlayer.get(defenderId) : null;
+        const defenderCard = defenderState?.board?.find((card) => card.slotIndex === tauntAdjustedAttack.targetSlotIndex) || null;
+        const defenderAttack = defenderId
+          ? this.findPendingAttackBySlot(match, defenderId, tauntAdjustedAttack.targetSlotIndex)
+          : null;
+        const defenderResolvedAttack = defenderId && defenderAttack
+          ? this.resolveCommitAttackStep(match, defenderId, defenderAttack)
+          : null;
+        const baseRetaliationDamage = defenderResolvedAttack?.effectId === 'damage_enemy'
+          ? defenderResolvedAttack.resolvedValue
+          : 0;
+        const bonusRetaliationDamage = Number(defenderCard?.retaliationBonus);
+        const retaliationDamage = baseRetaliationDamage
+          + (Number.isFinite(bonusRetaliationDamage) ? Math.max(0, Math.floor(bonusRetaliationDamage)) : 0);
+        const defenseRoll = match.commitRollsByAttackId.get(`${attack.id}:defense`);
+        const attackDefense = Number(defenseRoll?.roll?.outcome);
+        Object.assign(retaliationResult, this.applyRetaliationDamage({
+          match,
+          attackerId,
+          attackerSlotIndex: attack.attackerSlotIndex,
+          retaliationDamage,
+          attackDefense,
+        }));
+      }
 
       const lifeStealResult = {
         lifeStealHealing: 0,
@@ -975,8 +1059,8 @@ class PhaseManagerServer {
       };
 
       if (executionResult.executed !== false && resolvedAttack.effectId === 'life_steal' && Number.isInteger(attack.attackerSlotIndex)) {
-        const attackerState = match.cardsByPlayer.get(attackerId);
-        const attackerCardAfterRetaliation = attackerState?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
+        const attackerStateAfter = match.cardsByPlayer.get(attackerId);
+        const attackerCardAfterRetaliation = attackerStateAfter?.board?.find((card) => card.slotIndex === attack.attackerSlotIndex) || null;
         const attackerHealth = Number(attackerCardAfterRetaliation?.catalogCard?.health);
         if (attackerCardAfterRetaliation?.catalogCard && Number.isFinite(attackerHealth)) {
           const healedAmount = Math.max(0, Math.floor(executedResolvedValue));
@@ -989,18 +1073,24 @@ class PhaseManagerServer {
       }
 
       commitExecutionByAttackId.set(attack.id, {
-          ...executionResult,
-          buffExecuted: buffResult.executed !== false,
-          buffReason: buffResult.reason || null,
-          ...retaliationResult,
-          ...lifeStealResult,
-        });
+        ...executionResult,
+        buffExecuted: buffResult.executed !== false,
+        buffReason: buffResult.reason || null,
+        ...retaliationResult,
+        ...lifeStealResult,
+        speedOutcome: nextAttack.speedOutcome,
+        adjustedSpeedOutcome: nextAttack.adjustedSpeedOutcome,
+        frostbiteStacks: nextAttack.frostbiteStacks,
+      });
+      executedCommitAttackIds.push(attack.id);
     }
 
     match.commitExecutionByAttackId = commitExecutionByAttackId;
+    match.executedCommitAttackIds = executedCommitAttackIds;
   }
 
-  getOrderedCommitAttacks(match) {
+
+  getOrderedCommitAttacks(match, attackEntries = null) {
     const pendingCommitAttacksByPlayer = match?.pendingCommitAttacksByPlayer;
     const commitRollsByAttackId = match?.commitRollsByAttackId;
     const ordered = [];
@@ -1016,28 +1106,35 @@ class PhaseManagerServer {
       return Number.isInteger(attackerCard.frostbiteStacks) ? Math.max(1, attackerCard.frostbiteStacks) : 1;
     };
 
-    for (const attackerId of match?.players || []) {
-      const attacks = pendingCommitAttacksByPlayer?.get(attackerId) || [];
-      for (const attack of attacks) {
-        const speedRollEntry = commitRollsByAttackId?.get(`${attack.id}:speed`);
-        const speedOutcome = Number(speedRollEntry?.roll?.outcome);
-        const speedResolvedAt = Number(speedRollEntry?.submittedAt);
-        const normalizedSpeedOutcome = Number.isFinite(speedOutcome) ? Math.max(0, Math.floor(speedOutcome)) : 0;
-        const frostbiteStacks = getFrostbiteStacks(attackerId, attack?.attackerSlotIndex);
-        const adjustedSpeedOutcome = Math.max(0, normalizedSpeedOutcome - frostbiteStacks);
+    const entries = Array.isArray(attackEntries)
+      ? attackEntries
+      : (match?.players || []).flatMap((attackerId) => {
+        const attacks = pendingCommitAttacksByPlayer?.get(attackerId) || [];
+        return attacks.map((attack) => ({ attackerId, attack }));
+      });
 
-        ordered.push({
-          attackerId,
-          attack,
-          speedOutcome: normalizedSpeedOutcome,
-          adjustedSpeedOutcome,
-          frostbiteStacks,
-          hasFrostbiteSpeedPenalty: frostbiteStacks > 0,
-          speedResolvedAt: Number.isFinite(speedResolvedAt) ? speedResolvedAt : Number.POSITIVE_INFINITY,
-          originalOrder,
-        });
-        originalOrder += 1;
-      }
+    for (const entry of entries) {
+      const attackerId = entry?.attackerId;
+      const attack = entry?.attack;
+      if (!attackerId || !attack?.id) continue;
+      const speedRollEntry = commitRollsByAttackId?.get(`${attack.id}:speed`);
+      const speedOutcome = Number(speedRollEntry?.roll?.outcome);
+      const speedResolvedAt = Number(speedRollEntry?.submittedAt);
+      const normalizedSpeedOutcome = Number.isFinite(speedOutcome) ? Math.max(0, Math.floor(speedOutcome)) : 0;
+      const frostbiteStacks = getFrostbiteStacks(attackerId, attack?.attackerSlotIndex);
+      const adjustedSpeedOutcome = Math.max(0, normalizedSpeedOutcome - frostbiteStacks);
+
+      ordered.push({
+        attackerId,
+        attack,
+        speedOutcome: normalizedSpeedOutcome,
+        adjustedSpeedOutcome,
+        frostbiteStacks,
+        hasFrostbiteSpeedPenalty: frostbiteStacks > 0,
+        speedResolvedAt: Number.isFinite(speedResolvedAt) ? speedResolvedAt : Number.POSITIVE_INFINITY,
+        originalOrder,
+      });
+      originalOrder += 1;
     }
 
     ordered.sort((a, b) => {
@@ -1051,6 +1148,7 @@ class PhaseManagerServer {
 
     return ordered;
   }
+
 
   resolveCommitPhase(match) {
     match.phase = 2;
@@ -1081,6 +1179,7 @@ class PhaseManagerServer {
     match.pendingCommitAttacksByPlayer = pendingAttacks;
     match.commitRollsByAttackId = new Map();
     match.commitExecutionByAttackId = new Map();
+    match.executedCommitAttackIds = [];
     match.commitCompletedPlayers = new Set();
     match.commitAnimationCompletedPlayers = new Set();
     match.commitAllRolledAt = null;
@@ -1418,6 +1517,7 @@ class PhaseManagerServer {
         pendingCommitAttacksByPlayer: new Map(),
         commitRollsByAttackId: new Map(),
         commitExecutionByAttackId: new Map(),
+        executedCommitAttackIds: [],
         commitCompletedPlayers: new Set(),
         commitAnimationCompletedPlayers: new Set(),
         commitAllRolledAt: null,
@@ -1649,6 +1749,7 @@ class PhaseManagerServer {
       effectId,
       resolvedValue: baseResolvedValue,
       sourceType: spellCard?.type,
+      enemyValueSourceStat: spellAbility?.enemyValueSourceStat || null,
     });
     active.effectId = effectId;
     active.resolvedValue = resolvedValue;
@@ -1708,6 +1809,7 @@ class PhaseManagerServer {
       effectId,
       resolvedValue: baseResolvedValue,
       sourceType: spellCard?.type,
+      enemyValueSourceStat: spellAbility?.enemyValueSourceStat || null,
     });
     const executionResult = this.applyResolvedAbilityEffect({
       match,
@@ -1721,7 +1823,7 @@ class PhaseManagerServer {
 
     active.effectId = effectId;
     active.resolvedValue = resolvedValue;
-    active.resolvedDamage = (effectId === 'damage_enemy' || effectId === 'life_steal') && executionResult.executed !== false ? resolvedValue : 0;
+    active.resolvedDamage = (effectId === 'damage_enemy' || effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback') && executionResult.executed !== false ? resolvedValue : 0;
     active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false ? resolvedValue : 0;
     if (effectId === 'life_steal' && executionResult.executed !== false) {
       const casterState = match.cardsByPlayer.get(playerId);

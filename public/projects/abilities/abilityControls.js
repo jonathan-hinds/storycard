@@ -22,6 +22,7 @@ export function toAbilityInput(formData, defaultAbilityKind = 'Creature') {
     valueSourceType,
     valueSourceStat: valueSourceType === 'roll' ? (formData.get('valueSourceStat') || null) : null,
     valueSourceFixed: valueSourceType === 'fixed' ? rawFixed : null,
+    enemyValueSourceStat: formData.get('enemyValueSourceStat') || null,
     durationTurns: formData.get('durationTurns') || null,
   };
 }

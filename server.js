@@ -23,6 +23,7 @@ const {
   ABILITY_BUFF_TARGETS,
   ABILITY_VALUE_SOURCE_TYPES,
   ABILITY_ROLL_STATS,
+  ABILITY_ENEMY_ROLL_STATS,
   ABILITY_ROLL_STATS_BY_KIND,
   listAbilities: listCatalogAbilities,
   createAbility: createCatalogAbility,
@@ -290,6 +291,7 @@ async function handleApi(req, res, pathname) {
         abilityBuffTargets: ABILITY_BUFF_TARGETS,
         abilityValueSourceTypes: ABILITY_VALUE_SOURCE_TYPES,
         abilityRollStats: abilityKind && ABILITY_ROLL_STATS_BY_KIND[abilityKind] ? ABILITY_ROLL_STATS_BY_KIND[abilityKind] : ABILITY_ROLL_STATS,
+        abilityEnemyRollStats: ABILITY_ENEMY_ROLL_STATS,
       });
     } catch (error) {
       sendJson(res, 500, { error: 'Unable to load abilities from database' });
