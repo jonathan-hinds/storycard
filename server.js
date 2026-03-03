@@ -44,6 +44,8 @@ const {
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
+const BUFF_ICON_IDS = [...ABILITY_BUFFS.filter((buffId) => buffId !== 'none'), 'disruption'];
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -304,7 +306,7 @@ async function handleApi(req, res, pathname) {
       const buffIcons = await listBuffIcons();
       sendJson(res, 200, {
         buffIcons,
-        buffIds: ABILITY_BUFFS.filter((buffId) => buffId !== 'none'),
+        buffIds: BUFF_ICON_IDS,
       });
     } catch (error) {
       sendJson(res, 500, { error: 'Unable to load buff icon config' });
