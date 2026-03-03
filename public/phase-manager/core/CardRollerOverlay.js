@@ -154,12 +154,32 @@ export class CardRollerOverlay {
 
   getDisplayedOutcome(card, rollType, outcome) {
     if (!Number.isFinite(outcome)) return outcome;
-    if (rollType !== 'speed') return outcome;
+    let adjustedOutcome = outcome;
 
-    const frostbiteStacks = Number.isInteger(card?.userData?.frostbiteStacks)
-      ? Math.max(0, card.userData.frostbiteStacks)
+    if (rollType === 'speed') {
+      const frostbiteStacks = Number.isInteger(card?.userData?.frostbiteStacks)
+        ? Math.max(0, card.userData.frostbiteStacks)
+        : 0;
+      adjustedOutcome = Math.max(0, adjustedOutcome - frostbiteStacks);
+    }
+
+    const disruptionTurnsRemaining = Number.isInteger(card?.userData?.disruptionDebuffTurnsRemaining)
+      ? Math.max(0, card.userData.disruptionDebuffTurnsRemaining)
       : 0;
-    return Math.max(0, outcome - frostbiteStacks);
+    const disruptionDebuffs = card?.userData?.disruptionDebuffs && typeof card.userData.disruptionDebuffs === 'object'
+      ? card.userData.disruptionDebuffs
+      : null;
+    if (disruptionTurnsRemaining > 0 && disruptionDebuffs) {
+      const disruptionPenalty = Number(disruptionDebuffs[rollType]);
+      const normalizedPenalty = Number.isFinite(disruptionPenalty)
+        ? Math.max(0, Math.floor(disruptionPenalty))
+        : 0;
+      if (normalizedPenalty > 0) {
+        adjustedOutcome = Math.max(0, adjustedOutcome - normalizedPenalty);
+      }
+    }
+
+    return adjustedOutcome;
   }
 
   applyOutcomeToCard(card, rollType, outcome) {
