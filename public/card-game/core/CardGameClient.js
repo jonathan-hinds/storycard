@@ -2302,7 +2302,9 @@ export class CardGameClient {
         : null;
       if (adjustedRollOutcomes && attackCard?.userData?.cardId) {
         ['damage', 'speed', 'defense'].forEach((rollStat) => {
-          const adjustedValue = Number(adjustedRollOutcomes[rollStat]);
+          const rawAdjustedValue = adjustedRollOutcomes[rollStat];
+          if (rawAdjustedValue == null) return;
+          const adjustedValue = Number(rawAdjustedValue);
           if (!Number.isFinite(adjustedValue)) return;
           this.setCardStatDisplayOverride(
             attackCard.userData.cardId,
@@ -2350,9 +2352,15 @@ export class CardGameClient {
         adjustedSpeedOutcome: Number.isFinite(step?.adjustedSpeedOutcome) ? Math.max(0, Math.floor(step.adjustedSpeedOutcome)) : null,
         adjustedRollOutcomes: step?.adjustedRollOutcomes && typeof step.adjustedRollOutcomes === 'object'
           ? {
-            damage: Number.isFinite(Number(step.adjustedRollOutcomes.damage)) ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.damage))) : null,
-            speed: Number.isFinite(Number(step.adjustedRollOutcomes.speed)) ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.speed))) : null,
-            defense: Number.isFinite(Number(step.adjustedRollOutcomes.defense)) ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.defense))) : null,
+            damage: step.adjustedRollOutcomes.damage != null && Number.isFinite(Number(step.adjustedRollOutcomes.damage))
+              ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.damage)))
+              : null,
+            speed: step.adjustedRollOutcomes.speed != null && Number.isFinite(Number(step.adjustedRollOutcomes.speed))
+              ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.speed)))
+              : null,
+            defense: step.adjustedRollOutcomes.defense != null && Number.isFinite(Number(step.adjustedRollOutcomes.defense))
+              ? Math.max(0, Math.floor(Number(step.adjustedRollOutcomes.defense)))
+              : null,
           }
           : null,
         didHit: false,
@@ -2389,7 +2397,9 @@ export class CardGameClient {
             : null;
           if (adjustedRollOutcomes && animation.attackerCard?.userData?.cardId) {
             ['damage', 'speed', 'defense'].forEach((rollStat) => {
-              const adjustedValue = Number(adjustedRollOutcomes[rollStat]);
+              const rawAdjustedValue = adjustedRollOutcomes[rollStat];
+              if (rawAdjustedValue == null) return;
+              const adjustedValue = Number(rawAdjustedValue);
               if (!Number.isFinite(adjustedValue)) return;
               this.setCardStatDisplayOverride(animation.attackerCard.userData.cardId, rollStat, Math.max(0, Math.floor(adjustedValue)));
             });
