@@ -1402,7 +1402,7 @@ export class PhaseManagerClient {
       try {
         await this.cardRollerOverlay.rollForAttacks(commitAttacks, {
           rollSequence: ['damage', 'speed', 'defense'],
-          canControlAttack: (attack) => attack?.attackerSide === PLAYER_SIDE,
+          canControlAttack: (attack) => attack?.attackerId === this.playerId,
           onAttackRoll: ({ attack, rollType, sides, roll }) => this.submitCommitRoll({
             attackId: attack?.id,
             rollType,
