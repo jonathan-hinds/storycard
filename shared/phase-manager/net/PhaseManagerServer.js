@@ -278,6 +278,8 @@ class PhaseManagerServer {
         fireStacks: 0,
         frostbiteTurnsRemaining: 0,
         frostbiteStacks: 0,
+        focalMarkTurnsRemaining: 0,
+        focalMarkBonusDamage: 0,
         disruptionDebuffTurnsRemaining: 0,
         disruptionDebuffs: createEmptyDisruptionDebuffs(),
       }));
@@ -321,6 +323,8 @@ class PhaseManagerServer {
         fireStacks: 0,
         frostbiteTurnsRemaining: 0,
         frostbiteStacks: 0,
+        focalMarkTurnsRemaining: 0,
+        focalMarkBonusDamage: 0,
         disruptionDebuffTurnsRemaining: 0,
         disruptionDebuffs: createEmptyDisruptionDebuffs(),
       };
@@ -602,8 +606,11 @@ class PhaseManagerServer {
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
       if (!playerState) return;
-      playerState.board = playerState.board.map((card) => ({
-        ...card,
+      playerState.board = playerState.board.map((card) => {
+        const nextFocalMarkTurnsRemaining = Math.max(0, (Number.isInteger(card.focalMarkTurnsRemaining) ? card.focalMarkTurnsRemaining : 0) - 1);
+        const currentFocalMarkBonusDamage = Math.max(0, (Number.isFinite(card.focalMarkBonusDamage) ? Math.floor(card.focalMarkBonusDamage) : 0));
+        return {
+          ...card,
         retaliationBonus: 0,
         attackCommitted: false,
         targetSlotIndex: null,
@@ -617,9 +624,12 @@ class PhaseManagerServer {
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
+        focalMarkTurnsRemaining: nextFocalMarkTurnsRemaining,
+        focalMarkBonusDamage: nextFocalMarkTurnsRemaining > 0 ? currentFocalMarkBonusDamage : 0,
         disruptionDebuffTurnsRemaining: Math.max(0, (Number.isInteger(card.disruptionDebuffTurnsRemaining) ? card.disruptionDebuffTurnsRemaining : 0) - 1),
         disruptionDebuffs: createEmptyDisruptionDebuffs(),
-      }));
+        };
+      });
     });
     this.applyDecisionPhaseStartDraw(match);
   }
@@ -841,7 +851,7 @@ class PhaseManagerServer {
 
   applyResolvedAbilityBuff({ match, casterId, attack, buffId, buffTarget, durationTurns }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire' && buffId !== 'frostbite') {
+    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire' && buffId !== 'frostbite' && buffId !== 'focal_mark') {
       return { executed: true, reason: 'no_buff' };
     }
     const normalizedDuration = Number.isInteger(durationTurns) ? Math.max(0, durationTurns) : 0;
@@ -874,6 +884,18 @@ class PhaseManagerServer {
       const dotHandler = DOT_HANDLERS[buffId];
       dotHandler?.apply(targetCard, normalizedDuration);
       return { executed: true, reason: `${buffId}_applied` };
+    }
+
+    if (buffId === 'focal_mark') {
+      const bonusDamage = Number.isFinite(attack?.resolvedValue)
+        ? Math.max(0, Math.floor(attack.resolvedValue))
+        : 0;
+      if (bonusDamage < 1) {
+        return { executed: false, reason: 'invalid_bonus_value' };
+      }
+      targetCard.focalMarkTurnsRemaining = normalizedDuration;
+      targetCard.focalMarkBonusDamage = bonusDamage;
+      return { executed: true, reason: 'focal_mark_applied' };
     }
 
     return { executed: true, reason: 'no_buff' };
@@ -1208,12 +1230,39 @@ class PhaseManagerServer {
       resolvedAttack.resolvedHealing = resolvedAttack.effectId === 'heal_target' ? executedResolvedValue : 0;
       resolvedAttack.resolvedLifeStealHealing = resolvedAttack.effectId === 'life_steal' ? executedResolvedValue : 0;
 
+      if (executionResult.executed !== false
+        && (resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback')
+        && tauntAdjustedAttack.targetSide === 'opponent'
+        && Number.isInteger(tauntAdjustedAttack.targetSlotIndex)) {
+        const defenderId = match.players.find((id) => id !== attackerId);
+        const defenderState = defenderId ? match.cardsByPlayer.get(defenderId) : null;
+        const defenderCard = defenderState?.board?.find((card) => card.slotIndex === tauntAdjustedAttack.targetSlotIndex) || null;
+        const markDuration = Number.isInteger(defenderCard?.focalMarkTurnsRemaining) ? defenderCard.focalMarkTurnsRemaining : 0;
+        const markBonus = Number(defenderCard?.focalMarkBonusDamage);
+        const normalizedMarkBonus = Number.isFinite(markBonus) ? Math.max(0, Math.floor(markBonus)) : 0;
+        if (markDuration > 0 && normalizedMarkBonus > 0 && defenderCard?.catalogCard) {
+          const defenderHealth = Number(defenderCard.catalogCard.health);
+          if (Number.isFinite(defenderHealth)) {
+            const nextHealth = defenderHealth - normalizedMarkBonus;
+            defenderCard.catalogCard.health = nextHealth;
+            if (nextHealth <= 0 && defenderState) {
+              defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
+            }
+            resolvedAttack.resolvedValue += normalizedMarkBonus;
+            resolvedAttack.resolvedDamage += normalizedMarkBonus;
+          }
+        }
+      }
+
       const buffResult = executionResult.executed === false
         ? { executed: false, reason: 'effect_failed' }
         : this.applyResolvedAbilityBuff({
           match,
           casterId: attackerId,
-          attack: tauntAdjustedAttack,
+          attack: {
+            ...tauntAdjustedAttack,
+            resolvedValue: resolvedAttack.baseResolvedValue,
+          },
           buffId: resolvedAttack.buffId,
           buffTarget: resolvedAttack.buffTarget,
           durationTurns: resolvedAttack.buffDurationTurns,
@@ -1574,6 +1623,8 @@ class PhaseManagerServer {
         fireStacks: Number.isInteger(knownCard?.fireStacks) ? knownCard.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(knownCard?.frostbiteTurnsRemaining) ? knownCard.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(knownCard?.frostbiteStacks) ? knownCard.frostbiteStacks : 0,
+        focalMarkTurnsRemaining: Number.isInteger(knownCard?.focalMarkTurnsRemaining) ? knownCard.focalMarkTurnsRemaining : 0,
+        focalMarkBonusDamage: Number.isFinite(knownCard?.focalMarkBonusDamage) ? Math.max(0, Math.floor(knownCard.focalMarkBonusDamage)) : 0,
         disruptionDebuffTurnsRemaining: Number.isInteger(knownCard?.disruptionDebuffTurnsRemaining) ? knownCard.disruptionDebuffTurnsRemaining : 0,
         disruptionDebuffs: knownCard?.disruptionDebuffs && typeof knownCard.disruptionDebuffs === 'object'
           ? {
@@ -2103,6 +2154,7 @@ class PhaseManagerServer {
         attackerSlotIndex: null,
         targetSlotIndex: active.targetSlotIndex,
         targetSide: active.targetSide,
+        resolvedValue: baseResolvedValue,
       },
       buffId: spellAbility?.buffId || 'none',
       buffTarget: spellAbility?.buffTarget || 'none',
