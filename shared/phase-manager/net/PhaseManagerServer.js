@@ -215,6 +215,160 @@ class PhaseManagerServer {
     return Number.isInteger(firstEnemy?.slotIndex) ? firstEnemy.slotIndex : null;
   }
 
+  getNpcCreatureCandidateTargets(match, npcId, ability) {
+    if (!match || !npcId || !ability) return [];
+    const target = typeof ability.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
+    const buffTarget = typeof ability.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
+    const targetRule = target !== 'none' ? target : buffTarget;
+    const npcState = match.cardsByPlayer.get(npcId);
+    const enemyId = match.players.find((id) => id !== npcId);
+    const enemyState = enemyId ? match.cardsByPlayer.get(enemyId) : null;
+
+    if (targetRule === 'none') {
+      return [{ targetSide: null, targetSlotIndex: null }];
+    }
+
+    if (targetRule === 'self') {
+      return [{ targetSide: 'player', targetSlotIndex: null, requiresSelfSlot: true }];
+    }
+
+    if (targetRule === 'friendly') {
+      return (npcState?.board || [])
+        .filter((card) => Number.isInteger(card?.slotIndex))
+        .map((card) => ({ targetSide: 'player', targetSlotIndex: card.slotIndex }));
+    }
+
+    if (targetRule === 'enemy') {
+      const tauntCards = this.getActiveTauntCardsForDefender(match, enemyId);
+      const tauntSlotSet = new Set(tauntCards.map((card) => card.slotIndex));
+      return (enemyState?.board || [])
+        .filter((card) => Number.isInteger(card?.slotIndex))
+        .filter((card) => tauntSlotSet.size === 0 || tauntSlotSet.has(card.slotIndex))
+        .map((card) => ({ targetSide: 'opponent', targetSlotIndex: card.slotIndex }));
+    }
+
+    return [];
+  }
+
+  scoreNpcTargetCandidate({ match, npcId, ability, candidate, attackerCard = null, attackerSlotIndex = null }) {
+    if (!match || !npcId || !ability || !candidate) return Number.NEGATIVE_INFINITY;
+    const npcState = match.cardsByPlayer.get(npcId);
+    const enemyId = match.players.find((id) => id !== npcId);
+    const enemyState = enemyId ? match.cardsByPlayer.get(enemyId) : null;
+    const effectId = String(ability.effectId || 'none').trim().toLowerCase();
+    const buffId = String(ability.buffId || 'none').trim().toLowerCase();
+
+    const enemyBoardPressure = (enemyState?.board || []).reduce((sum, card) => {
+      const health = Number(card?.catalogCard?.health);
+      return sum + (Number.isFinite(health) ? Math.max(0, health) : 0);
+    }, 0);
+    const friendlyBoardPressure = (npcState?.board || []).reduce((sum, card) => {
+      const health = Number(card?.catalogCard?.health);
+      return sum + (Number.isFinite(health) ? Math.max(0, health) : 0);
+    }, 0);
+    const needsDefense = enemyBoardPressure > friendlyBoardPressure;
+
+    const resolveTargetCard = () => {
+      if (!Number.isInteger(candidate.targetSlotIndex)) return null;
+      if (candidate.targetSide === 'opponent') {
+        return enemyState?.board?.find((card) => card.slotIndex === candidate.targetSlotIndex) || null;
+      }
+      if (candidate.targetSide === 'player') {
+        const resolvedSlot = candidate.requiresSelfSlot ? attackerSlotIndex : candidate.targetSlotIndex;
+        if (!Number.isInteger(resolvedSlot)) return null;
+        return npcState?.board?.find((card) => card.slotIndex === resolvedSlot) || null;
+      }
+      return null;
+    };
+
+    const targetCard = resolveTargetCard();
+    const targetHealth = Number(targetCard?.catalogCard?.health);
+    const targetHealthValue = Number.isFinite(targetHealth) ? Math.max(0, targetHealth) : 0;
+    const attackValue = this.resolveAbilityValue({ ability, rollValue: 4 });
+    const hasEnemyTarget = candidate.targetSide === 'opponent' && Number.isInteger(candidate.targetSlotIndex);
+    const hasFriendlyTarget = candidate.targetSide === 'player' && (Number.isInteger(candidate.targetSlotIndex) || candidate.requiresSelfSlot);
+
+    let score = 0;
+
+    if (effectId === 'damage_enemy' || effectId === 'life_steal' || effectId === 'disruption') {
+      if (!hasEnemyTarget) return Number.NEGATIVE_INFINITY;
+      score += 30;
+      if (Number.isFinite(targetHealth)) {
+        const wouldDefeat = attackValue >= targetHealthValue;
+        score += wouldDefeat ? 35 : Math.min(18, targetHealthValue);
+      }
+      if (effectId === 'life_steal') {
+        const attackerHealth = Number(attackerCard?.catalogCard?.health);
+        if (Number.isFinite(attackerHealth) && attackerHealth <= 4) score += 12;
+      }
+      if (needsDefense) score += 6;
+    } else if (effectId === 'heal_target') {
+      if (!hasFriendlyTarget) return Number.NEGATIVE_INFINITY;
+      const missingHealth = Number.isFinite(targetHealth) ? Math.max(0, 10 - targetHealth) : 0;
+      score += 10 + Math.min(20, missingHealth * 2);
+      if (needsDefense) score += 8;
+    } else if (effectId === 'none') {
+      score += 2;
+    }
+
+    if (buffId !== 'none') {
+      score += 8;
+      if (buffId === 'taunt' && hasFriendlyTarget) {
+        const tauntTurns = Number(targetCard?.tauntTurnsRemaining);
+        score += Number.isFinite(tauntTurns) && tauntTurns > 0 ? 2 : 12;
+        if (needsDefense) score += 10;
+      }
+      if (buffId === 'silence' && hasEnemyTarget) {
+        const alreadySilenced = Number(targetCard?.silenceTurnsRemaining);
+        score += Number.isFinite(alreadySilenced) && alreadySilenced > 0 ? 1 : 14;
+      }
+      if ((buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' || buffId === 'focal_mark') && hasEnemyTarget) {
+        score += 9;
+      }
+    }
+
+    if (hasEnemyTarget && Number.isInteger(candidate.targetSlotIndex)) {
+      score += Math.max(0, 4 - candidate.targetSlotIndex);
+    }
+
+    return score;
+  }
+
+  chooseNpcCreatureAttackPlan(match, npcId, attackerCard) {
+    if (!match || !npcId || !attackerCard?.catalogCard || !Number.isInteger(attackerCard.slotIndex)) return null;
+    const abilities = [attackerCard.catalogCard.ability1, attackerCard.catalogCard.ability2].filter(Boolean);
+    if (!abilities.length) return null;
+
+    let bestPlan = null;
+    abilities.forEach((ability, index) => {
+      const candidates = this.getNpcCreatureCandidateTargets(match, npcId, ability);
+      candidates.forEach((candidate) => {
+        const scoredCandidate = candidate.requiresSelfSlot
+          ? { ...candidate, targetSlotIndex: attackerCard.slotIndex }
+          : candidate;
+        const score = this.scoreNpcTargetCandidate({
+          match,
+          npcId,
+          ability,
+          candidate: scoredCandidate,
+          attackerCard,
+          attackerSlotIndex: attackerCard.slotIndex,
+        });
+        if (!Number.isFinite(score)) return;
+        if (!bestPlan || score > bestPlan.score) {
+          bestPlan = {
+            score,
+            selectedAbilityIndex: index,
+            targetSide: scoredCandidate.targetSide || null,
+            targetSlotIndex: Number.isInteger(scoredCandidate.targetSlotIndex) ? scoredCandidate.targetSlotIndex : null,
+          };
+        }
+      });
+    });
+
+    return bestPlan;
+  }
+
   getNpcActionDelayMs() {
     const parsed = Number.parseInt(this.options.npcActionDelayMs, 10);
     return Number.isFinite(parsed) ? Math.max(0, parsed) : 1200;
@@ -413,21 +567,26 @@ class PhaseManagerServer {
         }
       }
 
-      const preferredEnemyTargetSlot = this.chooseNpcPreferredEnemyTargetSlot(match, npcId);
       let changedAttackPlan = false;
       for (const card of npcState.board) {
         const isSilenced = Number.isInteger(card?.silenceTurnsRemaining) && card.silenceTurnsRemaining > 0;
         const isSummoningSick = !Number.isInteger(card?.summonedTurn) || card.summonedTurn >= match.turnNumber;
-        const shouldCommit = !isSilenced && !isSummoningSick && Number.isInteger(preferredEnemyTargetSlot);
-        const nextTargetSide = shouldCommit ? 'opponent' : null;
-        const nextTargetSlot = shouldCommit ? preferredEnemyTargetSlot : null;
+        const nextPlan = !isSilenced && !isSummoningSick
+          ? this.chooseNpcCreatureAttackPlan(match, npcId, card)
+          : null;
+        const shouldCommit = Boolean(nextPlan);
+        const nextTargetSide = shouldCommit ? nextPlan.targetSide : null;
+        const nextTargetSlot = shouldCommit ? nextPlan.targetSlotIndex : null;
+        const nextSelectedAbilityIndex = shouldCommit && Number.isInteger(nextPlan.selectedAbilityIndex)
+          ? nextPlan.selectedAbilityIndex
+          : 0;
         if (card.attackCommitted !== shouldCommit || card.targetSide !== nextTargetSide || card.targetSlotIndex !== nextTargetSlot) {
           changedAttackPlan = true;
         }
         card.attackCommitted = shouldCommit;
         card.targetSide = nextTargetSide;
         card.targetSlotIndex = nextTargetSlot;
-        card.selectedAbilityIndex = 0;
+        card.selectedAbilityIndex = nextSelectedAbilityIndex;
       }
       this.forceAttacksToTauntTarget(match, npcId);
 
