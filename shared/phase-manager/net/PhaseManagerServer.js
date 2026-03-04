@@ -8,6 +8,8 @@ const DEFAULT_OPTIONS = {
   startingHandSize: 3,
   maxHandSize: 7,
   boardSlotsPerSide: 3,
+  npcActionDelayMs: 1200,
+  npcStartDelayMs: 1800,
 };
 
 const MAX_UPKEEP = 10;
@@ -213,78 +215,244 @@ class PhaseManagerServer {
     return Number.isInteger(firstEnemy?.slotIndex) ? firstEnemy.slotIndex : null;
   }
 
-  autoPlayNpcDecisionPhase(match) {
-    if (!match || match.phase !== 1) return;
-    for (const npcId of this.getNpcPlayerIds(match)) {
-      const npcState = match.cardsByPlayer.get(npcId);
-      if (!npcState) continue;
+  getNpcActionDelayMs() {
+    const parsed = Number.parseInt(this.options.npcActionDelayMs, 10);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 1200;
+  }
 
-      while (npcState.board.length < this.options.boardSlotsPerSide) {
-        const nextCreatureIndex = npcState.hand.findIndex((card) => card?.catalogCard?.cardKind !== 'Spell');
-        if (nextCreatureIndex < 0) break;
-        const slotIndex = this.getFirstOpenBoardSlot(npcState.board);
-        if (!Number.isInteger(slotIndex)) break;
-        const [creatureCard] = npcState.hand.splice(nextCreatureIndex, 1);
-        npcState.board.push({
-          ...creatureCard,
-          slotIndex,
-          summonedTurn: match.turnNumber,
-          attackCommitted: false,
-          targetSlotIndex: null,
-          targetSide: null,
-          selectedAbilityIndex: 0,
-        });
+  getNpcStartDelayMs() {
+    const parsed = Number.parseInt(this.options.npcStartDelayMs, 10);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 1800;
+  }
+
+  getNpcSpellCandidateTargets(match, npcId, spellCard) {
+    if (!match || !npcId || !spellCard?.catalogCard) return [];
+    const ability = this.getAttackAbilityForCard(spellCard, 0) || {};
+    const target = typeof ability.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
+    const buffTarget = typeof ability.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
+    const targetRule = target !== 'none' ? target : buffTarget;
+    const npcState = match.cardsByPlayer.get(npcId);
+    const enemyId = match.players.find((id) => id !== npcId);
+    const enemyState = enemyId ? match.cardsByPlayer.get(enemyId) : null;
+    const candidates = [];
+
+    if (targetRule === 'none') {
+      return [{ targetSide: null, targetSlotIndex: null }];
+    }
+
+    if (targetRule === 'self') {
+      for (const card of npcState?.board || []) {
+        if (!Number.isInteger(card?.slotIndex)) continue;
+        candidates.push({ targetSide: 'player', targetSlotIndex: card.slotIndex });
       }
+      return candidates;
+    }
 
-      const spellCard = npcState.hand.find((card) => card?.catalogCard?.cardKind === 'Spell') || null;
-      if (spellCard && (!match.activeSpellResolution || match.activeSpellResolution.completedAt != null)) {
-        const targetSlotIndex = this.chooseNpcPreferredEnemyTargetSlot(match, npcId);
-        const startResult = this.startSpellResolution({
+    if (targetRule === 'friendly') {
+      for (const card of npcState?.board || []) {
+        if (!Number.isInteger(card?.slotIndex)) continue;
+        candidates.push({ targetSide: 'player', targetSlotIndex: card.slotIndex });
+      }
+      return candidates;
+    }
+
+    if (targetRule === 'enemy') {
+      const tauntCards = this.getActiveTauntCardsForDefender(match, enemyId);
+      const tauntSlotSet = new Set(tauntCards.map((card) => card.slotIndex));
+      for (const card of enemyState?.board || []) {
+        if (!Number.isInteger(card?.slotIndex)) continue;
+        if (tauntSlotSet.size > 0 && !tauntSlotSet.has(card.slotIndex)) continue;
+        candidates.push({ targetSide: 'opponent', targetSlotIndex: card.slotIndex });
+      }
+      return candidates;
+    }
+
+    return [];
+  }
+
+  chooseNpcSpellAction(match, npcId) {
+    const npcState = match?.cardsByPlayer?.get(npcId);
+    if (!npcState) return null;
+    if (match?.activeSpellResolution && match.activeSpellResolution.completedAt == null) return null;
+
+    for (const handCard of npcState.hand) {
+      if (handCard?.catalogCard?.cardKind !== 'Spell') continue;
+      if (match.npcSpellCardsCastThisTurn instanceof Set && match.npcSpellCardsCastThisTurn.has(handCard.id)) continue;
+      const candidateTargets = this.getNpcSpellCandidateTargets(match, npcId, handCard);
+      for (const candidate of candidateTargets) {
+        const previewResult = this.startSpellResolution({
           playerId: npcId,
-          cardId: spellCard.id,
+          cardId: handCard.id,
           selectedAbilityIndex: 0,
-          targetSide: Number.isInteger(targetSlotIndex) ? 'opponent' : null,
-          targetSlotIndex,
+          targetSide: candidate.targetSide,
+          targetSlotIndex: candidate.targetSlotIndex,
           rollType: 'damage',
           dieSides: 6,
         });
-        if (!startResult?.error) {
-          const activeSpell = match.activeSpellResolution;
-          if (activeSpell?.requiresRoll) {
-            this.submitSpellRoll({
-              playerId: npcId,
-              spellId: activeSpell.id,
-              rollOutcome: this.rollNpcDie(activeSpell.dieSides),
-              rollData: null,
-            });
-          }
-          this.completeSpellResolution({
+        if (previewResult?.error) continue;
+        return {
+          type: 'spell',
+          cardId: handCard.id,
+          spellId: match.activeSpellResolution?.id,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  validateSpellTargetSelection({ match, casterId, ability, targetSide, targetSlotIndex }) {
+    const normalizedTarget = typeof ability?.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
+    const normalizedBuffTarget = typeof ability?.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
+    const targetRule = normalizedTarget !== 'none' ? normalizedTarget : normalizedBuffTarget;
+
+    if (targetRule === 'none') {
+      return { valid: true, targetSide: null, targetSlotIndex: null };
+    }
+
+    if (!Number.isInteger(targetSlotIndex)) {
+      return { valid: false, error: 'spell target is required' };
+    }
+
+    if (targetRule === 'enemy' && targetSide !== 'opponent') {
+      return { valid: false, error: 'spell must target an enemy' };
+    }
+    if ((targetRule === 'self' || targetRule === 'friendly') && targetSide !== 'player') {
+      return { valid: false, error: 'spell must target a friendly card' };
+    }
+
+    const targetPlayerId = targetSide === 'player'
+      ? casterId
+      : match.players.find((id) => id !== casterId);
+    if (!targetPlayerId) return { valid: false, error: 'target player not found' };
+    const targetState = match.cardsByPlayer.get(targetPlayerId);
+    const targetCard = targetState?.board?.find((card) => card?.slotIndex === targetSlotIndex);
+    if (!targetCard) return { valid: false, error: 'target card not found' };
+
+    return { valid: true, targetSide, targetSlotIndex };
+  }
+
+  initializeNpcAutomationForMatch(match, { withStartDelay = false } = {}) {
+    if (!match) return;
+    const now = Date.now();
+    const startDelay = withStartDelay ? this.getNpcStartDelayMs() : 0;
+    const entries = new Map();
+    for (const npcId of this.getNpcPlayerIds(match)) {
+      entries.set(npcId, {
+        nextActionAt: now + startDelay,
+      });
+    }
+    match.npcAutomationByPlayer = entries;
+  }
+
+  processNpcDecisionPhase(match) {
+    if (!match || match.phase !== 1) return;
+    if (match.npcAutomationProcessing) return;
+    match.npcAutomationProcessing = true;
+    const now = Date.now();
+    if (!(match.npcAutomationByPlayer instanceof Map)) {
+      this.initializeNpcAutomationForMatch(match, { withStartDelay: false });
+    }
+
+    try {
+      for (const npcId of this.getNpcPlayerIds(match)) {
+      const automation = match.npcAutomationByPlayer.get(npcId) || { nextActionAt: now };
+      if (now < automation.nextActionAt) continue;
+      if (match.readyPlayers.has(npcId)) continue;
+      const npcState = match.cardsByPlayer.get(npcId);
+      if (!npcState) continue;
+
+      if (match.activeSpellResolution && match.activeSpellResolution.completedAt == null && match.activeSpellResolution.casterId === npcId) {
+        const activeSpell = match.activeSpellResolution;
+        if (activeSpell.requiresRoll && !Number.isFinite(activeSpell.rollOutcome)) {
+          this.submitSpellRoll({
             playerId: npcId,
-            spellId: activeSpell?.id,
+            spellId: activeSpell.id,
+            rollOutcome: this.rollNpcDie(activeSpell.dieSides),
+            rollData: null,
           });
+        }
+        this.completeSpellResolution({ playerId: npcId, spellId: activeSpell.id });
+        automation.nextActionAt = now + this.getNpcActionDelayMs();
+        match.npcAutomationByPlayer.set(npcId, automation);
+        continue;
+      }
+
+      const spellAction = this.chooseNpcSpellAction(match, npcId);
+      if (spellAction) {
+        if (!(match.npcSpellCardsCastThisTurn instanceof Set)) {
+          match.npcSpellCardsCastThisTurn = new Set();
+        }
+        if (spellAction.cardId) {
+          match.npcSpellCardsCastThisTurn.add(spellAction.cardId);
+        }
+        automation.nextActionAt = now + this.getNpcActionDelayMs();
+        match.npcAutomationByPlayer.set(npcId, automation);
+        continue;
+      }
+
+      if (npcState.board.length < this.options.boardSlotsPerSide) {
+        const nextCreatureIndex = npcState.hand.findIndex((card) => card?.catalogCard?.cardKind !== 'Spell');
+        if (nextCreatureIndex >= 0) {
+          const slotIndex = this.getFirstOpenBoardSlot(npcState.board);
+          if (Number.isInteger(slotIndex)) {
+            const [creatureCard] = npcState.hand.splice(nextCreatureIndex, 1);
+            npcState.board.push({
+              ...creatureCard,
+              slotIndex,
+              summonedTurn: match.turnNumber,
+              attackCommitted: false,
+              targetSlotIndex: null,
+              targetSide: null,
+              selectedAbilityIndex: 0,
+            });
+            automation.nextActionAt = now + this.getNpcActionDelayMs();
+            match.npcAutomationByPlayer.set(npcId, automation);
+            continue;
+          }
         }
       }
 
       const preferredEnemyTargetSlot = this.chooseNpcPreferredEnemyTargetSlot(match, npcId);
+      let changedAttackPlan = false;
       for (const card of npcState.board) {
         const isSilenced = Number.isInteger(card?.silenceTurnsRemaining) && card.silenceTurnsRemaining > 0;
         const isSummoningSick = !Number.isInteger(card?.summonedTurn) || card.summonedTurn >= match.turnNumber;
-        if (isSilenced || isSummoningSick) {
-          card.attackCommitted = false;
-          card.targetSide = null;
-          card.targetSlotIndex = null;
-          card.selectedAbilityIndex = 0;
-          continue;
+        const shouldCommit = !isSilenced && !isSummoningSick && Number.isInteger(preferredEnemyTargetSlot);
+        const nextTargetSide = shouldCommit ? 'opponent' : null;
+        const nextTargetSlot = shouldCommit ? preferredEnemyTargetSlot : null;
+        if (card.attackCommitted !== shouldCommit || card.targetSide !== nextTargetSide || card.targetSlotIndex !== nextTargetSlot) {
+          changedAttackPlan = true;
         }
-
-        card.attackCommitted = true;
-        card.targetSide = Number.isInteger(preferredEnemyTargetSlot) ? 'opponent' : null;
-        card.targetSlotIndex = Number.isInteger(preferredEnemyTargetSlot) ? preferredEnemyTargetSlot : null;
+        card.attackCommitted = shouldCommit;
+        card.targetSide = nextTargetSide;
+        card.targetSlotIndex = nextTargetSlot;
         card.selectedAbilityIndex = 0;
       }
-
       this.forceAttacksToTauntTarget(match, npcId);
+
+      const humanId = match.players.find((id) => id !== npcId);
+      const readyPayload = {
+        playerId: npcId,
+        hand: npcState.hand,
+        board: npcState.board,
+        discard: npcState.discard,
+      };
+      const canReady = humanId ? match.readyPlayers.has(humanId) || !changedAttackPlan : true;
+      if (canReady) {
+        this.readyUp(readyPayload);
+      }
+
+      automation.nextActionAt = now + this.getNpcActionDelayMs();
+      match.npcAutomationByPlayer.set(npcId, automation);
+      }
+    } finally {
+      match.npcAutomationProcessing = false;
     }
+  }
+
+  autoPlayNpcDecisionPhase(match) {
+    this.processNpcDecisionPhase(match);
   }
 
   autoSubmitNpcCommitRolls(match) {
@@ -741,6 +909,7 @@ class PhaseManagerServer {
     match.executedCommitAttackIds = [];
     match.commitAnimationCompletedPlayers = new Set();
     match.activeSpellResolution = null;
+    match.npcSpellCardsCastThisTurn = new Set();
     match.lastDotDamageEvents = this.applyDamageOverTimeAtPhaseChange(match);
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
@@ -771,6 +940,7 @@ class PhaseManagerServer {
       });
     });
     this.applyDecisionPhaseStartDraw(match);
+    this.initializeNpcAutomationForMatch(match, { withStartDelay: false });
     this.autoPlayNpcDecisionPhase(match);
   }
 
@@ -1870,6 +2040,9 @@ class PhaseManagerServer {
         this.phaseMatchmakingState.set(playerId, { status: 'idle' });
         return { status: 'idle', queueCount: this.phaseQueue.length };
       }
+      if (!match.npcAutomationProcessing) {
+        this.processNpcDecisionPhase(match);
+      }
       const opponentId = match.players.find((id) => id !== playerId) || null;
       return {
         status: 'matched',
@@ -1947,6 +2120,7 @@ class PhaseManagerServer {
         commitAllRolledAt: null,
         lastDotDamageEvents: [],
         activeSpellResolution: null,
+        npcSpellCardsCastThisTurn: new Set(),
         createdAt: Date.now(),
       };
       this.phaseMatches.set(matchId, match);
@@ -2006,11 +2180,13 @@ class PhaseManagerServer {
         commitAllRolledAt: null,
         lastDotDamageEvents: [],
         activeSpellResolution: null,
+        npcSpellCardsCastThisTurn: new Set(),
         createdAt: Date.now(),
       };
       this.phaseMatches.set(matchId, match);
       this.phaseMatchmakingState.set(npcPlayerId, { status: 'matched', matchId });
       this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
+      this.initializeNpcAutomationForMatch(match, { withStartDelay: true });
       this.autoPlayNpcDecisionPhase(match);
       return this.getPlayerPhaseStatus(playerId);
     }
@@ -2136,8 +2312,19 @@ class PhaseManagerServer {
       return { error: 'spell card is not available in player hand', statusCode: 400 };
     }
 
+    const spellAbility = this.getAttackAbilityForCard(handCard, Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0);
     const normalizedTargetSlotIndex = this.normalizeBoardTargetSlotIndex(targetSlotIndex, targetSide);
     const normalizedTargetSide = targetSide === 'player' || targetSide === 'opponent' ? targetSide : null;
+    const targetValidation = this.validateSpellTargetSelection({
+      match,
+      casterId: playerId,
+      ability: spellAbility,
+      targetSide: normalizedTargetSide,
+      targetSlotIndex: normalizedTargetSlotIndex,
+    });
+    if (!targetValidation.valid) {
+      return { error: targetValidation.error, statusCode: 400 };
+    }
     if (normalizedTargetSide === 'opponent' && Number.isInteger(normalizedTargetSlotIndex)) {
       const opponentId = match.players.find((id) => id !== playerId);
       const tauntSlots = new Set(this.getActiveTauntCardsForDefender(match, opponentId).map((card) => card.slotIndex));
@@ -2147,7 +2334,6 @@ class PhaseManagerServer {
     }
 
     const parsedDieSides = Number.parseInt(dieSides, 10);
-    const spellAbility = this.getAttackAbilityForCard(handCard, Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0);
     const spellId = `spell-${randomUUID().slice(0, 8)}`;
     match.activeSpellResolution = {
       id: spellId,
