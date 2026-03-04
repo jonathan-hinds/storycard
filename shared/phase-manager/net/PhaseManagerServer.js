@@ -176,6 +176,16 @@ class PhaseManagerServer {
     this.phaseMatchmakingState.set(playerId, { status: 'idle' });
   }
 
+
+  isNpcPlayerId(playerId) {
+    return typeof playerId === 'string' && playerId.startsWith('npc-');
+  }
+
+  getNpcPlayerIds(match) {
+    if (!match || !Array.isArray(match.players)) return [];
+    return match.players.filter((id) => this.isNpcPlayerId(id));
+  }
+
   colorFromHexString(hexColor, fallbackColor = DEFAULT_CARD_MESH_COLOR) {
     if (typeof hexColor !== 'string') return fallbackColor;
     const normalized = hexColor.trim();
@@ -1458,6 +1468,9 @@ class PhaseManagerServer {
     }
 
     match.commitCompletedPlayers.add(playerId);
+    for (const npcPlayerId of this.getNpcPlayerIds(match)) {
+      match.commitCompletedPlayers.add(npcPlayerId);
+    }
     if (match.commitCompletedPlayers.size === match.players.length && !match.commitAllRolledAt) {
       this.applyPendingSpellDisruptionDebuffsToCommitRolls(match);
       this.applyCommitEffects(match);
@@ -1489,6 +1502,9 @@ class PhaseManagerServer {
     }
 
     match.commitAnimationCompletedPlayers.add(playerId);
+    for (const npcPlayerId of this.getNpcPlayerIds(match)) {
+      match.commitAnimationCompletedPlayers.add(npcPlayerId);
+    }
     if (match.commitAnimationCompletedPlayers.size === match.players.length) {
       this.advanceMatchToDecisionPhase(match);
     }
@@ -1551,6 +1567,9 @@ class PhaseManagerServer {
 
   readyPlayerInMatch(match, playerId) {
     match.readyPlayers.add(playerId);
+    for (const npcPlayerId of this.getNpcPlayerIds(match)) {
+      match.readyPlayers.add(npcPlayerId);
+    }
 
     const allPlayersReady = match.players.every((id) => match.readyPlayers.has(id));
     if (!allPlayersReady) return;
@@ -1742,8 +1761,10 @@ class PhaseManagerServer {
     const preferredDeckCardIds = Array.isArray(options.deckCardIds)
       ? options.deckCardIds.filter((cardId) => typeof cardId === 'string' && cardId.trim()).map((cardId) => cardId.trim())
       : [];
+    const normalizedOpponentType = typeof options.opponentType === 'string' ? options.opponentType.trim().toLowerCase() : '';
+    const useNpcOpponent = normalizedOpponentType === 'npc';
 
-    const opponentEntry = this.phaseQueue.shift();
+    const opponentEntry = useNpcOpponent ? null : this.phaseQueue.shift();
     if (opponentEntry && opponentEntry.playerId && opponentEntry.playerId !== playerId) {
       const opponentId = opponentEntry.playerId;
       const matchId = `match-${randomUUID().slice(0, 8)}`;
@@ -1799,6 +1820,65 @@ class PhaseManagerServer {
       };
       this.phaseMatches.set(matchId, match);
       this.phaseMatchmakingState.set(opponentId, { status: 'matched', matchId });
+      this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
+      return this.getPlayerPhaseStatus(playerId);
+    }
+
+    if (useNpcOpponent) {
+      const npcPlayerId = `npc-${randomUUID().slice(0, 8)}`;
+      const matchId = `match-${randomUUID().slice(0, 8)}`;
+      const players = [npcPlayerId, playerId];
+      const preferredDeckByPlayer = new Map([
+        [npcPlayerId, []],
+        [playerId, preferredDeckCardIds],
+      ]);
+      const cardsByPlayer = new Map();
+      let catalogCards = [];
+
+      try {
+        const loadedCards = await this.options.catalogProvider();
+        catalogCards = Array.isArray(loadedCards) ? loadedCards : [];
+      } catch (error) {
+        catalogCards = [];
+      }
+
+      players.forEach((id) => {
+        const preferredDeck = preferredDeckByPlayer.get(id) || [];
+        const cards = this.buildDeckFromCatalog(id, catalogCards, preferredDeck);
+        const openingZones = this.buildOpeningZones(cards);
+        cardsByPlayer.set(id, {
+          allCards: cards,
+          hand: openingZones.hand,
+          board: [],
+          discard: [],
+          deck: openingZones.deck,
+        });
+      });
+
+      const match = {
+        id: matchId,
+        players,
+        cardsByPlayer,
+        turnNumber: 1,
+        upkeep: 1,
+        phase: 1,
+        phaseStartedAt: Date.now(),
+        phaseEndsAt: null,
+        readyPlayers: new Set(),
+        lastDrawnCardsByPlayer: new Map(),
+        pendingCommitAttacksByPlayer: new Map(),
+        commitRollsByAttackId: new Map(),
+        commitExecutionByAttackId: new Map(),
+        executedCommitAttackIds: [],
+        commitCompletedPlayers: new Set(),
+        commitAnimationCompletedPlayers: new Set(),
+        commitAllRolledAt: null,
+        lastDotDamageEvents: [],
+        activeSpellResolution: null,
+        createdAt: Date.now(),
+      };
+      this.phaseMatches.set(matchId, match);
+      this.phaseMatchmakingState.set(npcPlayerId, { status: 'matched', matchId });
       this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
       return this.getPlayerPhaseStatus(playerId);
     }

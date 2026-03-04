@@ -188,6 +188,7 @@ let phaseManager = null;
 let matchmakingPollTimer = 0;
 let hasRequestedExit = false;
 let pendingSavePromise = null;
+let currentMatchRequestMode = null;
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message || '';
@@ -325,6 +326,7 @@ function showHome() {
   backButton.hidden = true;
   setStatus('');
   hasRequestedExit = false;
+  currentMatchRequestMode = null;
 
   homeScene = new HomeCanvasScene({
     canvas,
@@ -418,9 +420,14 @@ async function pollMatchStatusUntilMatched() {
       return;
     }
     const searching = status?.status === 'searching';
+    if (!searching) {
+      currentMatchRequestMode = null;
+    }
     if (homeScene) {
-      homeScene.setFindMatchState(searching ? 'searching' : 'idle');
-      if (!searching) homeScene.setChallengeModeState('idle');
+      const isChallengeSearch = searching && currentMatchRequestMode === 'challenge';
+      const isPvpSearch = searching && currentMatchRequestMode !== 'challenge';
+      homeScene.setFindMatchState(isPvpSearch ? 'searching' : 'idle');
+      homeScene.setChallengeModeState(isChallengeSearch ? 'searching' : 'idle');
     }
   } catch (error) {
     stopPolling();
@@ -433,7 +440,11 @@ async function pollMatchStatusUntilMatched() {
 
 function startFindMatchFromHome() {
   if (!session?.user?.id) return;
-  if (homeScene) homeScene.setFindMatchState('searching');
+  currentMatchRequestMode = 'pvp';
+  if (homeScene) {
+    homeScene.setFindMatchState('searching');
+    homeScene.setChallengeModeState('idle');
+  }
 
   postJson('/api/phase-manager/matchmaking/find', {
     playerId: session.user.id,
@@ -448,6 +459,7 @@ function startFindMatchFromHome() {
       pollMatchStatusUntilMatched();
     })
     .catch(() => {
+      currentMatchRequestMode = null;
       if (homeScene) homeScene.setFindMatchState('idle');
       stopPolling();
     });
@@ -455,7 +467,11 @@ function startFindMatchFromHome() {
 
 function startChallengeModeFromHome() {
   if (!session?.user?.id) return;
-  if (homeScene) homeScene.setChallengeModeState('searching');
+  currentMatchRequestMode = 'challenge';
+  if (homeScene) {
+    homeScene.setChallengeModeState('searching');
+    homeScene.setFindMatchState('idle');
+  }
 
   postJson('/api/phase-manager/matchmaking/find', {
     playerId: session.user.id,
@@ -473,6 +489,7 @@ function startChallengeModeFromHome() {
       pollMatchStatusUntilMatched();
     })
     .catch(() => {
+      currentMatchRequestMode = null;
       if (homeScene) homeScene.setChallengeModeState('idle');
       stopPolling();
     });
