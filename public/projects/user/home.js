@@ -47,11 +47,12 @@ function saveSession(session) {
 }
 
 class HomeCanvasScene {
-  constructor({ canvas, interactionTarget, username, onDecks, onFindMatch }) {
+  constructor({ canvas, interactionTarget, username, onDecks, onFindMatch, onChallengeMode }) {
     this.canvas = canvas;
     this.interactionTarget = interactionTarget;
     this.onDecks = onDecks;
     this.onFindMatch = onFindMatch;
+    this.onChallengeMode = onChallengeMode;
     this.pointer = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.hitTargets = [];
@@ -79,8 +80,9 @@ class HomeCanvasScene {
     this.subtitleSprite.position.set(0, 1.55, 0.1);
     this.scene.add(this.subtitleSprite);
 
-    this.decksButton = this.createButton('Decks', -2.2, -0.4);
-    this.matchButton = this.createButton('Find Match', 2.2, -0.4, { secondary: true });
+    this.decksButton = this.createButton('Decks', -3.4, -0.4);
+    this.matchButton = this.createButton('Find Match', 0, -0.4, { secondary: true });
+    this.challengeButton = this.createButton('Challenge Mode', 3.4, -0.4, { secondary: true });
 
     this.onPointerUp = this.onPointerUp.bind(this);
     this.onResize = this.onResize.bind(this);
@@ -109,13 +111,13 @@ class HomeCanvasScene {
 
   createButton(label, x, y, { secondary = false } = {}) {
     const button = new THREE.Mesh(
-      new THREE.PlaneGeometry(4.1, 1.2),
+      new THREE.PlaneGeometry(3.3, 1.2),
       new THREE.MeshBasicMaterial({ color: secondary ? 0x1c2b49 : 0x334f80 })
     );
     button.position.set(x, y, 0.2);
 
-    const labelSprite = this.createTextSprite(label, { width: 900, height: 240, fontSize: 84 });
-    labelSprite.scale.set(3.1, 0.85, 1);
+    const labelSprite = this.createTextSprite(label, { width: 1000, height: 240, fontSize: 70 });
+    labelSprite.scale.set(2.8, 0.8, 1);
     labelSprite.position.set(0, 0, 0.1);
     button.add(labelSprite);
 
@@ -127,10 +129,19 @@ class HomeCanvasScene {
   setFindMatchState(state) {
     const nextLabel = state === 'searching' ? 'Searching...' : 'Find Match';
     this.matchButton.clear();
-    const labelSprite = this.createTextSprite(nextLabel, { width: 900, height: 240, fontSize: 84 });
-    labelSprite.scale.set(3.1, 0.85, 1);
+    const labelSprite = this.createTextSprite(nextLabel, { width: 1000, height: 240, fontSize: 70 });
+    labelSprite.scale.set(2.8, 0.8, 1);
     labelSprite.position.set(0, 0, 0.1);
     this.matchButton.add(labelSprite);
+  }
+
+  setChallengeModeState(state) {
+    const nextLabel = state === 'searching' ? 'Loading NPC...' : 'Challenge Mode';
+    this.challengeButton.clear();
+    const labelSprite = this.createTextSprite(nextLabel, { width: 1000, height: 240, fontSize: 70 });
+    labelSprite.scale.set(2.8, 0.8, 1);
+    labelSprite.position.set(0, 0, 0.1);
+    this.challengeButton.add(labelSprite);
   }
 
   onPointerUp(event) {
@@ -143,6 +154,7 @@ class HomeCanvasScene {
     if (!hit?.object) return;
     if (hit.object === this.decksButton) this.onDecks();
     if (hit.object === this.matchButton) this.onFindMatch();
+    if (hit.object === this.challengeButton) this.onChallengeMode();
   }
 
   onResize() {
@@ -320,6 +332,7 @@ function showHome() {
     username: session.user.username,
     onDecks: () => showDecks(),
     onFindMatch: () => startFindMatchFromHome(),
+    onChallengeMode: () => startChallengeModeFromHome(),
   });
 
   pollMatchStatusUntilMatched();
@@ -405,10 +418,16 @@ async function pollMatchStatusUntilMatched() {
       return;
     }
     const searching = status?.status === 'searching';
-    if (homeScene) homeScene.setFindMatchState(searching ? 'searching' : 'idle');
+    if (homeScene) {
+      homeScene.setFindMatchState(searching ? 'searching' : 'idle');
+      if (!searching) homeScene.setChallengeModeState('idle');
+    }
   } catch (error) {
     stopPolling();
-    if (homeScene) homeScene.setFindMatchState('idle');
+    if (homeScene) {
+      homeScene.setFindMatchState('idle');
+      homeScene.setChallengeModeState('idle');
+    }
   }
 }
 
@@ -430,6 +449,31 @@ function startFindMatchFromHome() {
     })
     .catch(() => {
       if (homeScene) homeScene.setFindMatchState('idle');
+      stopPolling();
+    });
+}
+
+function startChallengeModeFromHome() {
+  if (!session?.user?.id) return;
+  if (homeScene) homeScene.setChallengeModeState('searching');
+
+  postJson('/api/phase-manager/matchmaking/find', {
+    playerId: session.user.id,
+    deckCardIds: Array.isArray(session.user.deck?.cards) ? session.user.deck.cards : [],
+    mode: 'challenge',
+    opponentType: 'npc',
+    npcDeck: 'random',
+  })
+    .then((status) => {
+      if (status?.status === 'matched') {
+        showMatch();
+        return;
+      }
+      ensurePolling();
+      pollMatchStatusUntilMatched();
+    })
+    .catch(() => {
+      if (homeScene) homeScene.setChallengeModeState('idle');
       stopPolling();
     });
 }
