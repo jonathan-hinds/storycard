@@ -70,6 +70,14 @@ const BUFF_FIRE = 'fire';
 const BUFF_FROSTBITE = 'frostbite';
 const BUFF_DISRUPTION = 'disruption';
 
+function findCardByZoneAndSlot(cards, zone, slotIndex) {
+  if (!Array.isArray(cards) || !Number.isInteger(slotIndex)) return null;
+  return cards.find((entry) => (
+    entry?.userData?.zone === zone
+    && entry?.userData?.slotIndex === slotIndex
+  )) || null;
+}
+
 export class CardGameClient {
   constructor({ canvas, statusElement, resetButton, template = SINGLE_CARD_TEMPLATE, options = {} }) {
     if (!canvas) throw new Error('canvas is required');
@@ -1347,22 +1355,17 @@ export class CardGameClient {
   resolveBoardCardFromSideSlot(targetSide, targetSlotIndex) {
     if (!Number.isInteger(targetSlotIndex)) return null;
     if (targetSide !== 'player' && targetSide !== 'opponent') return null;
-    const boardSlotsPerSide = this.zoneFramework.boardSlotsPerSide;
+    const boardSlotsPerSide = Number.isInteger(this.zoneFramework?.boardSlotsPerSide)
+      ? this.zoneFramework.boardSlotsPerSide
+      : Math.floor((Array.isArray(this.boardSlots) ? this.boardSlots.length : 0) / 2);
     const resolvedSlotIndex = targetSide === this.template.playerSide
       ? targetSlotIndex + boardSlotsPerSide
       : targetSlotIndex;
-    if (typeof this.getCardByZoneAndSlot === 'function') {
-      return this.getCardByZoneAndSlot(CARD_ZONE_TYPES.BOARD, resolvedSlotIndex);
-    }
-    return this.cards.find((entry) => (
-      entry?.userData?.zone === CARD_ZONE_TYPES.BOARD
-      && entry?.userData?.slotIndex === resolvedSlotIndex
-    )) || null;
+    return findCardByZoneAndSlot(this.cards, CARD_ZONE_TYPES.BOARD, resolvedSlotIndex);
   }
 
   getCardByZoneAndSlot(zone, slotIndex) {
-    if (!Number.isInteger(slotIndex)) return null;
-    return this.cards.find((entry) => entry.userData.zone === zone && entry.userData.slotIndex === slotIndex) || null;
+    return findCardByZoneAndSlot(this.cards, zone, slotIndex);
   }
 
   selectRandomFriendlyBoardCard(owner = this.template.playerSide) {
