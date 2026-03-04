@@ -53,14 +53,14 @@ function setOptions(selectEl, values = [], fallbackValue = null) {
 }
 
 function getAllowedBuffIdsForTarget(target = 'none') {
-  if (target === 'enemy') return ['none', 'silence', 'poison', 'fire', 'frostbite'];
+  if (target === 'enemy') return ['none', 'silence', 'poison', 'fire', 'frostbite', 'focal_mark'];
   if (target === 'self' || target === 'friendly') return ['none', 'taunt'];
   return ['none'];
 }
 
 function getAllowedBuffTargetsForBuff(buffId = 'none') {
   if (buffId === 'taunt') return ['self', 'friendly'];
-  if (buffId === 'silence' || buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite') return ['enemy'];
+  if (buffId === 'silence' || buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' || buffId === 'focal_mark') return ['enemy'];
   return ['none'];
 }
 
@@ -106,7 +106,8 @@ function updateDurationVisibility() {
     || buffSelect?.value === 'silence'
     || buffSelect?.value === 'poison'
     || buffSelect?.value === 'fire'
-    || buffSelect?.value === 'frostbite';
+    || buffSelect?.value === 'frostbite'
+    || buffSelect?.value === 'focal_mark';
   if (!durationTurnsInput) return;
   durationTurnsInput.hidden = !needsDuration;
   if (durationTurnsInput.previousElementSibling) durationTurnsInput.previousElementSibling.hidden = !needsDuration;
@@ -123,7 +124,8 @@ function validateAbilityInput(abilityInput) {
     && abilityInput.buffId !== 'silence'
     && abilityInput.buffId !== 'poison'
     && abilityInput.buffId !== 'fire'
-    && abilityInput.buffId !== 'frostbite') {
+    && abilityInput.buffId !== 'frostbite'
+    && abilityInput.buffId !== 'focal_mark') {
     return 'Enemy-targeting abilities may only use enemy debuffs.';
   }
   if ((abilityInput.target === 'self' || abilityInput.target === 'friendly') && abilityInput.buffId !== 'none' && abilityInput.buffId !== 'taunt') {
@@ -134,7 +136,7 @@ function validateAbilityInput(abilityInput) {
     return 'Taunt buffs must target self or friendly.';
   }
 
-  if ((abilityInput.buffId === 'silence' || abilityInput.buffId === 'poison' || abilityInput.buffId === 'fire' || abilityInput.buffId === 'frostbite') && abilityInput.buffTarget !== 'enemy') {
+  if ((abilityInput.buffId === 'silence' || abilityInput.buffId === 'poison' || abilityInput.buffId === 'fire' || abilityInput.buffId === 'frostbite' || abilityInput.buffId === 'focal_mark') && abilityInput.buffTarget !== 'enemy') {
     return `${toTitle(abilityInput.buffId)} debuffs must target enemy.`;
   }
 
@@ -142,10 +144,11 @@ function validateAbilityInput(abilityInput) {
     && abilityInput.buffId !== 'silence'
     && abilityInput.buffId !== 'poison'
     && abilityInput.buffId !== 'fire'
-    && abilityInput.buffId !== 'frostbite') return null;
+    && abilityInput.buffId !== 'frostbite'
+    && abilityInput.buffId !== 'focal_mark') return null;
   const durationTurns = Number(abilityInput.durationTurns);
   if (!Number.isInteger(durationTurns) || durationTurns < 1) {
-    return 'Taunt, silence, poison, fire, and frostbite effects must include a duration of at least 1 turn.';
+    return 'Taunt, silence, poison, fire, frostbite, and focal mark effects must include a duration of at least 1 turn.';
   }
   return null;
 }
