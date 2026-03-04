@@ -113,6 +113,37 @@ const DOT_HANDLERS = {
 
 const DISRUPTION_ROLL_STATS = Object.freeze(['damage', 'speed', 'defense']);
 
+const DEFAULT_NPC_PROFILE = Object.freeze({
+  boardDevelopmentPerTurn: 1,
+  aggression: 0.65,
+  defenseBias: 0.35,
+  preferGuaranteedValue: 0.4,
+  targetWeights: {
+    lowHealth: 1.1,
+    highThreat: 1.3,
+    tauntPriority: 1.5,
+    retaliationRisk: 0.8,
+  },
+  utilityWeights: {
+    damageEnemy: 1,
+    healTarget: 0.8,
+    lifeSteal: 1,
+    retaliationBonus: 0.6,
+    disruption: 0.85,
+    silence: 1,
+    taunt: 0.75,
+    poison: 0.65,
+    fire: 0.9,
+    frostbite: 0.7,
+    focalMark: 0.8,
+  },
+  wastePenaltyWeights: {
+    silenceOnSummoningSickTarget: 5,
+    reapplySilenceOnSilencedTarget: 2,
+    buffOnMissingTarget: 4,
+  },
+});
+
 function normalizeDisruptionTargetStat(stat) {
   const normalized = typeof stat === 'string' ? stat.trim().toLowerCase() : '';
   if (normalized === 'damage' || normalized === 'dmg' || normalized === 'efct') return 'damage';
@@ -133,6 +164,35 @@ function normalizeRollOutcome(outcome) {
   return Number.isFinite(outcome) ? Math.max(0, Math.floor(outcome)) : null;
 }
 
+function deepCloneSimple(value) {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((entry) => deepCloneSimple(entry));
+  const next = {};
+  Object.entries(value).forEach(([key, nestedValue]) => {
+    next[key] = deepCloneSimple(nestedValue);
+  });
+  return next;
+}
+
+function mergeNpcProfile(profile = {}) {
+  return {
+    ...deepCloneSimple(DEFAULT_NPC_PROFILE),
+    ...deepCloneSimple(profile),
+    targetWeights: {
+      ...deepCloneSimple(DEFAULT_NPC_PROFILE.targetWeights),
+      ...deepCloneSimple(profile?.targetWeights || {}),
+    },
+    utilityWeights: {
+      ...deepCloneSimple(DEFAULT_NPC_PROFILE.utilityWeights),
+      ...deepCloneSimple(profile?.utilityWeights || {}),
+    },
+    wastePenaltyWeights: {
+      ...deepCloneSimple(DEFAULT_NPC_PROFILE.wastePenaltyWeights),
+      ...deepCloneSimple(profile?.wastePenaltyWeights || {}),
+    },
+  };
+}
+
 class PhaseManagerServer {
   constructor(options = {}) {
     this.options = {
@@ -143,6 +203,11 @@ class PhaseManagerServer {
     this.phaseQueue = [];
     this.phaseMatchmakingState = new Map();
     this.phaseMatches = new Map();
+    this.npcPlayers = new Set();
+  }
+
+  isNpcPlayer(playerId) {
+    return typeof playerId === 'string' && this.npcPlayers.has(playerId);
   }
 
   getQueuePosition(playerId) {
@@ -536,6 +601,263 @@ class PhaseManagerServer {
     const drawnCard = playerState.deck.shift();
     playerState.hand.push(drawnCard);
     return [drawnCard.id];
+  }
+
+  parseDieSides(value, fallback = 6) {
+    const match = String(value || '').trim().match(/D(\d+)/i);
+    if (!match) return fallback;
+    const parsed = Number.parseInt(match[1], 10);
+    return Number.isFinite(parsed) ? Math.max(2, parsed) : fallback;
+  }
+
+  getRollSidesForType(card, ability, rollType) {
+    const catalogCard = card?.catalogCard || {};
+    if (rollType === 'damage') {
+      const sourceStat = ability?.valueSourceStat === 'efct' ? 'damage' : (ability?.valueSourceStat || 'damage');
+      return this.parseDieSides(catalogCard[sourceStat], 6);
+    }
+    return this.parseDieSides(catalogCard[rollType], 6);
+  }
+
+  rollNpcValue(sides = 6, profile = {}) {
+    const safeSides = Number.isFinite(sides) ? Math.max(2, Math.floor(sides)) : 6;
+    const preferGuaranteedValue = Number(profile?.preferGuaranteedValue);
+    const guaranteedBias = Number.isFinite(preferGuaranteedValue) ? Math.min(1, Math.max(0, preferGuaranteedValue)) : 0;
+    const minRoll = 1 + Math.floor((safeSides - 1) * guaranteedBias * 0.35);
+    const randomRoll = minRoll + Math.floor(Math.random() * (safeSides - minRoll + 1));
+    return Math.max(1, Math.min(safeSides, randomRoll));
+  }
+
+  scoreNpcTarget({ match, attackerId, ability, targetSide, targetSlotIndex, profile }) {
+    const target = this.getTargetCardForEffect({ match, casterId: attackerId, targetSide, targetSlotIndex });
+    if (!target?.catalogCard) return Number.NEGATIVE_INFINITY;
+    const health = Number(target.catalogCard.health);
+    const retaliationBonus = Number(target.retaliationBonus);
+    const tauntTurns = Number(target.tauntTurnsRemaining);
+    const targetWeights = profile?.targetWeights || {};
+    let score = 0;
+    if (Number.isFinite(health)) {
+      score += (12 - Math.max(0, health)) * (Number(targetWeights.lowHealth) || 1);
+      score += Math.max(0, health) * (Number(targetWeights.highThreat) || 1) * 0.05;
+    }
+    if (Number.isFinite(tauntTurns) && tauntTurns > 0) {
+      score += Number(targetWeights.tauntPriority) || 0;
+    }
+    if ((ability?.effectId === 'damage_enemy' || ability?.effectId === 'life_steal') && Number.isFinite(retaliationBonus)) {
+      score -= Math.max(0, retaliationBonus) * (Number(targetWeights.retaliationRisk) || 0.5);
+    }
+
+    if (ability?.buffId === 'silence') {
+      const summonedTurn = Number(target.summonedTurn);
+      const targetCanAttackSoon = Number.isInteger(summonedTurn) && summonedTurn < Number(match?.turnNumber);
+      const silencePenalty = profile?.wastePenaltyWeights || {};
+      if (!targetCanAttackSoon) {
+        score -= Number(silencePenalty.silenceOnSummoningSickTarget) || 5;
+      }
+      if (Number(target.silenceTurnsRemaining) > 0) {
+        score -= Number(silencePenalty.reapplySilenceOnSilencedTarget) || 2;
+      }
+    }
+
+    return score;
+  }
+
+  getNpcAttackOptions({ match, attackerId, card, profile }) {
+    const options = [];
+    const abilities = [card?.catalogCard?.ability1, card?.catalogCard?.ability2].filter(Boolean);
+    const opponentId = match.players.find((id) => id !== attackerId) || null;
+    const opponentState = opponentId ? match.cardsByPlayer.get(opponentId) : null;
+    const friendlyState = match.cardsByPlayer.get(attackerId);
+    const enemyBoard = opponentState?.board || [];
+    const friendlyBoard = friendlyState?.board || [];
+
+    abilities.forEach((ability, selectedAbilityIndex) => {
+      const targetCandidates = [];
+      if (ability?.buffTarget === 'self') {
+        targetCandidates.push({ targetSide: 'player', targetSlotIndex: card.slotIndex });
+      } else if (ability?.buffTarget === 'friendly' || ability?.effectId === 'heal_target' || ability?.effectId === 'retaliation_bonus') {
+        friendlyBoard.forEach((targetCard) => {
+          if (Number.isInteger(targetCard?.slotIndex)) {
+            targetCandidates.push({ targetSide: 'player', targetSlotIndex: targetCard.slotIndex });
+          }
+        });
+      } else if (ability?.buffTarget === 'enemy' || ability?.effectId === 'damage_enemy' || ability?.effectId === 'life_steal' || ability?.effectId === 'disruption') {
+        enemyBoard.forEach((targetCard) => {
+          if (Number.isInteger(targetCard?.slotIndex)) {
+            targetCandidates.push({ targetSide: 'opponent', targetSlotIndex: targetCard.slotIndex });
+          }
+        });
+      } else {
+        targetCandidates.push({ targetSide: null, targetSlotIndex: null });
+      }
+
+      if (!targetCandidates.length) {
+        targetCandidates.push({ targetSide: null, targetSlotIndex: null });
+      }
+
+      targetCandidates.forEach(({ targetSide, targetSlotIndex }) => {
+        const attack = {
+          attackerSlotIndex: card.slotIndex,
+          targetSide,
+          targetSlotIndex,
+          selectedAbilityIndex,
+        };
+        const effectId = ability?.effectId || 'none';
+        const utilityWeights = profile?.utilityWeights || {};
+        let score = Number(utilityWeights.damageEnemy) || 1;
+        if (effectId === 'heal_target') score = Number(utilityWeights.healTarget) || 0.8;
+        if (effectId === 'life_steal') score = Number(utilityWeights.lifeSteal) || 1;
+        if (effectId === 'retaliation_bonus') score = Number(utilityWeights.retaliationBonus) || 0.6;
+        if (effectId === 'disruption') score = Number(utilityWeights.disruption) || 0.85;
+        if (ability?.buffId === 'silence') score += Number(utilityWeights.silence) || 1;
+        if (ability?.buffId === 'taunt') score += Number(utilityWeights.taunt) || 0.75;
+        if (ability?.buffId === 'poison') score += Number(utilityWeights.poison) || 0.65;
+        if (ability?.buffId === 'fire') score += Number(utilityWeights.fire) || 0.9;
+        if (ability?.buffId === 'frostbite') score += Number(utilityWeights.frostbite) || 0.7;
+        if (ability?.buffId === 'focal_mark') score += Number(utilityWeights.focalMark) || 0.8;
+
+        if (Number.isInteger(targetSlotIndex) && targetSide) {
+          score += this.scoreNpcTarget({
+            match,
+            attackerId,
+            ability,
+            targetSide,
+            targetSlotIndex,
+            profile,
+          });
+        } else if (ability?.buffId && ability.buffId !== 'none') {
+          score -= Number(profile?.wastePenaltyWeights?.buffOnMissingTarget) || 3;
+        }
+
+        options.push({ attack, score });
+      });
+    });
+
+    return options;
+  }
+
+  buildNpcDecisionPayload(match, playerId, profile = {}) {
+    const playerState = match.cardsByPlayer.get(playerId);
+    if (!playerState) return null;
+
+    const boardSlots = new Set((playerState.board || []).map((card) => card.slotIndex));
+    const nextBoard = [...(playerState.board || [])];
+    const nextHand = [...(playerState.hand || [])];
+    const developmentCount = Math.max(0, Math.floor(Number(profile.boardDevelopmentPerTurn) || 1));
+    let played = 0;
+    while (played < developmentCount && nextBoard.length < this.options.boardSlotsPerSide) {
+      const nextCreatureIndex = nextHand.findIndex((card) => card?.catalogCard?.cardKind === 'Creature');
+      if (nextCreatureIndex < 0) break;
+      const [creature] = nextHand.splice(nextCreatureIndex, 1);
+      let slot = 0;
+      while (boardSlots.has(slot) && slot < this.options.boardSlotsPerSide) slot += 1;
+      if (slot >= this.options.boardSlotsPerSide) break;
+      boardSlots.add(slot);
+      nextBoard.push({ id: creature.id, slotIndex: slot });
+      played += 1;
+    }
+
+    const boardBySlot = new Map((playerState.board || []).map((card) => [card.slotIndex, card]));
+    const attacks = [];
+    nextBoard.forEach((entry) => {
+      const boardCard = boardBySlot.get(entry.slotIndex);
+      if (!boardCard) return;
+      const canAttack = Number.isInteger(boardCard.summonedTurn) && boardCard.summonedTurn < match.turnNumber;
+      if (!canAttack) return;
+      if (Number(boardCard.silenceTurnsRemaining) > 0) return;
+
+      const options = this.getNpcAttackOptions({ match, attackerId: playerId, card: boardCard, profile })
+        .sort((a, b) => b.score - a.score);
+      if (!options.length) return;
+      attacks.push(options[0].attack);
+    });
+
+    return {
+      hand: nextHand.map((card) => ({ id: card.id })),
+      board: nextBoard,
+      discard: (playerState.discard || []).map((card) => ({ id: card.id })),
+      attacks,
+    };
+  }
+
+  processNpcPlayers(match) {
+    if (!match?.players || !match.cardsByPlayer) return;
+    const npcPlayers = match.players.filter((playerId) => this.isNpcPlayer(playerId));
+    if (!npcPlayers.length) return;
+
+    let safetyCounter = 0;
+    while (safetyCounter < 12) {
+      safetyCounter += 1;
+      let progressed = false;
+
+      for (const npcPlayerId of npcPlayers) {
+        const profile = mergeNpcProfile(match?.npcProfileByPlayer?.get(npcPlayerId));
+        if (match.phase === 1 && !match.readyPlayers.has(npcPlayerId)) {
+          const playerState = match.cardsByPlayer.get(npcPlayerId);
+          if (!playerState) continue;
+          const payload = this.buildNpcDecisionPayload(match, npcPlayerId, profile);
+          if (!payload) continue;
+          const validated = this.validatePhaseTurnPayload(payload, match, npcPlayerId, playerState, match.turnNumber);
+          if (validated.error) continue;
+          playerState.hand = validated.hand;
+          playerState.board = validated.board;
+          playerState.discard = validated.discard;
+          this.readyPlayerInMatch(match, npcPlayerId);
+          progressed = true;
+          continue;
+        }
+
+        if (match.phase === 2) {
+          const attacks = match.pendingCommitAttacksByPlayer?.get(npcPlayerId) || [];
+          const playerState = match.cardsByPlayer.get(npcPlayerId);
+          for (const attack of attacks) {
+            const attackerCard = (playerState?.board || []).find((card) => card?.slotIndex === attack.attackerSlotIndex) || null;
+            ['damage', 'speed', 'defense'].forEach((rollType) => {
+              const key = `${attack.id}:${rollType}`;
+              if (match.commitRollsByAttackId.has(key)) return;
+              const ability = this.getAttackAbilityForCard(attackerCard, attack.selectedAbilityIndex);
+              const sides = this.getRollSidesForType(attackerCard, ability, rollType);
+              const outcome = this.rollNpcValue(sides, profile);
+              match.commitRollsByAttackId.set(key, {
+                attackId: attack.id,
+                attackerId: npcPlayerId,
+                rollType,
+                sides,
+                roll: { outcome },
+                submittedAt: Date.now(),
+              });
+              this.applySpellDisruptionDebuffToCommitRoll({
+                match,
+                attackerId: npcPlayerId,
+                attackId: attack.id,
+                rollType,
+              });
+              progressed = true;
+            });
+          }
+
+          if (!match.commitCompletedPlayers.has(npcPlayerId)) {
+            match.commitCompletedPlayers.add(npcPlayerId);
+            if (match.commitCompletedPlayers.size === match.players.length && !match.commitAllRolledAt) {
+              this.applyPendingSpellDisruptionDebuffsToCommitRolls(match);
+              this.applyCommitEffects(match);
+              match.commitAllRolledAt = Date.now();
+            }
+            progressed = true;
+          }
+
+          if (Number.isFinite(match.commitAllRolledAt) && !match.commitAnimationCompletedPlayers.has(npcPlayerId)) {
+            match.commitAnimationCompletedPlayers.add(npcPlayerId);
+            if (match.commitAnimationCompletedPlayers.size === match.players.length) {
+              this.advanceMatchToDecisionPhase(match);
+            }
+            progressed = true;
+          }
+        }
+      }
+
+      if (!progressed) break;
+    }
   }
 
   applyDamageOverTimeAtPhaseChange(match) {
@@ -1720,6 +2042,7 @@ class PhaseManagerServer {
         this.phaseMatchmakingState.set(playerId, { status: 'idle' });
         return { status: 'idle', queueCount: this.phaseQueue.length };
       }
+      this.processNpcPlayers(match);
       const opponentId = match.players.find((id) => id !== playerId) || null;
       return {
         status: 'matched',
@@ -1742,6 +2065,69 @@ class PhaseManagerServer {
     const preferredDeckCardIds = Array.isArray(options.deckCardIds)
       ? options.deckCardIds.filter((cardId) => typeof cardId === 'string' && cardId.trim()).map((cardId) => cardId.trim())
       : [];
+
+    const useSoloNpc = options?.solo === true;
+    if (useSoloNpc) {
+      const npcId = `npc-${randomUUID().slice(0, 8)}`;
+      const matchId = `match-${randomUUID().slice(0, 8)}`;
+      const players = [playerId, npcId];
+      const preferredDeckByPlayer = new Map([
+        [playerId, preferredDeckCardIds],
+        [npcId, []],
+      ]);
+      const cardsByPlayer = new Map();
+      let catalogCards = [];
+      try {
+        const loadedCards = await this.options.catalogProvider();
+        catalogCards = Array.isArray(loadedCards) ? loadedCards : [];
+      } catch (error) {
+        catalogCards = [];
+      }
+
+      players.forEach((id) => {
+        const preferredDeck = preferredDeckByPlayer.get(id) || [];
+        const cards = this.buildDeckFromCatalog(id, catalogCards, preferredDeck);
+        const openingZones = this.buildOpeningZones(cards);
+        cardsByPlayer.set(id, {
+          allCards: cards,
+          hand: openingZones.hand,
+          board: [],
+          discard: [],
+          deck: openingZones.deck,
+        });
+      });
+
+      const npcProfileByPlayer = new Map([[npcId, mergeNpcProfile(options?.npcProfile || {})]]);
+      const match = {
+        id: matchId,
+        players,
+        cardsByPlayer,
+        npcProfileByPlayer,
+        turnNumber: 1,
+        upkeep: 1,
+        phase: 1,
+        phaseStartedAt: Date.now(),
+        phaseEndsAt: null,
+        readyPlayers: new Set(),
+        lastDrawnCardsByPlayer: new Map(),
+        pendingCommitAttacksByPlayer: new Map(),
+        commitRollsByAttackId: new Map(),
+        commitExecutionByAttackId: new Map(),
+        executedCommitAttackIds: [],
+        commitCompletedPlayers: new Set(),
+        commitAnimationCompletedPlayers: new Set(),
+        commitAllRolledAt: null,
+        lastDotDamageEvents: [],
+        activeSpellResolution: null,
+        createdAt: Date.now(),
+      };
+      this.phaseMatches.set(matchId, match);
+      this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
+      this.phaseMatchmakingState.set(npcId, { status: 'matched', matchId });
+      this.npcPlayers.add(npcId);
+      this.processNpcPlayers(match);
+      return this.getPlayerPhaseStatus(playerId);
+    }
 
     const opponentEntry = this.phaseQueue.shift();
     if (opponentEntry && opponentEntry.playerId && opponentEntry.playerId !== playerId) {

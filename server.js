@@ -496,6 +496,8 @@ async function handleApi(req, res, pathname) {
 
     sendJson(res, 200, await phaseManagerServer.findMatch(body.playerId, {
       deckCardIds: Array.isArray(body.deckCardIds) ? body.deckCardIds : [],
+      solo: body.solo === true,
+      npcProfile: body.npcProfile && typeof body.npcProfile === 'object' ? body.npcProfile : null,
     }));
     return true;
   }
