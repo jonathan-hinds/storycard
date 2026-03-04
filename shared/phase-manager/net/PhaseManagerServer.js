@@ -186,6 +186,135 @@ class PhaseManagerServer {
     return match.players.filter((id) => this.isNpcPlayerId(id));
   }
 
+  rollNpcDie(sides = 6) {
+    const normalizedSides = Number.isFinite(Number(sides)) ? Math.max(2, Math.floor(Number(sides))) : 6;
+    return 1 + Math.floor(Math.random() * normalizedSides);
+  }
+
+  getFirstOpenBoardSlot(board = []) {
+    const occupied = new Set(board
+      .map((card) => (Number.isInteger(card?.slotIndex) ? card.slotIndex : null))
+      .filter((slotIndex) => slotIndex != null));
+    for (let slotIndex = 0; slotIndex < this.options.boardSlotsPerSide; slotIndex += 1) {
+      if (!occupied.has(slotIndex)) return slotIndex;
+    }
+    return null;
+  }
+
+  chooseNpcPreferredEnemyTargetSlot(match, npcId) {
+    const enemyId = match?.players?.find((id) => id !== npcId);
+    if (!enemyId) return null;
+    const tauntCards = this.getActiveTauntCardsForDefender(match, enemyId);
+    if (tauntCards.length) return tauntCards[0].slotIndex;
+    const enemyBoard = match?.cardsByPlayer?.get(enemyId)?.board || [];
+    const firstEnemy = enemyBoard
+      .filter((card) => Number.isInteger(card?.slotIndex))
+      .sort((a, b) => a.slotIndex - b.slotIndex)[0] || null;
+    return Number.isInteger(firstEnemy?.slotIndex) ? firstEnemy.slotIndex : null;
+  }
+
+  autoPlayNpcDecisionPhase(match) {
+    if (!match || match.phase !== 1) return;
+    for (const npcId of this.getNpcPlayerIds(match)) {
+      const npcState = match.cardsByPlayer.get(npcId);
+      if (!npcState) continue;
+
+      while (npcState.board.length < this.options.boardSlotsPerSide) {
+        const nextCreatureIndex = npcState.hand.findIndex((card) => card?.catalogCard?.cardKind !== 'Spell');
+        if (nextCreatureIndex < 0) break;
+        const slotIndex = this.getFirstOpenBoardSlot(npcState.board);
+        if (!Number.isInteger(slotIndex)) break;
+        const [creatureCard] = npcState.hand.splice(nextCreatureIndex, 1);
+        npcState.board.push({
+          ...creatureCard,
+          slotIndex,
+          summonedTurn: match.turnNumber,
+          attackCommitted: false,
+          targetSlotIndex: null,
+          targetSide: null,
+          selectedAbilityIndex: 0,
+        });
+      }
+
+      const spellCard = npcState.hand.find((card) => card?.catalogCard?.cardKind === 'Spell') || null;
+      if (spellCard && (!match.activeSpellResolution || match.activeSpellResolution.completedAt != null)) {
+        const targetSlotIndex = this.chooseNpcPreferredEnemyTargetSlot(match, npcId);
+        const startResult = this.startSpellResolution({
+          playerId: npcId,
+          cardId: spellCard.id,
+          selectedAbilityIndex: 0,
+          targetSide: Number.isInteger(targetSlotIndex) ? 'opponent' : null,
+          targetSlotIndex,
+          rollType: 'damage',
+          dieSides: 6,
+        });
+        if (!startResult?.error) {
+          const activeSpell = match.activeSpellResolution;
+          if (activeSpell?.requiresRoll) {
+            this.submitSpellRoll({
+              playerId: npcId,
+              spellId: activeSpell.id,
+              rollOutcome: this.rollNpcDie(activeSpell.dieSides),
+              rollData: null,
+            });
+          }
+          this.completeSpellResolution({
+            playerId: npcId,
+            spellId: activeSpell?.id,
+          });
+        }
+      }
+
+      const preferredEnemyTargetSlot = this.chooseNpcPreferredEnemyTargetSlot(match, npcId);
+      for (const card of npcState.board) {
+        const isSilenced = Number.isInteger(card?.silenceTurnsRemaining) && card.silenceTurnsRemaining > 0;
+        const isSummoningSick = !Number.isInteger(card?.summonedTurn) || card.summonedTurn >= match.turnNumber;
+        if (isSilenced || isSummoningSick) {
+          card.attackCommitted = false;
+          card.targetSide = null;
+          card.targetSlotIndex = null;
+          card.selectedAbilityIndex = 0;
+          continue;
+        }
+
+        card.attackCommitted = true;
+        card.targetSide = Number.isInteger(preferredEnemyTargetSlot) ? 'opponent' : null;
+        card.targetSlotIndex = Number.isInteger(preferredEnemyTargetSlot) ? preferredEnemyTargetSlot : null;
+        card.selectedAbilityIndex = 0;
+      }
+
+      this.forceAttacksToTauntTarget(match, npcId);
+    }
+  }
+
+  autoSubmitNpcCommitRolls(match) {
+    if (!match || match.phase !== 2) return;
+    for (const npcId of this.getNpcPlayerIds(match)) {
+      const attacks = match.pendingCommitAttacksByPlayer.get(npcId) || [];
+      for (const attack of attacks) {
+        ['damage', 'speed', 'defense'].forEach((rollType) => {
+          const key = `${attack.id}:${rollType}`;
+          if (match.commitRollsByAttackId.has(key)) return;
+          const outcome = this.rollNpcDie(6);
+          match.commitRollsByAttackId.set(key, {
+            attackId: attack.id,
+            attackerId: npcId,
+            rollType,
+            sides: 6,
+            roll: { outcome, frames: [] },
+            submittedAt: Date.now(),
+          });
+          this.applySpellDisruptionDebuffToCommitRoll({
+            match,
+            attackerId: npcId,
+            attackId: attack.id,
+            rollType,
+          });
+        });
+      }
+    }
+  }
+
   colorFromHexString(hexColor, fallbackColor = DEFAULT_CARD_MESH_COLOR) {
     if (typeof hexColor !== 'string') return fallbackColor;
     const normalized = hexColor.trim();
@@ -642,6 +771,7 @@ class PhaseManagerServer {
       });
     });
     this.applyDecisionPhaseStartDraw(match);
+    this.autoPlayNpcDecisionPhase(match);
   }
 
 
@@ -1449,6 +1579,7 @@ class PhaseManagerServer {
     match.commitAnimationCompletedPlayers = new Set();
     match.commitAllRolledAt = null;
     match.phaseEndsAt = null;
+    this.autoSubmitNpcCommitRolls(match);
   }
 
   completeCommitRolls(payload) {
@@ -1880,6 +2011,7 @@ class PhaseManagerServer {
       this.phaseMatches.set(matchId, match);
       this.phaseMatchmakingState.set(npcPlayerId, { status: 'matched', matchId });
       this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
+      this.autoPlayNpcDecisionPhase(match);
       return this.getPlayerPhaseStatus(playerId);
     }
 
