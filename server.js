@@ -16,6 +16,11 @@ const {
   updateCard: updateCatalogCard,
 } = require('./shared/cards-catalog/mongoStore');
 const {
+  listArchetypes: listCatalogArchetypes,
+  createArchetype: createCatalogArchetype,
+  updateArchetype: updateCatalogArchetype,
+} = require('./shared/archetypes-catalog/mongoStore');
+const {
   ABILITY_KINDS,
   ABILITY_TARGETS,
   ABILITY_EFFECTS,
@@ -371,6 +376,52 @@ async function handleApi(req, res, pathname) {
     return true;
   }
 
+  if (req.method === 'GET' && pathname === '/api/projects/archetypes') {
+    try {
+      const archetypes = await listCatalogArchetypes();
+      sendJson(res, 200, {
+        archetypes,
+        cardStatDice: CARD_STAT_DICE,
+      });
+    } catch (error) {
+      sendJson(res, 500, { error: 'Unable to load archetypes from database' });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/projects/archetypes') {
+    try {
+      const body = await readRequestJson(req);
+      const archetype = await createCatalogArchetype(body);
+      sendJson(res, 201, { archetype });
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('required')
+        || error.message.includes('must be an integer')
+        || error.message.includes('must be one of');
+      sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create archetype' });
+    }
+    return true;
+  }
+
+  const catalogArchetypeMatch = pathname.match(/^\/api\/projects\/archetypes\/([^/]+)$/);
+  if (req.method === 'PUT' && catalogArchetypeMatch) {
+    try {
+      const body = await readRequestJson(req);
+      const archetype = await updateCatalogArchetype(catalogArchetypeMatch[1], body);
+      sendJson(res, 200, { archetype });
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('required')
+        || error.message.includes('must be an integer')
+        || error.message.includes('must be one of');
+      const isNotFound = error.message === 'Archetype not found';
+      const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
+      sendJson(res, statusCode, { error: error.message || 'Unable to update archetype' });
+    }
+    return true;
+  }
+
   if (req.method === 'GET' && pathname === '/api/projects/cards') {
     try {
       const cards = await listCatalogCards();
@@ -400,6 +451,7 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('ability1Id')
         || error.message.includes('ability2Id')
         || error.message.includes('Unknown abilities')
+        || error.message.includes('Unknown archetype')
         || error.message.includes('but cardKind is');
       sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create card' });
     }
@@ -421,6 +473,7 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('ability1Id')
         || error.message.includes('ability2Id')
         || error.message.includes('Unknown abilities')
+        || error.message.includes('Unknown archetype')
         || error.message.includes('but cardKind is');
       const isNotFound = error.message === 'Card not found';
       const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
