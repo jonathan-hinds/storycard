@@ -334,13 +334,18 @@ class PhaseManagerServer {
     return score;
   }
 
-  chooseNpcCreatureAttackPlan(match, npcId, attackerCard) {
+  chooseNpcCreatureAttackPlan(match, npcId, attackerCard, availableUpkeep = Number.POSITIVE_INFINITY) {
     if (!match || !npcId || !attackerCard?.catalogCard || !Number.isInteger(attackerCard.slotIndex)) return null;
+    const normalizedAvailableUpkeep = Number.isFinite(availableUpkeep)
+      ? Math.max(0, Math.floor(availableUpkeep))
+      : Number.POSITIVE_INFINITY;
     const abilities = [attackerCard.catalogCard.ability1, attackerCard.catalogCard.ability2].filter(Boolean);
     if (!abilities.length) return null;
 
     let bestPlan = null;
     abilities.forEach((ability, index) => {
+      const abilityCost = this.getAbilityUpkeepCost(ability);
+      if (abilityCost > normalizedAvailableUpkeep) return;
       const candidates = this.getNpcCreatureCandidateTargets(match, npcId, ability);
       candidates.forEach((candidate) => {
         const scoredCandidate = candidate.requiresSelfSlot
@@ -358,6 +363,7 @@ class PhaseManagerServer {
         if (!bestPlan || score > bestPlan.score) {
           bestPlan = {
             score,
+            upkeepCost: abilityCost,
             selectedAbilityIndex: index,
             targetSide: scoredCandidate.targetSide || null,
             targetSlotIndex: Number.isInteger(scoredCandidate.targetSlotIndex) ? scoredCandidate.targetSlotIndex : null,
@@ -431,6 +437,9 @@ class PhaseManagerServer {
 
     for (const handCard of npcState.hand) {
       if (handCard?.catalogCard?.cardKind !== 'Spell') continue;
+      const spellAbility = this.getAttackAbilityForCard(handCard, 0);
+      const upkeepCost = this.getAbilityUpkeepCost(spellAbility);
+      if (upkeepCost > this.getPlayerUpkeepValue(npcState)) continue;
       if (match.npcSpellCardsCastThisTurn instanceof Set && match.npcSpellCardsCastThisTurn.has(handCard.id)) continue;
       const candidateTargets = this.getNpcSpellCandidateTargets(match, npcId, handCard);
       for (const candidate of candidateTargets) {
@@ -444,6 +453,8 @@ class PhaseManagerServer {
           dieSides: 6,
         });
         if (previewResult?.error) continue;
+        npcState.upkeep = Math.max(0, this.getPlayerUpkeepValue(npcState) - upkeepCost);
+        npcState.spentUpkeepOnSpellsThisTurn = this.getPlayerSpellUpkeepSpentValue(npcState) + upkeepCost;
         return {
           type: 'spell',
           cardId: handCard.id,
@@ -568,11 +579,12 @@ class PhaseManagerServer {
       }
 
       let changedAttackPlan = false;
+      let remainingUpkeep = Math.max(0, this.getPlayerUpkeepValue(npcState) + this.getCommittedAttackUpkeepCost(npcState.board));
       for (const card of npcState.board) {
         const isSilenced = Number.isInteger(card?.silenceTurnsRemaining) && card.silenceTurnsRemaining > 0;
         const isSummoningSick = !Number.isInteger(card?.summonedTurn) || card.summonedTurn >= match.turnNumber;
         const nextPlan = !isSilenced && !isSummoningSick
-          ? this.chooseNpcCreatureAttackPlan(match, npcId, card)
+          ? this.chooseNpcCreatureAttackPlan(match, npcId, card, remainingUpkeep)
           : null;
         const shouldCommit = Boolean(nextPlan);
         const nextTargetSide = shouldCommit ? nextPlan.targetSide : null;
@@ -587,7 +599,14 @@ class PhaseManagerServer {
         card.targetSide = nextTargetSide;
         card.targetSlotIndex = nextTargetSlot;
         card.selectedAbilityIndex = nextSelectedAbilityIndex;
+        if (shouldCommit) {
+          const upkeepCost = Number.isFinite(nextPlan.upkeepCost)
+            ? Math.max(0, Math.floor(nextPlan.upkeepCost))
+            : this.getAbilityUpkeepCost(this.getAttackAbilityForCard(card, nextSelectedAbilityIndex));
+          remainingUpkeep = Math.max(0, remainingUpkeep - upkeepCost);
+        }
       }
+      npcState.upkeep = remainingUpkeep;
       this.forceAttacksToTauntTarget(match, npcId);
 
       const humanId = match.players.find((id) => id !== npcId);
@@ -959,8 +978,8 @@ class PhaseManagerServer {
     return {
       id: match.id,
       turnNumber: match.turnNumber,
-      upkeep: match.upkeep,
-      upkeepTotal: MAX_UPKEEP,
+      upkeep: this.getPlayerUpkeepValue(playerState),
+      upkeepTotal: this.getPlayerUpkeepTotalValue(playerState),
       phase: match.phase,
       youAreReady: match.readyPlayers.has(playerId),
       opponentIsReady: opponentId ? match.readyPlayers.has(opponentId) : false,
@@ -1057,7 +1076,6 @@ class PhaseManagerServer {
 
   advanceMatchToDecisionPhase(match) {
     match.turnNumber += 1;
-    match.upkeep = Math.min(MAX_UPKEEP, match.upkeep + 1);
     match.phase = 1;
     match.phaseStartedAt = Date.now();
     match.phaseEndsAt = null;
@@ -1073,6 +1091,10 @@ class PhaseManagerServer {
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
       if (!playerState) return;
+      const nextUpkeepTotal = Math.min(MAX_UPKEEP, this.getPlayerUpkeepTotalValue(playerState) + 1);
+      playerState.upkeepTotal = nextUpkeepTotal;
+      playerState.upkeep = nextUpkeepTotal;
+      playerState.spentUpkeepOnSpellsThisTurn = 0;
       playerState.board = playerState.board.map((card) => {
         const nextFocalMarkTurnsRemaining = Math.max(0, (Number.isInteger(card.focalMarkTurnsRemaining) ? card.focalMarkTurnsRemaining : 0) - 1);
         const currentFocalMarkBonusDamage = Math.max(0, (Number.isFinite(card.focalMarkBonusDamage) ? Math.floor(card.focalMarkBonusDamage) : 0));
@@ -1225,6 +1247,36 @@ class PhaseManagerServer {
     }
   }
 
+
+  getAbilityUpkeepCost(ability) {
+    const parsedCost = Number.parseInt(ability?.cost, 10);
+    if (!Number.isFinite(parsedCost)) return 0;
+    return Math.max(0, Math.floor(parsedCost));
+  }
+
+  getPlayerUpkeepTotalValue(playerState) {
+    const value = Number.parseInt(playerState?.upkeepTotal, 10);
+    return Number.isFinite(value) ? Math.max(1, Math.min(MAX_UPKEEP, value)) : 1;
+  }
+
+  getPlayerUpkeepValue(playerState) {
+    const value = Number.parseInt(playerState?.upkeep, 10);
+    return Number.isFinite(value) ? Math.max(0, Math.min(this.getPlayerUpkeepTotalValue(playerState), value)) : this.getPlayerUpkeepTotalValue(playerState);
+  }
+
+  getPlayerSpellUpkeepSpentValue(playerState) {
+    const value = Number.parseInt(playerState?.spentUpkeepOnSpellsThisTurn, 10);
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  }
+
+  getCommittedAttackUpkeepCost(board) {
+    if (!Array.isArray(board)) return 0;
+    return board.reduce((total, card) => {
+      if (card?.attackCommitted !== true) return total;
+      const ability = this.getAttackAbilityForCard(card, Number.isInteger(card?.selectedAbilityIndex) ? card.selectedAbilityIndex : 0);
+      return total + this.getAbilityUpkeepCost(ability);
+    }, 0);
+  }
 
   getAttackAbilityForCard(card, selectedAbilityIndex = 0) {
     const catalogCard = card?.catalogCard || {};
@@ -2193,6 +2245,24 @@ class PhaseManagerServer {
       seenAttackerSlots.add(attack.attackerSlotIndex);
     }
 
+    const upkeepTotal = this.getPlayerUpkeepTotalValue(playerState);
+    let remainingUpkeep = upkeepTotal;
+    const spellUpkeepCost = this.getPlayerSpellUpkeepSpentValue(playerState);
+    if (spellUpkeepCost > remainingUpkeep) {
+      return { error: 'insufficient upkeep for selected abilities' };
+    }
+    remainingUpkeep -= spellUpkeepCost;
+
+    for (const card of normalizedBoard) {
+      if (card.attackCommitted !== true) continue;
+      const ability = this.getAttackAbilityForCard(card, Number.isInteger(card.selectedAbilityIndex) ? card.selectedAbilityIndex : 0);
+      const upkeepCost = this.getAbilityUpkeepCost(ability);
+      if (upkeepCost > remainingUpkeep) {
+        return { error: 'insufficient upkeep for selected abilities' };
+      }
+      remainingUpkeep -= upkeepCost;
+    }
+
     const normalizedDiscard = discard.map((card) => knownCards.get(card.id));
     for (const [knownCardId, knownCard] of knownCards.entries()) {
       if (uniqueIds.has(knownCardId)) continue;
@@ -2203,6 +2273,9 @@ class PhaseManagerServer {
       hand: hand.map((card) => knownCards.get(card.id)),
       board: normalizedBoard,
       discard: normalizedDiscard,
+      upkeepTotal,
+      upkeep: remainingUpkeep,
+      spentUpkeepOnSpellsThisTurn: spellUpkeepCost,
     };
   }
 
@@ -2279,6 +2352,9 @@ class PhaseManagerServer {
           board: [],
           discard: [],
           deck: openingZones.deck,
+          upkeepTotal: 1,
+          upkeep: 1,
+          spentUpkeepOnSpellsThisTurn: 0,
         });
       });
 
@@ -2287,7 +2363,6 @@ class PhaseManagerServer {
         players,
         cardsByPlayer,
         turnNumber: 1,
-        upkeep: 1,
         phase: 1,
         phaseStartedAt: Date.now(),
         phaseEndsAt: null,
@@ -2339,6 +2414,9 @@ class PhaseManagerServer {
           board: [],
           discard: [],
           deck: openingZones.deck,
+          upkeepTotal: 1,
+          upkeep: 1,
+          spentUpkeepOnSpellsThisTurn: 0,
         });
       });
 
@@ -2347,7 +2425,6 @@ class PhaseManagerServer {
         players,
         cardsByPlayer,
         turnNumber: 1,
-        upkeep: 1,
         phase: 1,
         phaseStartedAt: Date.now(),
         phaseEndsAt: null,
@@ -2421,6 +2498,9 @@ class PhaseManagerServer {
     playerState.hand = validated.hand;
     playerState.board = validated.board;
     playerState.discard = validated.discard;
+    playerState.upkeepTotal = validated.upkeepTotal;
+    playerState.upkeep = validated.upkeep;
+    playerState.spentUpkeepOnSpellsThisTurn = validated.spentUpkeepOnSpellsThisTurn;
     this.readyPlayerInMatch(match, playerId);
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
@@ -2463,6 +2543,9 @@ class PhaseManagerServer {
     playerState.hand = validated.hand;
     playerState.board = validated.board;
     playerState.discard = validated.discard;
+    playerState.upkeepTotal = validated.upkeepTotal;
+    playerState.upkeep = validated.upkeep;
+    playerState.spentUpkeepOnSpellsThisTurn = validated.spentUpkeepOnSpellsThisTurn;
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
@@ -2495,6 +2578,11 @@ class PhaseManagerServer {
     }
 
     const spellAbility = this.getAttackAbilityForCard(handCard, Number.isInteger(selectedAbilityIndex) ? selectedAbilityIndex : 0);
+    const upkeepCost = this.getAbilityUpkeepCost(spellAbility);
+    const availableUpkeep = this.getPlayerUpkeepValue(playerState);
+    if (upkeepCost > availableUpkeep) {
+      return { error: 'insufficient upkeep for selected ability', statusCode: 400 };
+    }
     const normalizedTargetSlotIndex = this.normalizeBoardTargetSlotIndex(targetSlotIndex, targetSide);
     const normalizedTargetSide = targetSide === 'player' || targetSide === 'opponent' ? targetSide : null;
     const targetValidation = this.validateSpellTargetSelection({
@@ -2514,6 +2602,9 @@ class PhaseManagerServer {
         return { error: 'target must be a taunting enemy while taunt is active', statusCode: 400 };
       }
     }
+
+    playerState.upkeep = Math.max(0, availableUpkeep - upkeepCost);
+    playerState.spentUpkeepOnSpellsThisTurn = this.getPlayerSpellUpkeepSpentValue(playerState) + upkeepCost;
 
     const parsedDieSides = Number.parseInt(dieSides, 10);
     const spellId = `spell-${randomUUID().slice(0, 8)}`;
