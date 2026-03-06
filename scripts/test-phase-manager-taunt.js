@@ -66,6 +66,70 @@ const server = new PhaseManagerServer();
   assert.equal(ally.catalogCard.health, 10, 'non-taunting allies should not receive redirected damage while taunt is active');
 }
 
+
+{
+  const p1 = 'p1';
+  const p2 = 'p2';
+  const attackerA = createCreature({
+    id: 'attacker-a',
+    slotIndex: 0,
+    ability1: { effectId: 'damage_enemy', valueSourceType: 'fixed', valueSourceFixed: 2 },
+    targetSlotIndex: 0,
+  });
+  const attackerB = createCreature({
+    id: 'attacker-b',
+    slotIndex: 1,
+    ability1: { effectId: 'damage_enemy', valueSourceType: 'fixed', valueSourceFixed: 2 },
+    targetSlotIndex: 0,
+  });
+  const defenderC = createCreature({
+    id: 'defender-c',
+    slotIndex: 0,
+    ability1: { effectId: 'damage_enemy', valueSourceType: 'fixed', valueSourceFixed: 2 },
+    targetSlotIndex: 0,
+  });
+  const defenderD = createCreature({
+    id: 'defender-d',
+    slotIndex: 1,
+    // Legacy taunt data shape from older catalog entries.
+    ability1: { effectId: 'taunt', target: 'self', valueSourceType: 'none', durationTurns: 2 },
+    targetSlotIndex: null,
+  });
+  defenderD.targetSide = null;
+
+  const match = {
+    players: [p1, p2],
+    cardsByPlayer: new Map([
+      [p1, { board: [attackerA, attackerB] }],
+      [p2, { board: [defenderC, defenderD] }],
+    ]),
+    pendingCommitAttacksByPlayer: new Map([
+      [p1, [
+        { id: 'a', attackerSlotIndex: 0, targetSlotIndex: 0, targetSide: 'opponent', selectedAbilityIndex: 0 },
+        { id: 'b', attackerSlotIndex: 1, targetSlotIndex: 0, targetSide: 'opponent', selectedAbilityIndex: 0 },
+      ]],
+      [p2, [
+        { id: 'd', attackerSlotIndex: 1, targetSlotIndex: null, targetSide: null, selectedAbilityIndex: 0 },
+        { id: 'c', attackerSlotIndex: 0, targetSlotIndex: 0, targetSide: 'opponent', selectedAbilityIndex: 0 },
+      ]],
+    ]),
+    commitRollsByAttackId: new Map([
+      ['a:speed', { roll: { outcome: 6 }, submittedAt: 1 }],
+      ['b:speed', { roll: { outcome: 7 }, submittedAt: 1 }],
+      ['d:speed', { roll: { outcome: 8 }, submittedAt: 1 }],
+      ['c:speed', { roll: { outcome: 1 }, submittedAt: 1 }],
+    ]),
+    commitExecutionByAttackId: new Map(),
+  };
+
+  server.applyCommitEffects(match);
+
+  assert.equal(defenderD.tauntTurnsRemaining, 2, 'legacy taunt abilities should still apply taunt as a buff');
+  assert.equal(defenderC.catalogCard.health, 8, 'C should only lose health from retaliation after attacking, not from redirected incoming attacks');
+  assert.equal(defenderD.catalogCard.health, 6, 'both redirected attacks should land on taunting D');
+}
+
+
 {
   const match = {
     players: ['p1', 'p2'],
