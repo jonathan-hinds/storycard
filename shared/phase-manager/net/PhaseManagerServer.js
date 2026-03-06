@@ -1230,10 +1230,33 @@ class PhaseManagerServer {
     const catalogCard = card?.catalogCard || {};
     const abilities = [catalogCard.ability1, catalogCard.ability2].filter(Boolean);
     if (!abilities.length) return null;
-    if (Number.isInteger(selectedAbilityIndex) && selectedAbilityIndex >= 0 && selectedAbilityIndex < abilities.length) {
-      return abilities[selectedAbilityIndex];
+    const selectedAbility = Number.isInteger(selectedAbilityIndex) && selectedAbilityIndex >= 0 && selectedAbilityIndex < abilities.length
+      ? abilities[selectedAbilityIndex]
+      : abilities[0];
+    if (!selectedAbility || typeof selectedAbility !== 'object') return selectedAbility;
+
+    const normalizedEffectId = typeof selectedAbility.effectId === 'string'
+      ? selectedAbility.effectId.trim().toLowerCase()
+      : 'none';
+    const normalizedBuffId = typeof selectedAbility.buffId === 'string'
+      ? selectedAbility.buffId.trim().toLowerCase()
+      : 'none';
+    if (normalizedEffectId !== 'taunt' || normalizedBuffId !== 'none') {
+      return selectedAbility;
     }
-    return abilities[0];
+
+    const normalizedTarget = typeof selectedAbility.target === 'string'
+      ? selectedAbility.target.trim().toLowerCase()
+      : 'none';
+    const fallbackBuffTarget = normalizedTarget === 'self' || normalizedTarget === 'friendly'
+      ? normalizedTarget
+      : 'self';
+    return {
+      ...selectedAbility,
+      effectId: 'none',
+      buffId: 'taunt',
+      buffTarget: fallbackBuffTarget,
+    };
   }
 
   resolveAttackValue({ ability, attackId, commitRollsByAttackId }) {
