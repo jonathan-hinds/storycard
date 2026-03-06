@@ -2718,6 +2718,15 @@ class PhaseManagerServer {
       durationTurns: Number.isInteger(spellAbility?.durationTurns) ? spellAbility.durationTurns : null,
     });
 
+    const casterState = match.cardsByPlayer.get(playerId);
+    if (casterState) {
+      const spellHandIndex = casterState.hand.findIndex((card) => card?.id === active.cardId);
+      if (spellHandIndex >= 0) {
+        const [consumedSpell] = casterState.hand.splice(spellHandIndex, 1);
+        casterState.discard.push(consumedSpell);
+      }
+    }
+
     active.completedAt = Date.now();
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
