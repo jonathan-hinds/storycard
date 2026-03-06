@@ -18,6 +18,7 @@ const saveCardButton = document.getElementById('save-card-button');
 const artworkImageSelect = document.getElementById('card-artwork-image');
 const ability1Select = document.getElementById('card-ability-1');
 const ability2Select = document.getElementById('card-ability-2');
+const archetypeSelect = document.getElementById('card-archetype');
 const cardLibraryCanvas = document.getElementById('card-library-canvas');
 const cardLibraryStageWrap = cardLibraryCanvas.parentElement;
 const GRID_LAYOUT_DEFAULTS = Object.freeze({
@@ -60,6 +61,7 @@ let cardLibraryScene;
 let selectedCardId = null;
 let cardsCache = [];
 let abilitiesCache = [];
+let archetypesCache = [];
 
 function setFieldVisibility(label, input, visible) {
   if (label) label.hidden = !visible;
@@ -80,6 +82,7 @@ function normalizeCardForForm(card) {
       health: '',
       speed: '',
       defense: '',
+      archetypeId: null,
     };
   }
 
@@ -88,6 +91,7 @@ function normalizeCardForForm(card) {
     health: card?.health ?? 0,
     speed: card?.speed ?? '',
     defense: card?.defense ?? '',
+    archetypeId: card?.archetypeId ?? null,
   };
 }
 
@@ -122,12 +126,17 @@ function buildCardInput(formData) {
     artworkImagePath: formData.get('artworkImagePath') || null,
     ability1Id: formData.get('ability1Id'),
     ability2Id: formData.get('ability2Id') || null,
+    archetypeId: formData.get('archetypeId') || null,
   };
 
   if (cardKind === 'Creature') {
     cardInput.health = Number.parseInt(formData.get('health'), 10);
     cardInput.speed = formData.get('speed');
     cardInput.defense = formData.get('defense');
+  }
+
+  if (cardKind !== 'Creature') {
+    cardInput.archetypeId = null;
   }
 
   return cardInput;
@@ -191,6 +200,7 @@ cardLibraryScene = new CardLibraryScene({
     artworkImageSelect.value = card.artworkImagePath ?? '';
     ability1Select.value = card.ability1Id ?? '';
     ability2Select.value = card.ability2Id ?? '';
+    archetypeSelect.value = card.archetypeId ?? '';
     saveCardButton.disabled = false;
     setStatus(`Editing "${card.name}". Update fields and click Save Card.`);
   },
@@ -264,6 +274,45 @@ function buildAbilitySelectOptions(abilities = []) {
   }
 }
 
+function buildArchetypeSelectOptions(archetypes = []) {
+  const currentValue = archetypeSelect.value;
+  archetypeSelect.innerHTML = '';
+
+  const noneOption = document.createElement('option');
+  noneOption.value = '';
+  noneOption.textContent = 'No archetype';
+  archetypeSelect.append(noneOption);
+
+  archetypes.forEach((archetype) => {
+    const option = document.createElement('option');
+    option.value = archetype.id;
+    option.textContent = archetype.name;
+    archetypeSelect.append(option);
+  });
+
+  if (currentValue && archetypes.some((archetype) => archetype.id === currentValue)) {
+    archetypeSelect.value = currentValue;
+  }
+}
+
+function applyArchetypeToCreatureForm(archetypeId) {
+  if (!archetypeId) return;
+  const archetype = archetypesCache.find((item) => item.id === archetypeId);
+  if (!archetype) return;
+  form.elements.health.value = archetype.health;
+  form.elements.damage.value = archetype.damage;
+  form.elements.speed.value = archetype.speed;
+  form.elements.defense.value = archetype.defense;
+}
+
+async function fetchArchetypes() {
+  const response = await fetch('/api/projects/archetypes');
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Unable to load archetypes');
+  archetypesCache = Array.isArray(payload.archetypes) ? payload.archetypes : [];
+  buildArchetypeSelectOptions(archetypesCache);
+}
+
 async function fetchAbilities(abilityKind = cardKindSelect.value || 'Creature') {
   const response = await fetch(`/api/projects/abilities?abilityKind=${encodeURIComponent(abilityKind)}`);
   const payload = await response.json();
@@ -316,6 +365,7 @@ function resetFormToCreateMode() {
   artworkImageSelect.value = '';
   ability1Select.value = '';
   ability2Select.value = '';
+  archetypeSelect.value = '';
   cardKindSelect.value = 'Creature';
 }
 
@@ -327,6 +377,9 @@ async function syncCardKindUI(cardKind) {
   setFieldVisibility(healthLabel, healthInput, !isSpell);
   setFieldVisibility(speedLabel, speedSelect, !isSpell);
   setFieldVisibility(defenseLabel, defenseSelect, !isSpell);
+  archetypeSelect.hidden = isSpell;
+  const archetypeLabel = document.querySelector('label[for="card-archetype"]');
+  if (archetypeLabel) archetypeLabel.hidden = isSpell;
 
   if (isSpell) {
     if (!form.elements.damage.value) {
@@ -335,6 +388,7 @@ async function syncCardKindUI(cardKind) {
     form.elements.health.value = '';
     form.elements.speed.value = '';
     form.elements.defense.value = '';
+    form.elements.archetypeId.value = '';
   }
 
   await fetchAbilities(cardKind || 'Creature');
@@ -349,6 +403,7 @@ async function fetchCards() {
   setStatus('Loading cards...');
   try {
     await fetchArtworkAssets();
+    await fetchArchetypes();
     const response = await fetch('/api/projects/cards');
     const payload = await response.json();
 
@@ -454,6 +509,7 @@ saveCardButton.addEventListener('click', async () => {
       artworkImageSelect.value = normalizedCard.artworkImagePath ?? '';
       ability1Select.value = normalizedCard.ability1Id ?? '';
       ability2Select.value = normalizedCard.ability2Id ?? '';
+      archetypeSelect.value = normalizedCard.archetypeId ?? '';
       await syncCardKindUI(cardKindSelect.value || 'Creature');
     }
   } catch (error) {
@@ -463,6 +519,11 @@ saveCardButton.addEventListener('click', async () => {
 
 cardKindSelect.addEventListener('change', () => {
   syncCardKindUI(cardKindSelect.value).catch((error) => setStatus(error.message, true));
+});
+
+archetypeSelect.addEventListener('change', () => {
+  if ((cardKindSelect.value || 'Creature') !== 'Creature') return;
+  applyArchetypeToCreatureForm(archetypeSelect.value);
 });
 
 fetchCards();

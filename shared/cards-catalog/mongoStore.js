@@ -3,6 +3,7 @@ const CARD_KINDS = ['Creature', 'Spell'];
 const CARD_STAT_DICE = ['D6', 'D8', 'D12', 'D20'];
 const SPELL_EFFECTIVENESS_NONE_VALUE = 'NONE';
 const { listAbilitiesByIds } = require('../abilities-catalog/mongoStore');
+const { listArchetypesByIds } = require('../archetypes-catalog/mongoStore');
 
 const DEFAULT_MONGO_URI = 'mongodb+srv://jonathandhd:Bluecow3@cluster0.fwdtteo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 const DATABASE_NAME = process.env.CARDS_DB_NAME || 'storycard';
@@ -157,12 +158,13 @@ function toCardRecord(document) {
     artworkImagePath: document.artworkImagePath ?? null,
     ability1Id: document.ability1Id ?? null,
     ability2Id: document.ability2Id ?? null,
+    archetypeId: document.archetypeId ?? null,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
   };
 }
 
-async function hydrateCardAbilities(cardRecords = []) {
+async function hydrateCards(cardRecords = []) {
   const abilityIds = [
     ...new Set(
       cardRecords
@@ -171,21 +173,27 @@ async function hydrateCardAbilities(cardRecords = []) {
     ),
   ];
 
-  if (!abilityIds.length) {
-    return cardRecords.map((card) => ({
-      ...card,
-      ability1: null,
-      ability2: null,
-    }));
-  }
+  const archetypeIds = [
+    ...new Set(
+      cardRecords
+        .map((card) => card.archetypeId)
+        .filter((id) => typeof id === 'string' && id.trim()),
+    ),
+  ];
 
-  const abilities = await listAbilitiesByIds(abilityIds);
+  const [abilities, archetypes] = await Promise.all([
+    abilityIds.length ? listAbilitiesByIds(abilityIds) : Promise.resolve([]),
+    archetypeIds.length ? listArchetypesByIds(archetypeIds) : Promise.resolve([]),
+  ]);
+
   const abilityById = new Map(abilities.map((ability) => [ability.id, ability]));
+  const archetypeById = new Map(archetypes.map((archetype) => [archetype.id, archetype]));
 
   return cardRecords.map((card) => ({
     ...card,
     ability1: card.ability1Id ? abilityById.get(card.ability1Id) ?? null : null,
     ability2: card.ability2Id ? abilityById.get(card.ability2Id) ?? null : null,
+    archetype: card.archetypeId ? archetypeById.get(card.archetypeId) ?? null : null,
   }));
 }
 
@@ -257,6 +265,7 @@ function validateCardInput(input = {}) {
 
   const ability1Id = typeof input.ability1Id === 'string' ? input.ability1Id.trim() : '';
   const ability2Id = typeof input.ability2Id === 'string' ? input.ability2Id.trim() : '';
+  const archetypeId = typeof input.archetypeId === 'string' ? input.archetypeId.trim() : '';
 
   const validatedInput = {
     name,
@@ -268,12 +277,17 @@ function validateCardInput(input = {}) {
     artworkImagePath: normalizeArtworkImagePath(input.artworkImagePath),
     ability1Id,
     ability2Id: ability2Id || null,
+    archetypeId: archetypeId || null,
   };
 
   if (cardKind === 'Creature') {
     validatedInput.health = normalizeInteger(input.health, 'health');
     validatedInput.speed = normalizeDieValue(input.speed, 'speed');
     validatedInput.defense = normalizeDieValue(input.defense, 'defense');
+  }
+
+  if (cardKind !== 'Creature') {
+    validatedInput.archetypeId = null;
   }
 
   return validatedInput;
@@ -303,13 +317,21 @@ async function validateAbilityReferences(validatedCardInput) {
   }
 }
 
+async function validateArchetypeReference(validatedCardInput) {
+  if (validatedCardInput.cardKind !== 'Creature' || !validatedCardInput.archetypeId) return;
+  const [archetype] = await listArchetypesByIds([validatedCardInput.archetypeId]);
+  if (!archetype) {
+    throw new Error(`Unknown archetype: ${validatedCardInput.archetypeId}`);
+  }
+}
+
 async function listCards() {
   await ensureLegacyStatsMigrated();
   await ensureLegacyCardKindsMigrated();
   await ensureSpellStatsAreCleanedUp();
   const collection = await getCollection();
   const docs = await collection.find({}).sort({ createdAt: -1, _id: -1 }).toArray();
-  return hydrateCardAbilities(docs.map(toCardRecord));
+  return hydrateCards(docs.map(toCardRecord));
 }
 
 async function createCard(input = {}) {
@@ -319,6 +341,7 @@ async function createCard(input = {}) {
   const collection = await getCollection();
   const validated = validateCardInput(input);
   await validateAbilityReferences(validated);
+  await validateArchetypeReference(validated);
   const cardToInsert = {
     ...validated,
     createdAt: new Date().toISOString(),
@@ -326,7 +349,7 @@ async function createCard(input = {}) {
 
   const result = await collection.insertOne(cardToInsert);
   const inserted = await collection.findOne({ _id: result.insertedId });
-  const [hydratedCard] = await hydrateCardAbilities([toCardRecord(inserted)]);
+  const [hydratedCard] = await hydrateCards([toCardRecord(inserted)]);
   return hydratedCard;
 }
 
@@ -337,6 +360,7 @@ async function updateCard(cardId, input = {}) {
   const collection = await getCollection();
   const validated = validateCardInput(input);
   await validateAbilityReferences(validated);
+  await validateArchetypeReference(validated);
   const { ObjectId } = getMongoClientConstructor();
 
   if (!ObjectId.isValid(cardId)) {
@@ -358,7 +382,7 @@ async function updateCard(cardId, input = {}) {
   }
 
   const updatedCard = await collection.findOne({ _id: new ObjectId(cardId) });
-  const [hydratedCard] = await hydrateCardAbilities([toCardRecord(updatedCard)]);
+  const [hydratedCard] = await hydrateCards([toCardRecord(updatedCard)]);
   return hydratedCard;
 }
 

@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Buff Icon Manager</title>
+    <title>Archetypes Project</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="buff-icons-project">
+  <body data-page="archetypes-project">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -33,14 +33,37 @@
 
     <main class="cards-project-layout">
       <section class="cards-panel">
-        <h1>Buff Icon Manager</h1>
-        <p>Assign texture assets to buffs. These icons are shown in battle badge slots while buffs are active.</p>
+        <h1>Archetypes Catalog</h1>
+        <p>Create and edit creature archetypes stored in MongoDB.</p>
 
-        <form id="buff-icon-form" class="card" novalidate></form>
-        <p id="buff-icon-status" class="cards-status" aria-live="polite"></p>
+        <form id="create-archetype-form" class="card" novalidate>
+          <label for="archetype-name">Name</label>
+          <input id="archetype-name" name="name" type="text" maxlength="80" required />
+
+          <label for="archetype-health">HP</label>
+          <input id="archetype-health" name="health" type="number" step="1" required />
+
+          <label for="archetype-damage">DMG Die</label>
+          <select id="archetype-damage" name="damage" required></select>
+
+          <label for="archetype-speed">SPD Die</label>
+          <select id="archetype-speed" name="speed" required></select>
+
+          <label for="archetype-defense">DEF Die</label>
+          <select id="archetype-defense" name="defense" required></select>
+
+          <button type="submit">Create Archetype</button>
+          <button id="save-archetype-button" type="button" disabled>Save Archetype</button>
+          <p id="create-archetype-status" class="cards-status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="cards-list-wrap" aria-live="polite">
+        <h2>Archetype Library</h2>
+        <div id="archetype-list" class="cards-list"></div>
       </section>
     </main>
 
-    <script type="module" src="/public/projects/buff-icons.js"></script>
+    <script type="module" src="/public/projects/archetypes.js"></script>
   </body>
 </html>
