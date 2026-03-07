@@ -60,6 +60,12 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
     rollType: 'defense',
     roll: { outcome: 3 },
   });
+  match.commitRollsByAttackId.set('p2:0:none:none:damage', {
+    attackId: 'p2:0:none:none',
+    attackerId: 'p2',
+    rollType: 'damage',
+    roll: { outcome: 2 },
+  });
 
   server.applyCommitEffects(match);
 
@@ -168,9 +174,9 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
 
   server.applyCommitEffects(match);
 
-  assert.equal(attacker.catalogCard.health, 2, 'attacker should take retaliation damage from defender bonus even when defender did not attack');
+  assert.equal(attacker.catalogCard.health, 5, 'attacker should not take retaliation damage when defender has no committed damage roll');
   const execution = match.commitExecutionByAttackId.get('p1:0:opponent:0');
-  assert.equal(execution.retaliationDamage, 3, 'retaliation damage should include temporary retaliation bonuses');
+  assert.equal(execution.retaliationDamage, 0, 'retaliation damage should be zero when defender did not commit a phase 2 damage roll');
 }
 
 {
@@ -202,6 +208,12 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
     targetSide: 'opponent',
     selectedAbilityIndex: 0,
   }]);
+  match.commitRollsByAttackId.set('p2:0:opponent:0:damage', {
+    attackId: 'p2:0:opponent:0',
+    attackerId: 'p2',
+    rollType: 'damage',
+    roll: { outcome: 3 },
+  });
 
   server.applyCommitEffects(match);
 
@@ -342,6 +354,73 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
   assert.equal(p1Attack?.retaliationDamage, 3, 'serialized retaliation should reflect opponent executed damage for local attacker');
   assert.equal(p2Attack?.resolvedDamage, 3, 'serialized attacker damage should match executed damage for remote attacker');
   assert.equal(p2Attack?.retaliationDamage, 8, 'serialized retaliation should reflect opponent executed damage for remote attacker');
+}
+
+{
+  const match = {
+    id: 'match-retaliation-multi-attackers',
+    players: ['p1', 'p2'],
+    cardsByPlayer: new Map(),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+  };
+
+  const attackerA = createCreature({ id: 'a1', slotIndex: 0, health: 10, damageValue: 1, targetSlotIndex: 0, targetSide: 'opponent' });
+  const attackerB = createCreature({ id: 'a2', slotIndex: 1, health: 10, damageValue: 1, targetSlotIndex: 0, targetSide: 'opponent' });
+  const defender = createCreature({ id: 'd1', slotIndex: 0, health: 20, damageValue: 4, targetSlotIndex: 0, targetSide: 'opponent' });
+
+  match.cardsByPlayer.set('p1', { board: [attackerA, attackerB] });
+  match.cardsByPlayer.set('p2', { board: [defender] });
+  match.pendingCommitAttacksByPlayer.set('p1', [
+    { id: 'p1:0:opponent:0', attackerSlotIndex: 0, targetSlotIndex: 0, targetSide: 'opponent', selectedAbilityIndex: 0 },
+    { id: 'p1:1:opponent:0', attackerSlotIndex: 1, targetSlotIndex: 0, targetSide: 'opponent', selectedAbilityIndex: 0 },
+  ]);
+  match.pendingCommitAttacksByPlayer.set('p2', [
+    { id: 'p2:0:opponent:0', attackerSlotIndex: 0, targetSlotIndex: 0, targetSide: 'opponent', selectedAbilityIndex: 0 },
+  ]);
+
+  match.commitRollsByAttackId.set('p2:0:opponent:0:damage', { attackId: 'p2:0:opponent:0', attackerId: 'p2', rollType: 'damage', roll: { outcome: 4 } });
+
+  server.applyCommitEffects(match);
+
+  const execA = match.commitExecutionByAttackId.get('p1:0:opponent:0');
+  const execB = match.commitExecutionByAttackId.get('p1:1:opponent:0');
+  assert.equal(execA?.retaliationDamage, 4, 'first attacker should receive retaliation from shared defending target');
+  assert.equal(execB?.retaliationDamage, 4, 'second attacker should also receive retaliation from same defending target');
+}
+
+{
+  const match = {
+    id: 'match-retaliation-after-attacking',
+    players: ['p1', 'p2'],
+    cardsByPlayer: new Map(),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+  };
+
+  const attacker = createCreature({ id: 'late-attacker', slotIndex: 0, health: 12, damageValue: 2, targetSlotIndex: 1, targetSide: 'opponent' });
+  const defender = createCreature({ id: 'already-attacked', slotIndex: 0, health: 12, damageValue: 3, targetSlotIndex: 1, targetSide: 'opponent' });
+  const defenderTarget = createCreature({ id: 'dummy', slotIndex: 1, health: 30, damageValue: 0, targetSlotIndex: null, targetSide: null, attackCommitted: false });
+  const attackerTarget = createCreature({ id: 'dummy2', slotIndex: 1, health: 30, damageValue: 0, targetSlotIndex: null, targetSide: null, attackCommitted: false });
+
+  match.cardsByPlayer.set('p1', { board: [attacker, attackerTarget] });
+  match.cardsByPlayer.set('p2', { board: [defender, defenderTarget] });
+  match.pendingCommitAttacksByPlayer.set('p1', [
+    { id: 'p1:0:opponent:0', attackerSlotIndex: 0, targetSlotIndex: 0, targetSide: 'opponent', selectedAbilityIndex: 0 },
+  ]);
+  match.pendingCommitAttacksByPlayer.set('p2', [
+    { id: 'p2:0:opponent:1', attackerSlotIndex: 0, targetSlotIndex: 1, targetSide: 'opponent', selectedAbilityIndex: 0 },
+  ]);
+
+  match.commitRollsByAttackId.set('p2:0:opponent:1:damage', { attackId: 'p2:0:opponent:1', attackerId: 'p2', rollType: 'damage', roll: { outcome: 3 } });
+  match.commitRollsByAttackId.set('p2:0:opponent:1:speed', { attackId: 'p2:0:opponent:1', attackerId: 'p2', rollType: 'speed', roll: { outcome: 6 }, submittedAt: 100 });
+  match.commitRollsByAttackId.set('p1:0:opponent:0:speed', { attackId: 'p1:0:opponent:0', attackerId: 'p1', rollType: 'speed', roll: { outcome: 1 }, submittedAt: 200 });
+
+  server.applyCommitEffects(match);
+
+  assert.equal(attacker.catalogCard.health, 9, 'a creature that already attacked should still retaliate when attacked later in phase 2');
 }
 
 console.log('phase manager retaliation checks passed');

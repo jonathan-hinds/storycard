@@ -221,7 +221,7 @@ function buildMatchWithBoards(p1Board, p2Board) {
 
   server.applyCommitEffects(match);
 
-  assert.equal(creatureC.catalogCard.health, 4, 'C should only take base-damage interactions before A applies late focal mark (no retroactive bonus applied to earlier attacks)');
+  assert.equal(creatureC.catalogCard.health, 8, 'C should only take base-damage interactions before A applies late focal mark (no retroactive bonus applied to earlier attacks)');
   assert.equal(creatureC.focalMarkTurnsRemaining, 2, 'late A attack should still apply focal mark for future hits');
   assert.equal(creatureC.focalMarkBonusDamage, 2, 'late focal mark should carry the configured bonus amount');
 }
