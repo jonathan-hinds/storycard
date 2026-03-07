@@ -7,6 +7,7 @@ function makeCreature(id) {
     cardKind: 'Creature',
     health: 5,
     ability1: {
+      target: 'enemy',
       effectId: 'damage_enemy',
       valueSourceType: 'fixed',
       valueSourceFixed: 2,
