@@ -130,6 +130,100 @@ async function main() {
     assert.equal(hasNpcSpeedRoll, true, 'NPC attacks should have auto-submitted commit rolls');
   }
 
+  const followup = await server.findMatch('human-quick-ready', {
+    opponentType: 'npc',
+    deckCardIds: ['creature-1', 'creature-2', 'creature-3', 'creature-4', 'spell-heal-1', 'spell-dmg-1'],
+  });
+  const followupMatch = server.phaseMatches.get(followup.matchId);
+  const followupNpcId = followupMatch.players.find((id) => id.startsWith('npc-'));
+  const followupHumanId = followupMatch.players.find((id) => id === 'human-quick-ready');
+  const followupNpcState = followupMatch.cardsByPlayer.get(followupNpcId);
+  const followupHumanState = followupMatch.cardsByPlayer.get(followupHumanId);
+
+  followupMatch.turnNumber = 2;
+  followupMatch.phase = 1;
+  followupMatch.readyPlayers = new Set();
+  followupMatch.pendingCommitAttacksByPlayer = new Map();
+  followupMatch.commitRollsByAttackId = new Map();
+  followupMatch.commitExecutionByAttackId = new Map();
+  followupMatch.activeSpellResolution = null;
+  followupMatch.npcAutomationByPlayer = new Map([[followupNpcId, { nextActionAt: Date.now() + 60_000 }]]);
+
+  const npcCreatureIndex = followupNpcState.hand.findIndex((card) => card?.catalogCard?.cardKind === 'Creature');
+  const humanCreatureIndex = followupHumanState.hand.findIndex((card) => card?.catalogCard?.cardKind === 'Creature');
+  assert.ok(npcCreatureIndex >= 0, 'expected a creature in NPC hand for quick-ready scenario');
+  assert.ok(humanCreatureIndex >= 0, 'expected a creature in human hand for quick-ready scenario');
+
+  const followupNpcCard = {
+    ...followupNpcState.hand[npcCreatureIndex],
+    catalogCard: {
+      ...(followupNpcState.hand[npcCreatureIndex]?.catalogCard || {}),
+      cardKind: 'Creature',
+      health: 5,
+      ability1: {
+        name: 'Quick Strike',
+        cost: '1',
+        target: 'enemy',
+        effectId: 'damage_enemy',
+        buffId: 'none',
+        valueSourceType: 'fixed',
+        valueSourceFixed: 2,
+      },
+      ability2: null,
+    },
+    slotIndex: 0,
+    summonedTurn: 1,
+    attackCommitted: false,
+    targetSlotIndex: null,
+    targetSide: null,
+    selectedAbilityIndex: 0,
+  };
+  const followupHumanCard = {
+    ...followupHumanState.hand[humanCreatureIndex],
+    catalogCard: {
+      ...(followupHumanState.hand[humanCreatureIndex]?.catalogCard || {}),
+      cardKind: 'Creature',
+      health: 5,
+      ability1: {
+        name: 'Quick Strike',
+        cost: '1',
+        target: 'enemy',
+        effectId: 'damage_enemy',
+        buffId: 'none',
+        valueSourceType: 'fixed',
+        valueSourceFixed: 2,
+      },
+      ability2: null,
+    },
+    slotIndex: 0,
+    summonedTurn: 1,
+    attackCommitted: false,
+    targetSlotIndex: null,
+    targetSide: null,
+    selectedAbilityIndex: 0,
+  };
+
+  followupNpcState.board = [followupNpcCard];
+  followupNpcState.hand = followupNpcState.hand.filter((_, index) => index !== npcCreatureIndex);
+  followupNpcState.upkeepTotal = 2;
+  followupNpcState.upkeep = 2;
+
+  followupHumanState.board = [followupHumanCard];
+  followupHumanState.hand = followupHumanState.hand.filter((_, index) => index !== humanCreatureIndex);
+  followupHumanState.upkeepTotal = 2;
+  followupHumanState.upkeep = 2;
+
+  const quickReadyResult = server.readyUp({
+    playerId: followupHumanId,
+    hand: followupHumanState.hand,
+    board: followupHumanState.board,
+    discard: followupHumanState.discard,
+  });
+
+  assert.equal(quickReadyResult.statusCode, 200, 'quick human ready should still succeed');
+  const followupNpcAttacks = followupMatch.pendingCommitAttacksByPlayer.get(followupNpcId) || [];
+  assert.ok(followupNpcAttacks.length >= 1, 'NPC should still commit attacks when human readies before NPC delay elapses');
+
   console.log('phase manager npc autoplay checks passed');
 }
 
