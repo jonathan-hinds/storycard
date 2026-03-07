@@ -959,6 +959,18 @@ class PhaseManagerServer {
         : null;
 
       if (executionState) {
+        resolvedAttack.resolvedValue = Number.isFinite(executionState.resolvedValue)
+          ? executionState.resolvedValue
+          : resolvedAttack.resolvedValue;
+        resolvedAttack.resolvedDamage = Number.isFinite(executionState.resolvedDamage)
+          ? executionState.resolvedDamage
+          : resolvedAttack.resolvedDamage;
+        resolvedAttack.resolvedHealing = Number.isFinite(executionState.resolvedHealing)
+          ? executionState.resolvedHealing
+          : resolvedAttack.resolvedHealing;
+        resolvedAttack.resolvedLifeStealHealing = Number.isFinite(executionState.resolvedLifeStealHealing)
+          ? executionState.resolvedLifeStealHealing
+          : resolvedAttack.resolvedLifeStealHealing;
         resolvedAttack.resolvedLifeStealHealing = Number.isFinite(executionState.lifeStealHealing)
           ? executionState.lifeStealHealing
           : resolvedAttack.resolvedLifeStealHealing;
@@ -1941,6 +1953,12 @@ class PhaseManagerServer {
 
       commitExecutionByAttackId.set(attack.id, {
         ...executionResult,
+        resolvedValue: Number.isFinite(resolvedAttack.resolvedValue) ? resolvedAttack.resolvedValue : 0,
+        resolvedDamage: Number.isFinite(resolvedAttack.resolvedDamage) ? resolvedAttack.resolvedDamage : 0,
+        resolvedHealing: Number.isFinite(resolvedAttack.resolvedHealing) ? resolvedAttack.resolvedHealing : 0,
+        resolvedLifeStealHealing: Number.isFinite(resolvedAttack.resolvedLifeStealHealing)
+          ? resolvedAttack.resolvedLifeStealHealing
+          : 0,
         buffExecuted: buffResult.executed !== false,
         buffReason: buffResult.reason || null,
         ...retaliationResult,
