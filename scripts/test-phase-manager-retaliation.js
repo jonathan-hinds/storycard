@@ -242,6 +242,108 @@ function createCreature({ id, slotIndex, health, attackCommitted = true, targetS
   assert.equal(execution.appliedValue, 5, 'execution metadata should expose type-adjusted value');
 }
 
+
+{
+  const match = {
+    id: 'match-retaliation-serialization-values',
+    players: ['p1', 'p2'],
+    turnNumber: 1,
+    upkeep: 1,
+    phase: 2,
+    readyPlayers: new Set(),
+    lastDrawnCardsByPlayer: new Map(),
+    cardsByPlayer: new Map(),
+    pendingCommitAttacksByPlayer: new Map(),
+    commitRollsByAttackId: new Map(),
+    commitExecutionByAttackId: new Map(),
+    executedCommitAttackIds: [],
+  };
+
+  const attackerA = createCreature({ id: 'attacker-a', slotIndex: 0, health: 20, damageValue: 0, targetSlotIndex: 0, targetSide: 'opponent' });
+  const attackerB = createCreature({ id: 'attacker-b', slotIndex: 0, health: 20, damageValue: 0, targetSlotIndex: 0, targetSide: 'opponent' });
+  const defenderA = createCreature({ id: 'defender-a', slotIndex: 0, health: 20, damageValue: 0, targetSlotIndex: 0, targetSide: 'opponent' });
+  const defenderB = createCreature({ id: 'defender-b', slotIndex: 0, health: 20, damageValue: 0, targetSlotIndex: 0, targetSide: 'opponent' });
+
+  attackerA.catalogCard.ability1 = { effectId: 'damage_enemy', valueSourceType: 'roll', valueSourceStat: 'damage' };
+  attackerB.catalogCard.ability1 = { effectId: 'damage_enemy', valueSourceType: 'roll', valueSourceStat: 'damage' };
+  defenderA.catalogCard.ability1 = { effectId: 'damage_enemy', valueSourceType: 'roll', valueSourceStat: 'damage' };
+  defenderB.catalogCard.ability1 = { effectId: 'damage_enemy', valueSourceType: 'roll', valueSourceStat: 'damage' };
+
+  match.cardsByPlayer.set('p1', { hand: [], board: [attackerA], deck: [], discard: [] });
+  match.cardsByPlayer.set('p2', { hand: [], board: [attackerB], deck: [], discard: [] });
+
+  match.pendingCommitAttacksByPlayer.set('p1', [{
+    id: 'p1:0:opponent:0',
+    attackerSlotIndex: 0,
+    targetSlotIndex: 0,
+    targetSide: 'opponent',
+    selectedAbilityIndex: 0,
+  }]);
+  match.pendingCommitAttacksByPlayer.set('p2', [{
+    id: 'p2:0:opponent:0',
+    attackerSlotIndex: 0,
+    targetSlotIndex: 0,
+    targetSide: 'opponent',
+    selectedAbilityIndex: 0,
+  }]);
+
+  match.commitRollsByAttackId.set('p1:0:opponent:0:damage', {
+    attackId: 'p1:0:opponent:0',
+    attackerId: 'p1',
+    rollType: 'damage',
+    roll: { outcome: 8 },
+    submittedAt: 100,
+  });
+  match.commitRollsByAttackId.set('p2:0:opponent:0:damage', {
+    attackId: 'p2:0:opponent:0',
+    attackerId: 'p2',
+    rollType: 'damage',
+    roll: { outcome: 3 },
+    submittedAt: 100,
+  });
+  match.commitRollsByAttackId.set('p1:0:opponent:0:speed', {
+    attackId: 'p1:0:opponent:0',
+    attackerId: 'p1',
+    rollType: 'speed',
+    roll: { outcome: 1 },
+    submittedAt: 100,
+  });
+  match.commitRollsByAttackId.set('p2:0:opponent:0:speed', {
+    attackId: 'p2:0:opponent:0',
+    attackerId: 'p2',
+    rollType: 'speed',
+    roll: { outcome: 1 },
+    submittedAt: 100,
+  });
+  match.commitRollsByAttackId.set('p1:0:opponent:0:defense', {
+    attackId: 'p1:0:opponent:0',
+    attackerId: 'p1',
+    rollType: 'defense',
+    roll: { outcome: 0 },
+    submittedAt: 100,
+  });
+  match.commitRollsByAttackId.set('p2:0:opponent:0:defense', {
+    attackId: 'p2:0:opponent:0',
+    attackerId: 'p2',
+    rollType: 'defense',
+    roll: { outcome: 0 },
+    submittedAt: 100,
+  });
+
+  server.applyCommitEffects(match);
+
+  const p1View = server.serializeMatchForPlayer(match, 'p1');
+  const p2View = server.serializeMatchForPlayer(match, 'p2');
+
+  const p1Attack = p1View.meta.commitAttacks.find((attack) => attack.id === 'p1:0:opponent:0');
+  const p2Attack = p2View.meta.commitAttacks.find((attack) => attack.id === 'p2:0:opponent:0');
+
+  assert.equal(p1Attack?.resolvedDamage, 8, 'serialized attacker damage should match executed damage for local attacker');
+  assert.equal(p1Attack?.retaliationDamage, 3, 'serialized retaliation should reflect opponent executed damage for local attacker');
+  assert.equal(p2Attack?.resolvedDamage, 3, 'serialized attacker damage should match executed damage for remote attacker');
+  assert.equal(p2Attack?.retaliationDamage, 8, 'serialized retaliation should reflect opponent executed damage for remote attacker');
+}
+
 console.log('phase manager retaliation checks passed');
 
 
