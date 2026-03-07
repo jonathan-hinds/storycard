@@ -2488,17 +2488,17 @@ export class CardGameClient {
             this.refreshCardFace(animation.defenderCard);
           }
           if (Number.isFinite(animation.retaliationDamage) && animation.retaliationDamage > 0) {
+            const retaliationAppliedDamage = Number.isFinite(animation.retaliationAppliedDamage)
+              ? Math.max(0, Math.floor(animation.retaliationAppliedDamage))
+              : 0;
             this.spawnRetaliationPopup({
-              amount: animation.retaliationDamage,
+              amount: retaliationAppliedDamage,
               worldPoint: card.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
               driftTowardWorldPoint: this.getCardSlotAnchorPoint(card),
               time,
             });
 
             const attackerHealth = Number(card.userData?.catalogCard?.health);
-            const retaliationAppliedDamage = Number.isFinite(animation.retaliationAppliedDamage)
-              ? Math.max(0, Math.floor(animation.retaliationAppliedDamage))
-              : 0;
             if (Number.isFinite(attackerHealth) && retaliationAppliedDamage > 0) {
               const nextAttackerHealth = attackerHealth - retaliationAppliedDamage;
               card.userData.catalogCard.health = nextAttackerHealth;
