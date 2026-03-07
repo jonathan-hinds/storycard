@@ -215,11 +215,35 @@ class PhaseManagerServer {
     return Number.isInteger(firstEnemy?.slotIndex) ? firstEnemy.slotIndex : null;
   }
 
+  getAbilityTargetRule(ability) {
+    const normalizedTarget = typeof ability?.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
+    const normalizedBuffTarget = typeof ability?.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
+    if (normalizedTarget !== 'none') return normalizedTarget;
+    if (normalizedBuffTarget !== 'none') return normalizedBuffTarget;
+
+    const normalizedEffectId = typeof ability?.effectId === 'string' ? ability.effectId.trim().toLowerCase() : 'none';
+    const normalizedBuffId = typeof ability?.buffId === 'string' ? ability.buffId.trim().toLowerCase() : 'none';
+
+    if (normalizedEffectId === 'damage_enemy' || normalizedEffectId === 'life_steal' || normalizedEffectId === 'disruption') {
+      return 'enemy';
+    }
+    if (normalizedEffectId === 'heal_target') {
+      return 'friendly';
+    }
+
+    if (normalizedBuffId === 'taunt') {
+      return 'self';
+    }
+    if (normalizedBuffId === 'silence' || normalizedBuffId === 'poison' || normalizedBuffId === 'fire' || normalizedBuffId === 'frostbite' || normalizedBuffId === 'focal_mark') {
+      return 'enemy';
+    }
+
+    return 'none';
+  }
+
   getNpcCreatureCandidateTargets(match, npcId, ability) {
     if (!match || !npcId || !ability) return [];
-    const target = typeof ability.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
-    const buffTarget = typeof ability.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
-    const targetRule = target !== 'none' ? target : buffTarget;
+    const targetRule = this.getAbilityTargetRule(ability);
     const npcState = match.cardsByPlayer.get(npcId);
     const enemyId = match.players.find((id) => id !== npcId);
     const enemyState = enemyId ? match.cardsByPlayer.get(enemyId) : null;
@@ -339,11 +363,10 @@ class PhaseManagerServer {
     const normalizedAvailableUpkeep = Number.isFinite(availableUpkeep)
       ? Math.max(0, Math.floor(availableUpkeep))
       : Number.POSITIVE_INFINITY;
-    const abilities = [attackerCard.catalogCard.ability1, attackerCard.catalogCard.ability2].filter(Boolean);
-    if (!abilities.length) return null;
-
     let bestPlan = null;
-    abilities.forEach((ability, index) => {
+    [0, 1].forEach((index) => {
+      const ability = this.getAttackAbilityForCard(attackerCard, index);
+      if (!ability) return;
       const abilityCost = this.getAbilityUpkeepCost(ability);
       if (abilityCost > normalizedAvailableUpkeep) return;
       const candidates = this.getNpcCreatureCandidateTargets(match, npcId, ability);
@@ -388,9 +411,7 @@ class PhaseManagerServer {
   getNpcSpellCandidateTargets(match, npcId, spellCard) {
     if (!match || !npcId || !spellCard?.catalogCard) return [];
     const ability = this.getAttackAbilityForCard(spellCard, 0) || {};
-    const target = typeof ability.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
-    const buffTarget = typeof ability.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
-    const targetRule = target !== 'none' ? target : buffTarget;
+    const targetRule = this.getAbilityTargetRule(ability);
     const npcState = match.cardsByPlayer.get(npcId);
     const enemyId = match.players.find((id) => id !== npcId);
     const enemyState = enemyId ? match.cardsByPlayer.get(enemyId) : null;
@@ -467,9 +488,7 @@ class PhaseManagerServer {
   }
 
   validateSpellTargetSelection({ match, casterId, ability, targetSide, targetSlotIndex }) {
-    const normalizedTarget = typeof ability?.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
-    const normalizedBuffTarget = typeof ability?.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
-    const targetRule = normalizedTarget !== 'none' ? normalizedTarget : normalizedBuffTarget;
+    const targetRule = this.getAbilityTargetRule(ability);
 
     if (targetRule === 'none') {
       return { valid: true, targetSide: null, targetSlotIndex: null };
