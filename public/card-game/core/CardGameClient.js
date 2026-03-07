@@ -736,6 +736,7 @@ export class CardGameClient {
 
   spawnCombatNumberPopup({
     amount,
+    text = null,
     worldPoint,
     driftTowardWorldPoint = null,
     time = performance.now(),
@@ -745,7 +746,9 @@ export class CardGameClient {
     directionalBias = COMBAT_NUMBER_DIRECTIONAL_BIAS,
     randomBias = COMBAT_NUMBER_RANDOM_BIAS,
   }) {
-    if (!this.damagePopupLayer || !Number.isFinite(amount) || amount <= 0 || !worldPoint) return;
+    const hasNumericAmount = Number.isFinite(amount) && amount > 0;
+    const hasTextLabel = typeof text === 'string' && text.trim().length > 0;
+    if (!this.damagePopupLayer || (!hasNumericAmount && !hasTextLabel) || !worldPoint) return;
     const start = this.getScreenPositionForWorldPoint(worldPoint);
     if (!start) return;
 
@@ -765,7 +768,7 @@ export class CardGameClient {
 
     const node = document.createElement('div');
     node.className = `damage-number-popup damage-number-popup--${variant}`;
-    node.textContent = `${prefix}${Math.round(amount)}`;
+    node.textContent = hasTextLabel ? text.trim() : `${prefix}${Math.round(amount)}`;
     node.style.left = `${start.x}px`;
     node.style.top = `${start.y}px`;
     this.damagePopupLayer.append(node);
@@ -800,6 +803,20 @@ export class CardGameClient {
       driftTowardWorldPoint,
       time,
       prefix: '-',
+      variant: COMBAT_NUMBER_VARIANTS.retaliation,
+      driftDistanceScale: COMBAT_NUMBER_RETALIATION_DRIFT_DISTANCE / COMBAT_NUMBER_DRIFT_DISTANCE,
+      directionalBias: COMBAT_NUMBER_RETALIATION_DIRECTIONAL_BIAS,
+      randomBias: COMBAT_NUMBER_RETALIATION_RANDOM_BIAS,
+    });
+  }
+
+  spawnRetaliationBlockedPopup({ worldPoint, driftTowardWorldPoint = null, time = performance.now() }) {
+    this.spawnCombatNumberPopup({
+      amount: 0,
+      text: 'BLOCK',
+      worldPoint,
+      driftTowardWorldPoint,
+      time,
       variant: COMBAT_NUMBER_VARIANTS.retaliation,
       driftDistanceScale: COMBAT_NUMBER_RETALIATION_DRIFT_DISTANCE / COMBAT_NUMBER_DRIFT_DISTANCE,
       directionalBias: COMBAT_NUMBER_RETALIATION_DIRECTIONAL_BIAS,
@@ -2491,12 +2508,22 @@ export class CardGameClient {
             const retaliationAppliedDamage = Number.isFinite(animation.retaliationAppliedDamage)
               ? Math.max(0, Math.floor(animation.retaliationAppliedDamage))
               : 0;
-            this.spawnRetaliationPopup({
-              amount: retaliationAppliedDamage,
-              worldPoint: card.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
-              driftTowardWorldPoint: this.getCardSlotAnchorPoint(card),
-              time,
-            });
+            const retaliationPopupWorldPoint = card.position.clone().add(new THREE.Vector3(0, 0.62, 0));
+            const retaliationPopupDriftTarget = this.getCardSlotAnchorPoint(card);
+            if (retaliationAppliedDamage > 0) {
+              this.spawnRetaliationPopup({
+                amount: retaliationAppliedDamage,
+                worldPoint: retaliationPopupWorldPoint,
+                driftTowardWorldPoint: retaliationPopupDriftTarget,
+                time,
+              });
+            } else {
+              this.spawnRetaliationBlockedPopup({
+                worldPoint: retaliationPopupWorldPoint,
+                driftTowardWorldPoint: retaliationPopupDriftTarget,
+                time,
+              });
+            }
 
             const attackerHealth = Number(card.userData?.catalogCard?.health);
             if (Number.isFinite(attackerHealth) && retaliationAppliedDamage > 0) {
