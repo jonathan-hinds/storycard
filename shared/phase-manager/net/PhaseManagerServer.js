@@ -217,9 +217,8 @@ class PhaseManagerServer {
 
   getNpcCreatureCandidateTargets(match, npcId, ability) {
     if (!match || !npcId || !ability) return [];
-    const target = typeof ability.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
-    const buffTarget = typeof ability.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
-    const targetRule = target !== 'none' ? target : buffTarget;
+    const { valid, targetRule } = this.resolveAbilityTargetRule(ability);
+    if (!valid) return [];
     const npcState = match.cardsByPlayer.get(npcId);
     const enemyId = match.players.find((id) => id !== npcId);
     const enemyState = enemyId ? match.cardsByPlayer.get(enemyId) : null;
@@ -339,7 +338,10 @@ class PhaseManagerServer {
     const normalizedAvailableUpkeep = Number.isFinite(availableUpkeep)
       ? Math.max(0, Math.floor(availableUpkeep))
       : Number.POSITIVE_INFINITY;
-    const abilities = [attackerCard.catalogCard.ability1, attackerCard.catalogCard.ability2].filter(Boolean);
+    const abilities = [
+      this.getAttackAbilityForCard(attackerCard, 0),
+      this.getAttackAbilityForCard(attackerCard, 1),
+    ].filter(Boolean);
     if (!abilities.length) return null;
 
     let bestPlan = null;
@@ -388,9 +390,8 @@ class PhaseManagerServer {
   getNpcSpellCandidateTargets(match, npcId, spellCard) {
     if (!match || !npcId || !spellCard?.catalogCard) return [];
     const ability = this.getAttackAbilityForCard(spellCard, 0) || {};
-    const target = typeof ability.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
-    const buffTarget = typeof ability.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
-    const targetRule = target !== 'none' ? target : buffTarget;
+    const { valid, targetRule } = this.resolveAbilityTargetRule(ability);
+    if (!valid) return [];
     const npcState = match.cardsByPlayer.get(npcId);
     const enemyId = match.players.find((id) => id !== npcId);
     const enemyState = enemyId ? match.cardsByPlayer.get(enemyId) : null;
@@ -467,9 +468,10 @@ class PhaseManagerServer {
   }
 
   validateSpellTargetSelection({ match, casterId, ability, targetSide, targetSlotIndex }) {
-    const normalizedTarget = typeof ability?.target === 'string' ? ability.target.trim().toLowerCase() : 'none';
-    const normalizedBuffTarget = typeof ability?.buffTarget === 'string' ? ability.buffTarget.trim().toLowerCase() : 'none';
-    const targetRule = normalizedTarget !== 'none' ? normalizedTarget : normalizedBuffTarget;
+    const { valid, targetRule } = this.resolveAbilityTargetRule(ability);
+    if (!valid) {
+      return { valid: false, error: 'spell ability targeting is invalid' };
+    }
 
     if (targetRule === 'none') {
       return { valid: true, targetSide: null, targetSlotIndex: null };
@@ -1252,6 +1254,41 @@ class PhaseManagerServer {
     const parsedCost = Number.parseInt(ability?.cost, 10);
     if (!Number.isFinite(parsedCost)) return 0;
     return Math.max(0, Math.floor(parsedCost));
+  }
+
+  resolveAbilityTargetRule(ability) {
+    const normalizedEffectId = typeof ability?.effectId === 'string'
+      ? ability.effectId.trim().toLowerCase()
+      : 'none';
+    const normalizedBuffId = typeof ability?.buffId === 'string'
+      ? ability.buffId.trim().toLowerCase()
+      : 'none';
+    const normalizedTarget = typeof ability?.target === 'string'
+      ? ability.target.trim().toLowerCase()
+      : 'none';
+    const normalizedBuffTarget = typeof ability?.buffTarget === 'string'
+      ? ability.buffTarget.trim().toLowerCase()
+      : 'none';
+
+    const hasEffect = normalizedEffectId !== 'none';
+    const hasBuff = normalizedBuffId !== 'none';
+    const allowedTargetKinds = new Set(['self', 'friendly', 'enemy']);
+
+    if (hasEffect) {
+      if (!allowedTargetKinds.has(normalizedTarget)) {
+        return { valid: false, targetRule: null };
+      }
+      return { valid: true, targetRule: normalizedTarget };
+    }
+
+    if (hasBuff) {
+      if (!allowedTargetKinds.has(normalizedBuffTarget)) {
+        return { valid: false, targetRule: null };
+      }
+      return { valid: true, targetRule: normalizedBuffTarget };
+    }
+
+    return { valid: true, targetRule: 'none' };
   }
 
   getPlayerUpkeepTotalValue(playerState) {
