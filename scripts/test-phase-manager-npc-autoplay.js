@@ -14,6 +14,24 @@ function makeCreature(id) {
   };
 }
 
+function makeLegacyLikeCreature(id) {
+  return {
+    id,
+    cardKind: 'Creature',
+    health: 5,
+    ability1: {
+      cost: '1',
+      name: 'Legacy Strike',
+      description: 'Deal damage to enemy target.',
+      effectId: 'damage_enemy',
+      valueSourceType: 'fixed',
+      valueSourceFixed: 2,
+      target: 'none',
+      buffTarget: 'none',
+    },
+  };
+}
+
 function makeEnemySpell(id) {
   return {
     id,
@@ -130,6 +148,61 @@ async function main() {
   }
 
   console.log('phase manager npc autoplay checks passed');
+
+  const legacyTargetServer = new PhaseManagerServer({
+    boardSlotsPerSide: 3,
+    deckSizePerPlayer: 2,
+    startingHandSize: 2,
+    npcStartDelayMs: 0,
+    npcActionDelayMs: 0,
+    catalogProvider: async () => [
+      makeLegacyLikeCreature('legacy-creature-1'),
+      makeLegacyLikeCreature('legacy-creature-2'),
+    ],
+  });
+  legacyTargetServer.shuffleCards = (cards) => [...cards];
+  const legacyStatus = await legacyTargetServer.findMatch('human-legacy', {
+    opponentType: 'npc',
+    deckCardIds: ['legacy-creature-1', 'legacy-creature-2'],
+  });
+  assert.equal(legacyStatus.status, 'matched', 'legacy target test should create a match');
+  const legacyMatch = legacyTargetServer.phaseMatches.get(legacyStatus.matchId);
+  const legacyNpcId = legacyMatch.players.find((id) => id.startsWith('npc-'));
+  const legacyHumanId = legacyMatch.players.find((id) => id !== legacyNpcId);
+  const legacyNpcState = legacyMatch.cardsByPlayer.get(legacyNpcId);
+  const legacyHumanState = legacyMatch.cardsByPlayer.get(legacyHumanId);
+
+  const npcCard = legacyNpcState.hand.shift();
+  const humanCard = legacyHumanState.hand.shift();
+  legacyNpcState.board.push({
+    ...npcCard,
+    slotIndex: 0,
+    summonedTurn: 0,
+    attackCommitted: false,
+    targetSlotIndex: null,
+    targetSide: null,
+    selectedAbilityIndex: 0,
+  });
+  legacyHumanState.board.push({
+    ...humanCard,
+    slotIndex: 0,
+    summonedTurn: 0,
+    attackCommitted: false,
+    targetSlotIndex: null,
+    targetSide: null,
+    selectedAbilityIndex: 0,
+  });
+  legacyNpcState.upkeepTotal = 1;
+  legacyNpcState.upkeep = 1;
+  legacyNpcState.hand = [];
+  legacyHumanState.hand = [];
+  legacyMatch.turnNumber = 2;
+
+  legacyTargetServer.processNpcDecisionPhase(legacyMatch);
+  const plannedNpcCard = legacyMatch.cardsByPlayer.get(legacyNpcId).board[0];
+  assert.equal(plannedNpcCard.attackCommitted, true, 'NPC should commit legacy-like enemy damage abilities even when target fields are none');
+  assert.equal(plannedNpcCard.targetSide, 'opponent', 'NPC should target opponent for enemy damage effects with missing target fields');
+  assert.equal(plannedNpcCard.targetSlotIndex, 0, 'NPC should target a valid enemy slot for enemy damage effects with missing target fields');
 }
 
 main().catch((error) => {
