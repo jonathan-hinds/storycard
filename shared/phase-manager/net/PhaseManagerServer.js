@@ -635,6 +635,37 @@ class PhaseManagerServer {
     this.processNpcDecisionPhase(match);
   }
 
+  prepareNpcAttackPlanForReady(match, npcId) {
+    if (!match || !npcId || match.phase !== 1) return;
+    const npcState = match.cardsByPlayer.get(npcId);
+    if (!npcState) return;
+
+    let remainingUpkeep = Math.max(0, this.getPlayerUpkeepValue(npcState) + this.getCommittedAttackUpkeepCost(npcState.board));
+    for (const card of npcState.board || []) {
+      const isSilenced = Number.isInteger(card?.silenceTurnsRemaining) && card.silenceTurnsRemaining > 0;
+      const isSummoningSick = !Number.isInteger(card?.summonedTurn) || card.summonedTurn >= match.turnNumber;
+      const nextPlan = !isSilenced && !isSummoningSick
+        ? this.chooseNpcCreatureAttackPlan(match, npcId, card, remainingUpkeep)
+        : null;
+      const shouldCommit = Boolean(nextPlan);
+      card.attackCommitted = shouldCommit;
+      card.targetSide = shouldCommit ? nextPlan.targetSide : null;
+      card.targetSlotIndex = shouldCommit ? nextPlan.targetSlotIndex : null;
+      card.selectedAbilityIndex = shouldCommit && Number.isInteger(nextPlan.selectedAbilityIndex)
+        ? nextPlan.selectedAbilityIndex
+        : 0;
+      if (shouldCommit) {
+        const upkeepCost = Number.isFinite(nextPlan.upkeepCost)
+          ? Math.max(0, Math.floor(nextPlan.upkeepCost))
+          : this.getAbilityUpkeepCost(this.getAttackAbilityForCard(card, card.selectedAbilityIndex));
+        remainingUpkeep = Math.max(0, remainingUpkeep - upkeepCost);
+      }
+    }
+
+    npcState.upkeep = remainingUpkeep;
+    this.forceAttacksToTauntTarget(match, npcId);
+  }
+
   autoSubmitNpcCommitRolls(match) {
     if (!match || match.phase !== 2) return;
     for (const npcId of this.getNpcPlayerIds(match)) {
@@ -2139,7 +2170,26 @@ class PhaseManagerServer {
 
   readyPlayerInMatch(match, playerId) {
     match.readyPlayers.add(playerId);
+
+    if (!this.isNpcPlayerId(playerId) && match?.phase === 1) {
+      if (!(match.npcAutomationByPlayer instanceof Map)) {
+        this.initializeNpcAutomationForMatch(match, { withStartDelay: false });
+      }
+      for (let attempts = 0; attempts < 8; attempts += 1) {
+        for (const npcPlayerId of this.getNpcPlayerIds(match)) {
+          if (match.readyPlayers.has(npcPlayerId)) continue;
+          const automation = match.npcAutomationByPlayer.get(npcPlayerId) || { nextActionAt: Date.now() };
+          automation.nextActionAt = 0;
+          match.npcAutomationByPlayer.set(npcPlayerId, automation);
+        }
+        this.processNpcDecisionPhase(match);
+        const allNpcReady = this.getNpcPlayerIds(match).every((npcPlayerId) => match.readyPlayers.has(npcPlayerId));
+        if (allNpcReady || match.phase !== 1) break;
+      }
+    }
+
     for (const npcPlayerId of this.getNpcPlayerIds(match)) {
+      this.prepareNpcAttackPlanForReady(match, npcPlayerId);
       match.readyPlayers.add(npcPlayerId);
     }
 
