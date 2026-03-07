@@ -1404,6 +1404,27 @@ class PhaseManagerServer {
     return Number.isFinite(outcome) ? outcome : 0;
   }
 
+  resolveRetaliationDamageFromCommittedAttack(match, committedAttack) {
+    if (!match?.commitRollsByAttackId || !committedAttack?.id) {
+      return 0;
+    }
+    if (committedAttack.retaliationEnabled === false) {
+      return 0;
+    }
+
+    const retaliationRoll = match.commitRollsByAttackId.get(`${committedAttack.id}:damage`);
+    const retaliationRollOutcome = normalizeRollOutcome(Number(retaliationRoll?.roll?.outcome));
+    const normalizedRollDamage = Number.isFinite(retaliationRollOutcome)
+      ? Math.max(0, Math.floor(retaliationRollOutcome))
+      : 0;
+    const committedRetaliationBonus = Number(committedAttack.committedRetaliationBonus);
+    const normalizedRetaliationBonus = Number.isFinite(committedRetaliationBonus)
+      ? Math.max(0, Math.floor(committedRetaliationBonus))
+      : 0;
+
+    return normalizedRollDamage + normalizedRetaliationBonus;
+  }
+
   applyCommitRollPenalty({ match, attackId, rollType, penaltyValue, source = null, targetStat = null }) {
     if (!match?.commitRollsByAttackId || typeof attackId !== 'string' || typeof rollType !== 'string') return null;
     const normalizedPenalty = normalizeRollOutcome(Number(penaltyValue));
@@ -1912,15 +1933,7 @@ class PhaseManagerServer {
         const defenderAttack = defenderId
           ? this.findPendingAttackBySlot(match, defenderId, tauntAdjustedAttack.targetSlotIndex)
           : null;
-        const defenderResolvedAttack = defenderId && defenderAttack
-          ? this.resolveCommitAttackStep(match, defenderId, defenderAttack)
-          : null;
-        const baseRetaliationDamage = defenderResolvedAttack?.effectId === 'damage_enemy'
-          ? defenderResolvedAttack.resolvedValue
-          : 0;
-        const bonusRetaliationDamage = Number(defenderCard?.retaliationBonus);
-        const retaliationDamage = baseRetaliationDamage
-          + (Number.isFinite(bonusRetaliationDamage) ? Math.max(0, Math.floor(bonusRetaliationDamage)) : 0);
+        const retaliationDamage = this.resolveRetaliationDamageFromCommittedAttack(match, defenderAttack);
         const defenseRoll = match.commitRollsByAttackId.get(`${attack.id}:defense`);
         const attackDefense = Number(defenseRoll?.roll?.outcome);
         Object.assign(retaliationResult, this.applyRetaliationDamage({
@@ -2052,13 +2065,27 @@ class PhaseManagerServer {
           card.selectedAbilityIndex = 0;
           return false;
         })
-        .map((card) => ({
-          id: `${playerId}:${card.slotIndex}:${card.targetSide || 'none'}:${Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : 'none'}`,
-          attackerSlotIndex: card.slotIndex,
-          targetSlotIndex: Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null,
-          targetSide: card.targetSide || null,
-          selectedAbilityIndex: Number.isInteger(card.selectedAbilityIndex) ? card.selectedAbilityIndex : 0,
-        })) || [];
+          .map((card) => {
+            const attackId = `${playerId}:${card.slotIndex}:${card.targetSide || 'none'}:${Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : 'none'}`;
+            const selectedAbilityIndex = Number.isInteger(card.selectedAbilityIndex) ? card.selectedAbilityIndex : 0;
+            const selectedAbility = this.getAttackAbilityForCard(card, selectedAbilityIndex);
+            const retaliationEnabled = selectedAbility?.effectId === 'damage_enemy';
+            const retaliationBonus = Number(card.retaliationBonus);
+            const committedRetaliationBonus = Number.isFinite(retaliationBonus)
+              ? Math.max(0, Math.floor(retaliationBonus))
+              : 0;
+
+            return {
+              id: attackId,
+              attackerId: playerId,
+              attackerSlotIndex: card.slotIndex,
+              targetSlotIndex: Number.isInteger(card.targetSlotIndex) ? card.targetSlotIndex : null,
+              targetSide: card.targetSide || null,
+              selectedAbilityIndex,
+              retaliationEnabled,
+              committedRetaliationBonus,
+            };
+          }) || [];
       pendingAttacks.set(playerId, attacks);
     });
     match.pendingCommitAttacksByPlayer = pendingAttacks;

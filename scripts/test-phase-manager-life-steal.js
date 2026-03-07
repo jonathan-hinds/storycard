@@ -86,6 +86,12 @@ function createCreature({ id, slotIndex, health, effectId = 'damage_enemy', valu
     targetSide: null,
     selectedAbilityIndex: 0,
   }]);
+  match.commitRollsByAttackId.set('p2:0:none:none:damage', {
+    attackId: 'p2:0:none:none',
+    attackerId: 'p2',
+    rollType: 'damage',
+    roll: { outcome: 3 },
+  });
 
   server.applyCommitEffects(match);
 
