@@ -1154,6 +1154,46 @@ export class CardGameClient {
     });
   }
 
+  getInteractionSnapshot() {
+    const pending = this.state.pendingAbilitySelection;
+    if (!pending) return null;
+    return {
+      pendingAbilitySelection: {
+        sourceCardId: pending.sourceCardId,
+        sourceSlotIndex: Number.isInteger(pending.sourceSlotIndex) ? pending.sourceSlotIndex : null,
+        targetType: pending.targetType,
+      },
+    };
+  }
+
+  restoreInteractionSnapshot(snapshot) {
+    const pendingSnapshot = snapshot?.pendingAbilitySelection;
+    if (!pendingSnapshot) return false;
+    if (this.state.spellResolutionInProgress || this.options?.interactionLocked) return false;
+
+    const sourceCard = this.getCardById(pendingSnapshot.sourceCardId);
+    if (!sourceCard || !this.canInteractWithCardAbilities(sourceCard)) return false;
+
+    const selectedAbilityIndex = Number.isInteger(sourceCard.userData.selectedAbilityIndex)
+      ? sourceCard.userData.selectedAbilityIndex
+      : 0;
+    const ability = selectedAbilityIndex === 1 ? sourceCard.userData.catalogCard?.ability2 : sourceCard.userData.catalogCard?.ability1;
+    if (!ability) return false;
+
+    const resolvedTargetType = this.getAbilityTargetType(ability);
+    if (resolvedTargetType === TARGET_TYPES.none) return false;
+
+    this.state.pendingAbilitySelection = {
+      sourceCardId: sourceCard.userData.cardId,
+      sourceSlotIndex: sourceCard.userData.slotIndex,
+      targetType: resolvedTargetType,
+      ability,
+    };
+    this.highlightValidTargetsForPendingAbility();
+    this.setStatus(`Select a ${resolvedTargetType} target for ${sourceCard.userData.cardId}.`);
+    return true;
+  }
+
   parseDieSides(value, fallback = 6) {
     if (typeof value !== 'string') return fallback;
     const match = value.trim().match(/d\s*(\d+)/i);
@@ -1646,6 +1686,7 @@ export class CardGameClient {
       : this.spellAbilityRequiresRoll(snapshotAbility);
 
     const run = async () => {
+      const interactionSnapshot = this.getInteractionSnapshot();
       this.state.activeSpellResolutionId = spellResolution.id;
       this.state.spellResolutionInProgress = true;
       this.options = { ...this.options, interactionLocked: true };
@@ -1729,6 +1770,7 @@ export class CardGameClient {
       this.state.activeSpellResolutionId = null;
       this.state.spellResolutionInProgress = false;
       this.options = { ...this.options, interactionLocked: false };
+      this.restoreInteractionSnapshot(interactionSnapshot);
     };
 
     this.state.remoteSpellResolutionPromise = run();
