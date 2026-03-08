@@ -54,6 +54,13 @@ const COMBAT_NUMBER_VARIANTS = Object.freeze({
   retaliation: 'retaliation',
   beneficial: 'beneficial',
 });
+const RETALIATION_POPUP_TEXT_SHADOW = [
+  '0 2px 0 #ffffff',
+  '0 -2px 0 #ffffff',
+  '2px 0 0 #ffffff',
+  '-2px 0 0 #ffffff',
+  '0 0 8px rgba(255, 255, 255, 0.78)',
+].join(', ');
 const TARGET_TYPES = Object.freeze({ self: 'self', friendly: 'friendly', enemy: 'enemy', none: 'none' });
 const TYPE_ADVANTAGE_MULTIPLIER_DEFAULT = 1.5;
 const TYPE_ADVANTAGE_BY_ATTACKER = Object.freeze({
@@ -753,6 +760,9 @@ export class CardGameClient {
     directionalBias = COMBAT_NUMBER_DIRECTIONAL_BIAS,
     randomBias = COMBAT_NUMBER_RANDOM_BIAS,
   }) {
+    const resolvedVariant = Object.values(COMBAT_NUMBER_VARIANTS).includes(variant)
+      ? variant
+      : COMBAT_NUMBER_VARIANTS.damage;
     const hasNumericAmount = Number.isFinite(amount) && amount > 0;
     const hasTextLabel = typeof text === 'string' && text.trim().length > 0;
     if (!this.damagePopupLayer || (!hasNumericAmount && !hasTextLabel) || !worldPoint) return;
@@ -774,8 +784,12 @@ export class CardGameClient {
     const driftY = driftVector.y - 28;
 
     const node = document.createElement('div');
-    node.className = `damage-number-popup damage-number-popup--${variant}`;
+    node.className = `damage-number-popup damage-number-popup--${resolvedVariant}`;
     node.textContent = hasTextLabel ? text.trim() : `${prefix}${Math.round(amount)}`;
+    if (resolvedVariant === COMBAT_NUMBER_VARIANTS.retaliation) {
+      node.style.color = '#000000';
+      node.style.textShadow = RETALIATION_POPUP_TEXT_SHADOW;
+    }
     node.style.left = `${start.x}px`;
     node.style.top = `${start.y}px`;
     this.damagePopupLayer.append(node);
@@ -788,7 +802,7 @@ export class CardGameClient {
       startY: start.y,
       driftX,
       driftY,
-      variant,
+      variant: resolvedVariant,
     });
   }
 
