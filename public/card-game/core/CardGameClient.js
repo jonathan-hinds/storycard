@@ -734,6 +734,13 @@ export class CardGameClient {
     return new THREE.Vector3(slot.x, 0.22, slot.z);
   }
 
+  getCardLanePopupPoint(card, yOffset = 0.62) {
+    if (!card) return null;
+    const laneAnchorPoint = this.getCardSlotAnchorPoint(card);
+    if (laneAnchorPoint) return laneAnchorPoint.clone().add(new THREE.Vector3(0, yOffset, 0));
+    return card.position.clone().add(new THREE.Vector3(0, yOffset, 0));
+  }
+
   spawnCombatNumberPopup({
     amount,
     text = null,
@@ -2481,9 +2488,10 @@ export class CardGameClient {
             const nextHealth = canUpdateHealth
               ? currentHealth - animation.resolvedDamage
               : null;
+            const defenderPopupWorldPoint = this.getCardLanePopupPoint(animation.defenderCard);
             this.spawnDamagePopup({
               amount: animation.resolvedDamage,
-              worldPoint: animation.defenderCard.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              worldPoint: defenderPopupWorldPoint,
               driftTowardWorldPoint: this.getCardSlotAnchorPoint(animation.defenderCard),
               time,
             });
@@ -2496,9 +2504,10 @@ export class CardGameClient {
               }
             }
           } else if (Number.isFinite(animation.resolvedHealing) && animation.resolvedHealing > 0 && canUpdateHealth) {
+            const defenderPopupWorldPoint = this.getCardLanePopupPoint(animation.defenderCard);
             this.spawnBeneficialPopup({
               amount: animation.resolvedHealing,
-              worldPoint: animation.defenderCard.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
+              worldPoint: defenderPopupWorldPoint,
               time,
             });
             animation.defenderCard.userData.catalogCard.health = currentHealth + animation.resolvedHealing;
@@ -2508,7 +2517,7 @@ export class CardGameClient {
             const retaliationAppliedDamage = Number.isFinite(animation.retaliationAppliedDamage)
               ? Math.max(0, Math.floor(animation.retaliationAppliedDamage))
               : 0;
-            const retaliationPopupWorldPoint = card.position.clone().add(new THREE.Vector3(0, 0.62, 0));
+            const retaliationPopupWorldPoint = this.getCardLanePopupPoint(card);
             const retaliationPopupDriftTarget = this.getCardSlotAnchorPoint(card);
             if (retaliationAppliedDamage > 0) {
               this.spawnRetaliationPopup({
