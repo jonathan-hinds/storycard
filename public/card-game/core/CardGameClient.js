@@ -2517,8 +2517,11 @@ export class CardGameClient {
             const retaliationAppliedDamage = Number.isFinite(animation.retaliationAppliedDamage)
               ? Math.max(0, Math.floor(animation.retaliationAppliedDamage))
               : 0;
-            const retaliationPopupWorldPoint = this.getCardLanePopupPoint(card);
-            const retaliationPopupDriftTarget = this.getCardSlotAnchorPoint(card);
+            const retaliationLaneAnchorPoint = animation.originPosition?.clone()
+              || this.getCardSlotAnchorPoint(card)
+              || card.position.clone();
+            const retaliationPopupWorldPoint = retaliationLaneAnchorPoint.clone().add(new THREE.Vector3(0, 0.62, 0));
+            const retaliationPopupDriftTarget = retaliationLaneAnchorPoint.clone().setY(0.22);
             if (retaliationAppliedDamage > 0) {
               this.spawnRetaliationPopup({
                 amount: retaliationAppliedDamage,
