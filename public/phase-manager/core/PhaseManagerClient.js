@@ -1434,7 +1434,10 @@ export class PhaseManagerClient {
     if (!allRolledAt) return;
 
     const latestCommitAttacks = await this.fetchLatestCommitAttacks();
-    const attackPlanToAnimate = latestCommitAttacks || commitAttacks;
+    const syncedCommitAttacks = Array.isArray(this.match?.meta?.commitAttacks)
+      ? this.match.meta.commitAttacks
+      : null;
+    const attackPlanToAnimate = latestCommitAttacks || syncedCommitAttacks || commitAttacks;
 
     await new Promise((resolve) => {
       this.client.playCommitPhaseAnimations(attackPlanToAnimate, {
@@ -1457,13 +1460,23 @@ export class PhaseManagerClient {
 
 
   async fetchLatestCommitAttacks() {
-    try {
-      const status = await this.getJson(`/api/phase-manager/matchmaking/status?playerId=${encodeURIComponent(this.playerId)}`);
-      const commitAttacks = Array.isArray(status?.matchState?.meta?.commitAttacks) ? status.matchState.meta.commitAttacks : null;
-      return commitAttacks;
-    } catch (error) {
-      return null;
+    const maxAttempts = 5;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        const status = await this.getJson(`/api/phase-manager/matchmaking/status?playerId=${encodeURIComponent(this.playerId)}`);
+        if (status?.matchState) {
+          this.applyMatchmakingStatus(status);
+        }
+        const commitAttacks = Array.isArray(status?.matchState?.meta?.commitAttacks) ? status.matchState.meta.commitAttacks : null;
+        if (commitAttacks) return commitAttacks;
+      } catch (error) {
+        // Keep retrying to avoid animating with stale attack plans when a transient status fetch fails.
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
     }
+
+    return null;
   }
 
   async waitForCommitAllRolledAt() {
@@ -1471,6 +1484,9 @@ export class PhaseManagerClient {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         const status = await this.getJson(`/api/phase-manager/matchmaking/status?playerId=${encodeURIComponent(this.playerId)}`);
+        if (status?.matchState) {
+          this.applyMatchmakingStatus(status);
+        }
         const commitAllRolledAt = status?.matchState?.meta?.commitAllRolledAt;
         if (Number.isFinite(commitAllRolledAt)) return commitAllRolledAt;
         if (status?.matchState?.phase !== 2) return null;
