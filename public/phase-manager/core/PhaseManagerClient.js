@@ -998,12 +998,15 @@ export class PhaseManagerClient {
       const sceneCard = this.client.cards.find((card) => card?.userData?.cardId === event.cardId && card.userData.owner === side);
       if (!sceneCard) return;
 
-      this.client.spawnDamagePopup({
-        amount: event.damage,
-        worldPoint: sceneCard.position.clone().add(new THREE.Vector3(0, 0.62, 0)),
-        driftTowardWorldPoint: this.client.getCardSlotAnchorPoint(sceneCard),
-        time: now,
-      });
+      const lanePopupPoint = this.client.getCardLanePopupPoint(sceneCard);
+      if (lanePopupPoint) {
+        this.client.spawnDamagePopup({
+          amount: event.damage,
+          worldPoint: lanePopupPoint,
+          driftTowardWorldPoint: this.client.getCardSlotAnchorPoint(sceneCard),
+          time: now,
+        });
+      }
 
       this.client.combatShakeEffects.push({
         card: sceneCard,

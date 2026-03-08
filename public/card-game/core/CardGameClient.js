@@ -737,8 +737,8 @@ export class CardGameClient {
   getCardLanePopupPoint(card, yOffset = 0.62) {
     if (!card) return null;
     const laneAnchorPoint = this.getCardSlotAnchorPoint(card);
-    if (laneAnchorPoint) return laneAnchorPoint.clone().add(new THREE.Vector3(0, yOffset, 0));
-    return card.position.clone().add(new THREE.Vector3(0, yOffset, 0));
+    if (!laneAnchorPoint) return null;
+    return laneAnchorPoint.clone().add(new THREE.Vector3(0, yOffset, 0));
   }
 
   spawnCombatNumberPopup({
@@ -2517,24 +2517,24 @@ export class CardGameClient {
             const retaliationAppliedDamage = Number.isFinite(animation.retaliationAppliedDamage)
               ? Math.max(0, Math.floor(animation.retaliationAppliedDamage))
               : 0;
-            const retaliationLaneAnchorPoint = animation.originPosition?.clone()
-              || this.getCardSlotAnchorPoint(card)
-              || card.position.clone();
-            const retaliationPopupWorldPoint = retaliationLaneAnchorPoint.clone().add(new THREE.Vector3(0, 0.62, 0));
-            const retaliationPopupDriftTarget = retaliationLaneAnchorPoint.clone().setY(0.22);
-            if (retaliationAppliedDamage > 0) {
-              this.spawnRetaliationPopup({
-                amount: retaliationAppliedDamage,
-                worldPoint: retaliationPopupWorldPoint,
-                driftTowardWorldPoint: retaliationPopupDriftTarget,
-                time,
-              });
-            } else {
-              this.spawnRetaliationBlockedPopup({
-                worldPoint: retaliationPopupWorldPoint,
-                driftTowardWorldPoint: retaliationPopupDriftTarget,
-                time,
-              });
+            const retaliationLaneAnchorPoint = this.getCardSlotAnchorPoint(card);
+            if (retaliationLaneAnchorPoint) {
+              const retaliationPopupWorldPoint = retaliationLaneAnchorPoint.clone().add(new THREE.Vector3(0, 0.62, 0));
+              const retaliationPopupDriftTarget = retaliationLaneAnchorPoint.clone().setY(0.22);
+              if (retaliationAppliedDamage > 0) {
+                this.spawnRetaliationPopup({
+                  amount: retaliationAppliedDamage,
+                  worldPoint: retaliationPopupWorldPoint,
+                  driftTowardWorldPoint: retaliationPopupDriftTarget,
+                  time,
+                });
+              } else {
+                this.spawnRetaliationBlockedPopup({
+                  worldPoint: retaliationPopupWorldPoint,
+                  driftTowardWorldPoint: retaliationPopupDriftTarget,
+                  time,
+                });
+              }
             }
 
             const attackerHealth = Number(card.userData?.catalogCard?.health);
