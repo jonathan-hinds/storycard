@@ -372,6 +372,26 @@ export class DeckBuilderScene {
     context.textBaseline = 'middle';
     context.fillText('All Cards Filters', toPanelX(90), toPanelY(92));
 
+    const summary = this.getDeckSummary();
+    const cardsInDeck = summary.deckCardIds.length;
+    const cardTarget = 10;
+    const creatureTarget = 3;
+    const statusLabel = summary.isValid ? 'Deck ready' : 'Deck requirements';
+    const statusColor = summary.isValid ? '#9ef0be' : '#f6d08a';
+    context.fillStyle = statusColor;
+    context.font = `600 ${34 * uniformScale * fontScale}px "Trebuchet MS", "Segoe UI", sans-serif`;
+    context.textAlign = 'right';
+    context.fillText(statusLabel, toPanelX(1960), toPanelY(96));
+
+    context.fillStyle = '#dce7ff';
+    context.font = `600 ${32 * uniformScale * fontScale}px "Trebuchet MS", "Segoe UI", sans-serif`;
+    context.fillText(
+      `Cards ${cardsInDeck}/${cardTarget} • Creatures ${summary.creatureCount}/${creatureTarget} min`,
+      toPanelX(1960),
+      toPanelY(158),
+    );
+    context.textAlign = 'left';
+
     const groups = [
       {
         label: 'Card kind',
@@ -524,7 +544,9 @@ export class DeckBuilderScene {
   }
 
   emitDeckChange() {
-    this.onDeckChange?.(this.getDeckSummary());
+    const summary = this.getDeckSummary();
+    this.redrawFilterPanel();
+    this.onDeckChange?.(summary);
   }
 
   rebuildLibraryPane() {
