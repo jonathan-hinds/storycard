@@ -174,7 +174,6 @@ class HomeCanvasScene {
 const stage = document.getElementById('user-module-stage');
 const canvas = document.getElementById('user-module-canvas');
 const overlayEl = document.getElementById('phase-manager-turn-overlay');
-const statusEl = document.getElementById('user-module-status');
 const backButton = document.getElementById('user-module-back-button');
 
 let session = loadSession();
@@ -189,11 +188,6 @@ let matchmakingPollTimer = 0;
 let hasRequestedExit = false;
 let pendingSavePromise = null;
 let currentMatchRequestMode = null;
-
-function setStatus(message, isError = false) {
-  statusEl.textContent = message || '';
-  statusEl.dataset.error = isError ? 'true' : 'false';
-}
 
 function stopPolling() {
   if (!matchmakingPollTimer) return;
@@ -257,9 +251,6 @@ async function persistDeck(summary) {
 }
 
 function updateDeckStatus(summary) {
-  const validity = summary.isValid ? '✅ Deck valid' : '⚠️ Deck invalid';
-  const violations = summary.violations.length ? ` — ${summary.violations.join(' ')}` : '';
-  setStatus(`${validity} (${summary.deckCardIds.length}/10 cards, ${summary.creatureCount} creatures)${violations}`, !summary.isValid);
   session.user.deck = {
     cards: summary.deckCardIds,
     creatureCount: summary.creatureCount,
@@ -271,14 +262,12 @@ function updateDeckStatus(summary) {
 async function handleSaveDeck() {
   const summary = deckBuilderScene?.getDeckSummary?.();
   if (!summary) return;
-  setStatus('Saving deck...');
   try {
     pendingSavePromise = persistDeck(summary);
     await pendingSavePromise;
     updateDeckStatus(summary);
-    setStatus(`${statusEl.textContent} — Saved.`);
   } catch (error) {
-    setStatus(error.message || 'Unable to save deck.', true);
+    // Deck validity and save feedback are now rendered in-canvas by DeckBuilderScene.
   } finally {
     pendingSavePromise = null;
   }
@@ -324,7 +313,6 @@ function showHome() {
   teardownAll();
   overlayEl.hidden = true;
   backButton.hidden = true;
-  setStatus('');
   hasRequestedExit = false;
   currentMatchRequestMode = null;
 
@@ -344,7 +332,6 @@ async function showDecks() {
   teardownAll();
   overlayEl.hidden = true;
   backButton.hidden = true;
-  setStatus('Loading cards...');
 
   await refreshUserDeck();
   const response = await fetch('/api/projects/cards');
@@ -352,7 +339,6 @@ async function showDecks() {
   if (!response.ok) throw new Error(payload.error || 'Unable to load cards');
   const cards = Array.isArray(payload.cards) ? payload.cards : [];
   if (!cards.length) {
-    setStatus('No cards found in the catalog.', true);
     return;
   }
 
@@ -393,7 +379,6 @@ function showMatch() {
   teardownAll();
   overlayEl.hidden = false;
   backButton.hidden = false;
-  setStatus('');
 
   phaseManager = new PhaseManagerClient({
     elements: createPhaseManagerElements({ canvas, overlayEl }),
