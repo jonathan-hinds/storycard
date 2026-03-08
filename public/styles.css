@@ -1005,24 +1005,6 @@ button {
   border-radius: 0;
 }
 
-.user-module-status {
-  position: absolute;
-  right: 1rem;
-  top: 1rem;
-  z-index: 6;
-  margin: 0;
-  padding: 0.5rem 0.75rem;
-  background: rgba(7, 13, 26, 0.72);
-  border: 1px solid rgba(148, 176, 255, 0.4);
-  border-radius: 0.45rem;
-  max-width: min(68vw, 420px);
-}
-
-.user-module-status[data-error='true'] {
-  color: #f4a8a8;
-}
-
-
 .user-match-stage-layout {
   min-height: 100vh;
   min-height: 100dvh;
