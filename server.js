@@ -270,7 +270,8 @@ async function handleApi(req, res, pathname) {
     } catch (error) {
       const isValidationError =
         error.message.includes('invalid user id')
-        || error.message.includes('deck cannot exceed');
+        || error.message.includes('deck cannot exceed')
+        || error.message.includes('deck must include exactly 3 creature cards');
       const statusCode = error.message === 'user not found' ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to save deck' });
     }

@@ -812,6 +812,10 @@ class PhaseManagerServer {
       .map((cardId) => cardById.get(cardId))
       .filter(Boolean);
 
+    const isCreatureCard = (card) => String(card?.cardKind || '').trim().toLowerCase() === 'creature';
+    const creaturePool = cardPool.filter((card) => isCreatureCard(card));
+    const nonCreaturePool = cardPool.filter((card) => !isCreatureCard(card));
+
     const deckCards = [];
     preferredCards.slice(0, this.options.deckSizePerPlayer).forEach((catalogCard) => {
       deckCards.push(catalogCard);
@@ -820,6 +824,22 @@ class PhaseManagerServer {
     while (deckCards.length < this.options.deckSizePerPlayer) {
       const randomCard = cardPool[Math.floor(Math.random() * cardPool.length)] || {};
       deckCards.push(randomCard);
+    }
+
+    if (creaturePool.length && nonCreaturePool.length) {
+      const countCreatures = () => deckCards.filter((card) => isCreatureCard(card)).length;
+      while (countCreatures() < 3) {
+        const replaceIndex = deckCards.findIndex((card) => !isCreatureCard(card));
+        if (replaceIndex < 0) break;
+        const randomCreature = creaturePool[Math.floor(Math.random() * creaturePool.length)] || creaturePool[0];
+        deckCards[replaceIndex] = randomCreature;
+      }
+      while (countCreatures() > 3) {
+        const replaceIndex = deckCards.findIndex((card) => isCreatureCard(card));
+        if (replaceIndex < 0) break;
+        const randomNonCreature = nonCreaturePool[Math.floor(Math.random() * nonCreaturePool.length)] || nonCreaturePool[0];
+        deckCards[replaceIndex] = randomNonCreature;
+      }
     }
 
     return deckCards.map((normalizedCard, index) => {

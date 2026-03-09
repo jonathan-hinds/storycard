@@ -386,7 +386,7 @@ export class DeckBuilderScene {
     context.fillStyle = '#dce7ff';
     context.font = `600 ${32 * uniformScale * fontScale}px "Trebuchet MS", "Segoe UI", sans-serif`;
     context.fillText(
-      `Cards ${cardsInDeck}/${cardTarget} • Creatures ${summary.creatureCount}/${creatureTarget} min`,
+      `Cards ${cardsInDeck}/${cardTarget} • Creatures ${summary.creatureCount}/${creatureTarget} exact`,
       toPanelX(1960),
       toPanelY(158),
     );
@@ -531,14 +531,14 @@ export class DeckBuilderScene {
       .filter((card) => resolveCardKind(card?.cardKind) === CARD_KINDS.CREATURE).length;
     const violations = [];
     if (deckCardIds.length > 10) violations.push('Deck cannot exceed 10 cards.');
-    if (creatureCount < 3) violations.push('Deck must include at least 3 creature cards.');
+    if (creatureCount !== 3) violations.push('Deck must include exactly 3 creature cards.');
     this.deckCounts.forEach((count, id) => {
       if (count > 2) violations.push(`Card ${id} cannot appear more than twice.`);
     });
     return {
       deckCardIds,
       creatureCount,
-      isValid: deckCardIds.length === 10 && creatureCount >= 3 && !violations.length,
+      isValid: deckCardIds.length === 10 && creatureCount === 3 && !violations.length,
       violations,
     };
   }
