@@ -236,9 +236,12 @@ function normalizeDeck(deck = {}) {
     throw new Error('deck cannot exceed 10 cards');
   }
   const creatureCount = Number.isInteger(deck.creatureCount) ? deck.creatureCount : 0;
+  if (creatureCount !== 3) {
+    throw new Error('deck must include exactly 3 creature cards');
+  }
   return {
     cards,
-    creatureCount: Math.max(0, creatureCount),
+    creatureCount: 3,
     updatedAt: new Date().toISOString(),
   };
 }
