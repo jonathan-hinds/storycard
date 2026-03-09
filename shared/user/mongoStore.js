@@ -153,14 +153,47 @@ function normalizeDeckFromDocument(document = {}) {
   };
 }
 
+function createDefaultPlayerMetrics() {
+  return {
+    totalGamesPlayed: 0,
+    totalWins: 0,
+    totalLosses: 0,
+    totalCreaturesKilled: 0,
+    totalCreaturesLost: 0,
+    totalSpellsPlayed: 0,
+    updatedAt: null,
+  };
+}
+
+function normalizePlayerMetricsFromDocument(document = {}) {
+  const source = document?.metrics && typeof document.metrics === 'object'
+    ? document.metrics
+    : {};
+  const defaults = createDefaultPlayerMetrics();
+  const normalized = { ...defaults };
+
+  Object.keys(defaults).forEach((key) => {
+    if (key === 'updatedAt') {
+      normalized.updatedAt = typeof source.updatedAt === 'string' ? source.updatedAt : null;
+      return;
+    }
+    const rawValue = Number(source[key]);
+    normalized[key] = Number.isFinite(rawValue) ? Math.max(0, Math.floor(rawValue)) : 0;
+  });
+
+  return normalized;
+}
+
 function toPublicUser(document) {
   const deck = normalizeDeckFromDocument(document);
+  const metrics = normalizePlayerMetricsFromDocument(document);
   return {
     id: document._id.toString(),
     username: document.username,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
     deck,
+    metrics,
   };
 }
 
@@ -179,6 +212,10 @@ async function createUser(input = {}) {
       deck: {
         cards: [],
         creatureCount: 0,
+        updatedAt: now,
+      },
+      metrics: {
+        ...createDefaultPlayerMetrics(),
         updatedAt: now,
       },
       createdAt: now,
@@ -288,12 +325,73 @@ async function getUserById(userId) {
   return toPublicUser(user);
 }
 
+function normalizeBattleMetricsInput(metrics = {}) {
+  const coerce = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+  };
+  return {
+    totalGamesPlayed: coerce(metrics.totalGamesPlayed),
+    totalWins: coerce(metrics.totalWins),
+    totalLosses: coerce(metrics.totalLosses),
+    totalCreaturesKilled: coerce(metrics.totalCreaturesKilled),
+    totalCreaturesLost: coerce(metrics.totalCreaturesLost),
+    totalSpellsPlayed: coerce(metrics.totalSpellsPlayed),
+  };
+}
+
+async function recordBattleMetrics(userId, metrics = {}) {
+  const { ObjectId } = getMongoClientConstructor();
+  if (typeof userId !== 'string' || !ObjectId.isValid(userId)) {
+    throw new Error('invalid user id');
+  }
+
+  const collection = await getCollection();
+  const now = new Date().toISOString();
+  const increments = normalizeBattleMetricsInput(metrics);
+  const result = await collection.findOneAndUpdate(
+    { _id: new ObjectId(userId) },
+    {
+      $inc: {
+        'metrics.totalGamesPlayed': increments.totalGamesPlayed,
+        'metrics.totalWins': increments.totalWins,
+        'metrics.totalLosses': increments.totalLosses,
+        'metrics.totalCreaturesKilled': increments.totalCreaturesKilled,
+        'metrics.totalCreaturesLost': increments.totalCreaturesLost,
+        'metrics.totalSpellsPlayed': increments.totalSpellsPlayed,
+      },
+      $set: {
+        'metrics.updatedAt': now,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        metrics: {
+          ...createDefaultPlayerMetrics(),
+          updatedAt: now,
+        },
+      },
+    },
+    { returnDocument: 'after' },
+  );
+
+  const updatedUser = result && typeof result === 'object' && 'value' in result
+    ? result.value
+    : result;
+  if (!updatedUser) {
+    throw new Error('user not found');
+  }
+
+  return toPublicUser(updatedUser);
+}
+
 module.exports = {
   createUser,
   getUserById,
   loginUser,
   normalizeDeckFromDocument,
   normalizeCardId,
+  normalizePlayerMetricsFromDocument,
+  recordBattleMetrics,
   updateUserDeck,
   normalizeUsername,
   normalizePassword,

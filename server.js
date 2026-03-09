@@ -44,6 +44,7 @@ const {
   getUserById,
   loginUser,
   updateUserDeck,
+  recordBattleMetrics,
 } = require('./shared/user/mongoStore');
 
 const PORT = process.env.PORT || 3000;
@@ -62,6 +63,14 @@ const diceStore = new Map();
 const dieRollerServer = new DieRollerServer();
 const phaseManagerServer = new PhaseManagerServer({
   catalogProvider: async () => listCatalogCards(),
+  onBattleMetrics: async ({ metricsByPlayer = {} } = {}) => {
+    const tasks = Object.entries(metricsByPlayer)
+      .filter(([playerId]) => typeof playerId === 'string' && !playerId.startsWith('npc-'))
+      .map(([playerId, metrics]) => recordBattleMetrics(playerId, metrics).catch(() => null));
+    if (tasks.length) {
+      await Promise.all(tasks);
+    }
+  },
 });
 const cardGameServer = new CardGameServer({
   cards: [

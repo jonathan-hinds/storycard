@@ -39,7 +39,10 @@ function createTabPlayerId() {
 }
 
 function getPhaseLabel(phase) {
-  return phase === 1 ? 'Decision' : 'Commit';
+  if (phase === 1) return 'Decision';
+  if (phase === 2) return 'Commit';
+  if (phase === 3) return 'Complete';
+  return 'Unknown';
 }
 
 export class PhaseManagerClient {
@@ -78,6 +81,7 @@ export class PhaseManagerClient {
     this.boundControlListeners = [];
     this.playedRemoteSpellResolutionIds = new Set();
     this.lastPlayedDotEventKey = null;
+    this.hasHandledMatchComplete = false;
     this.previewTuning = loadPreviewTuning();
     this.playerId = typeof this.options.playerId === 'string' && this.options.playerId.trim()
       ? this.options.playerId.trim()
@@ -1526,6 +1530,17 @@ export class PhaseManagerClient {
     }
   }
 
+  handleMatchCompleted(matchState) {
+    if (!matchState?.isComplete || this.hasHandledMatchComplete) return;
+    this.hasHandledMatchComplete = true;
+    if (typeof this.options.onMatchComplete === 'function') {
+      this.options.onMatchComplete({
+        matchId: matchState.id,
+        outcome: matchState.outcome || null,
+      });
+    }
+  }
+
   applyMatchmakingStatus(status) {
     const { matchmakingBtn, statusEl } = this.elements;
     this.updateQueueSummary(status);
@@ -1559,6 +1574,7 @@ export class PhaseManagerClient {
       const currentSerialized = JSON.stringify(this.match);
       if (nextSerialized !== currentSerialized) {
         this.match = nextMatch;
+        this.handleMatchCompleted(this.match);
         if (shouldRefreshScene) {
           this.renderMatch();
           this.playDotDamageEvents(this.match?.meta?.dotDamageEvents || []);
@@ -1570,6 +1586,7 @@ export class PhaseManagerClient {
           this.triggerRemoteSpellPlayback();
         }
       } else {
+        this.handleMatchCompleted(this.match);
         this.syncCardBuffStateFromMatch(this.match);
         this.playDotDamageEvents(this.match?.meta?.dotDamageEvents || []);
         this.setReadyLockState();
@@ -1586,6 +1603,7 @@ export class PhaseManagerClient {
     this.commitSequencePromise = null;
     this.playedRemoteSpellResolutionIds.clear();
     this.lastPlayedDotEventKey = null;
+    this.hasHandledMatchComplete = false;
     if (this.client) {
       this.client.destroy();
       this.client = null;

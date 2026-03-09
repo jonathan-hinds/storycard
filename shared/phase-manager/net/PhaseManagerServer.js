@@ -140,6 +140,7 @@ class PhaseManagerServer {
     this.options = {
       ...DEFAULT_OPTIONS,
       catalogProvider: typeof options.catalogProvider === 'function' ? options.catalogProvider : async () => [],
+      onBattleMetrics: typeof options.onBattleMetrics === 'function' ? options.onBattleMetrics : null,
       ...options,
     };
     this.phaseQueue = [];
@@ -156,6 +157,107 @@ class PhaseManagerServer {
     const index = this.phaseQueue.findIndex((entry) => entry.playerId === playerId);
     if (index !== -1) {
       this.phaseQueue.splice(index, 1);
+    }
+  }
+
+
+  createEmptyBattleMetrics() {
+    return {
+      totalGamesPlayed: 0,
+      totalWins: 0,
+      totalLosses: 0,
+      totalCreaturesKilled: 0,
+      totalCreaturesLost: 0,
+      totalSpellsPlayed: 0,
+    };
+  }
+
+  getMatchMetricsForPlayer(match, playerId) {
+    if (!match || !playerId) return this.createEmptyBattleMetrics();
+    if (!(match.metricsByPlayer instanceof Map)) {
+      match.metricsByPlayer = new Map();
+    }
+    if (!match.metricsByPlayer.has(playerId)) {
+      match.metricsByPlayer.set(playerId, this.createEmptyBattleMetrics());
+    }
+    return match.metricsByPlayer.get(playerId);
+  }
+
+  recordMatchMetric(match, playerId, metricKey, amount = 1) {
+    if (!match || !playerId || typeof metricKey !== 'string') return;
+    const metrics = this.getMatchMetricsForPlayer(match, playerId);
+    if (!(metricKey in metrics)) return;
+    const increment = Number.isFinite(Number(amount)) ? Math.max(0, Math.floor(Number(amount))) : 0;
+    if (increment < 1) return;
+    metrics[metricKey] += increment;
+  }
+
+  removeDefeatedCreaturesFromBoard(match, playerId) {
+    if (!match || !playerId) return [];
+    const playerState = match.cardsByPlayer.get(playerId);
+    if (!playerState || !Array.isArray(playerState.board) || !playerState.board.length) return [];
+
+    const defeated = [];
+    playerState.board = playerState.board.filter((card) => {
+      const currentHealth = Number(card?.catalogCard?.health);
+      if (Number.isFinite(currentHealth) && currentHealth <= 0) {
+        defeated.push(card);
+        return false;
+      }
+      return true;
+    });
+
+    if (defeated.length) {
+      playerState.discard.push(...defeated);
+    }
+
+    return defeated;
+  }
+
+  finalizeMatchIfGameOver(match) {
+    if (!match || match.phase === 3 || !Array.isArray(match.players)) return;
+
+    const defeatedPlayers = match.players.filter((playerId) => {
+      const initialCreatureCount = Number(match.initialCreatureCountByPlayer?.get?.(playerId));
+      if (!Number.isFinite(initialCreatureCount) || initialCreatureCount < 1) return false;
+      const metrics = this.getMatchMetricsForPlayer(match, playerId);
+      return Number(metrics.totalCreaturesLost) >= initialCreatureCount;
+    });
+
+    if (defeatedPlayers.length !== 1) return;
+
+    const loserId = defeatedPlayers[0];
+    const winnerId = match.players.find((playerId) => playerId !== loserId) || null;
+    if (!winnerId) return;
+
+    match.phase = 3;
+    match.phaseStartedAt = Date.now();
+    match.phaseEndsAt = match.phaseStartedAt;
+    match.completedAt = match.phaseStartedAt;
+    match.outcome = {
+      winnerId,
+      loserId,
+      completedAt: match.completedAt,
+    };
+
+    this.recordMatchMetric(match, winnerId, 'totalGamesPlayed', 1);
+    this.recordMatchMetric(match, winnerId, 'totalWins', 1);
+    this.recordMatchMetric(match, loserId, 'totalGamesPlayed', 1);
+    this.recordMatchMetric(match, loserId, 'totalLosses', 1);
+
+    if (typeof this.options.onBattleMetrics === 'function') {
+      const metricsPayload = {};
+      for (const playerId of match.players) {
+        metricsPayload[playerId] = { ...this.getMatchMetricsForPlayer(match, playerId) };
+      }
+      Promise.resolve(this.options.onBattleMetrics({
+        matchId: match.id,
+        mode: match.mode || 'matchmaking',
+        players: [...match.players],
+        winnerId,
+        loserId,
+        metricsByPlayer: metricsPayload,
+      })).catch(() => {});
     }
   }
 
@@ -1046,6 +1148,13 @@ class PhaseManagerServer {
       upkeep: this.getPlayerUpkeepValue(playerState),
       upkeepTotal: this.getPlayerUpkeepTotalValue(playerState),
       phase: match.phase,
+      isComplete: match.phase === 3,
+      outcome: match.outcome
+        ? {
+          ...match.outcome,
+          didPlayerWin: match.outcome.winnerId === playerId,
+        }
+        : null,
       youAreReady: match.readyPlayers.has(playerId),
       opponentIsReady: opponentId ? match.readyPlayers.has(opponentId) : false,
       players: {
@@ -1123,6 +1232,17 @@ class PhaseManagerServer {
         });
       });
     });
+
+    if (events.length) {
+      for (const playerId of match.players || []) {
+        const defeated = this.removeDefeatedCreaturesFromBoard(match, playerId);
+        if (!defeated.length) continue;
+        const opponentId = (match.players || []).find((id) => id !== playerId) || null;
+        if (opponentId) this.recordMatchMetric(match, opponentId, 'totalCreaturesKilled', defeated.length);
+        this.recordMatchMetric(match, playerId, 'totalCreaturesLost', defeated.length);
+      }
+      this.finalizeMatchIfGameOver(match);
+    }
 
     return events;
   }
@@ -1722,7 +1842,12 @@ class PhaseManagerServer {
     defenderCard.catalogCard.health = nextHealth;
 
     if (nextHealth <= 0) {
-      defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
+      const defeated = this.removeDefeatedCreaturesFromBoard(match, defenderId);
+      if (defeated.length) {
+        this.recordMatchMetric(match, casterId, 'totalCreaturesKilled', defeated.length);
+        this.recordMatchMetric(match, defenderId, 'totalCreaturesLost', defeated.length);
+      }
+      this.finalizeMatchIfGameOver(match);
     }
 
     return {
@@ -1781,7 +1906,15 @@ class PhaseManagerServer {
     attackerCard.catalogCard.health = nextHealth;
 
     if (nextHealth <= 0) {
-      attackerState.board = attackerState.board.filter((card) => card !== attackerCard);
+      const defeated = this.removeDefeatedCreaturesFromBoard(match, attackerId);
+      if (defeated.length) {
+        const defenderId = match.players.find((id) => id !== attackerId) || null;
+        if (defenderId) {
+          this.recordMatchMetric(match, defenderId, 'totalCreaturesKilled', defeated.length);
+        }
+        this.recordMatchMetric(match, attackerId, 'totalCreaturesLost', defeated.length);
+      }
+      this.finalizeMatchIfGameOver(match);
     }
 
     return {
@@ -1911,7 +2044,12 @@ class PhaseManagerServer {
             const nextHealth = defenderHealth - normalizedMarkBonus;
             defenderCard.catalogCard.health = nextHealth;
             if (nextHealth <= 0 && defenderState) {
-              defenderState.board = defenderState.board.filter((card) => card !== defenderCard);
+              const defeated = this.removeDefeatedCreaturesFromBoard(match, defenderId);
+              if (defeated.length) {
+                this.recordMatchMetric(match, attackerId, 'totalCreaturesKilled', defeated.length);
+                this.recordMatchMetric(match, defenderId, 'totalCreaturesLost', defeated.length);
+              }
+              this.finalizeMatchIfGameOver(match);
             }
             resolvedAttack.resolvedValue += normalizedMarkBonus;
             resolvedAttack.resolvedDamage += normalizedMarkBonus;
@@ -2174,7 +2312,11 @@ class PhaseManagerServer {
       match.commitAnimationCompletedPlayers.add(npcPlayerId);
     }
     if (match.commitAnimationCompletedPlayers.size === match.players.length) {
-      this.advanceMatchToDecisionPhase(match);
+      if (match.phase === 3) {
+        // Battle already ended during commit resolution.
+      } else {
+        this.advanceMatchToDecisionPhase(match);
+      }
     }
 
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
@@ -2473,130 +2615,97 @@ class PhaseManagerServer {
       ? options.deckCardIds.filter((cardId) => typeof cardId === 'string' && cardId.trim()).map((cardId) => cardId.trim())
       : [];
     const normalizedOpponentType = typeof options.opponentType === 'string' ? options.opponentType.trim().toLowerCase() : '';
+    const normalizedMode = typeof options.mode === 'string' && options.mode.trim() ? options.mode.trim().toLowerCase() : 'matchmaking';
     const useNpcOpponent = normalizedOpponentType === 'npc';
+
+    const createMatchState = async (players, preferredDeckByPlayer) => {
+      const cardsByPlayer = new Map();
+      let catalogCards = [];
+      try {
+        const loadedCards = await this.options.catalogProvider();
+        catalogCards = Array.isArray(loadedCards) ? loadedCards : [];
+      } catch (error) {
+        catalogCards = [];
+      }
+
+      players.forEach((id) => {
+        const preferredDeck = preferredDeckByPlayer.get(id) || [];
+        const cards = this.buildDeckFromCatalog(id, catalogCards, preferredDeck);
+        const openingZones = this.buildOpeningZones(cards);
+        cardsByPlayer.set(id, {
+          allCards: cards,
+          hand: openingZones.hand,
+          board: [],
+          discard: [],
+          deck: openingZones.deck,
+          upkeepTotal: 1,
+          upkeep: 1,
+          spentUpkeepOnSpellsThisTurn: 0,
+        });
+      });
+
+      const metricsByPlayer = new Map();
+      const initialCreatureCountByPlayer = new Map();
+      players.forEach((id) => {
+        metricsByPlayer.set(id, this.createEmptyBattleMetrics());
+        const playerState = cardsByPlayer.get(id);
+        const creatureCount = (playerState?.allCards || []).filter((card) => card?.catalogCard?.cardKind === 'Creature').length;
+        initialCreatureCountByPlayer.set(id, creatureCount);
+      });
+
+      return {
+        id: `match-${randomUUID().slice(0, 8)}`,
+        players,
+        cardsByPlayer,
+        metricsByPlayer,
+        initialCreatureCountByPlayer,
+        mode: normalizedMode || 'matchmaking',
+        turnNumber: 1,
+        phase: 1,
+        phaseStartedAt: Date.now(),
+        phaseEndsAt: null,
+        readyPlayers: new Set(),
+        lastDrawnCardsByPlayer: new Map(),
+        pendingCommitAttacksByPlayer: new Map(),
+        commitRollsByAttackId: new Map(),
+        commitExecutionByAttackId: new Map(),
+        executedCommitAttackIds: [],
+        commitCompletedPlayers: new Set(),
+        commitAnimationCompletedPlayers: new Set(),
+        commitAllRolledAt: null,
+        lastDotDamageEvents: [],
+        activeSpellResolution: null,
+        npcSpellCardsCastThisTurn: new Set(),
+        createdAt: Date.now(),
+      };
+    };
 
     const opponentEntry = useNpcOpponent ? null : this.phaseQueue.shift();
     if (opponentEntry && opponentEntry.playerId && opponentEntry.playerId !== playerId) {
       const opponentId = opponentEntry.playerId;
-      const matchId = `match-${randomUUID().slice(0, 8)}`;
       const players = [opponentId, playerId];
       const preferredDeckByPlayer = new Map([
         [opponentId, Array.isArray(opponentEntry.deckCardIds) ? opponentEntry.deckCardIds : []],
         [playerId, preferredDeckCardIds],
       ]);
-      const cardsByPlayer = new Map();
-      let catalogCards = [];
-
-      try {
-        const loadedCards = await this.options.catalogProvider();
-        catalogCards = Array.isArray(loadedCards) ? loadedCards : [];
-      } catch (error) {
-        catalogCards = [];
-      }
-
-      players.forEach((id) => {
-        const preferredDeck = preferredDeckByPlayer.get(id) || [];
-        const cards = this.buildDeckFromCatalog(id, catalogCards, preferredDeck);
-        const openingZones = this.buildOpeningZones(cards);
-        cardsByPlayer.set(id, {
-          allCards: cards,
-          hand: openingZones.hand,
-          board: [],
-          discard: [],
-          deck: openingZones.deck,
-          upkeepTotal: 1,
-          upkeep: 1,
-          spentUpkeepOnSpellsThisTurn: 0,
-        });
-      });
-
-      const match = {
-        id: matchId,
-        players,
-        cardsByPlayer,
-        turnNumber: 1,
-        phase: 1,
-        phaseStartedAt: Date.now(),
-        phaseEndsAt: null,
-        readyPlayers: new Set(),
-        lastDrawnCardsByPlayer: new Map(),
-        pendingCommitAttacksByPlayer: new Map(),
-        commitRollsByAttackId: new Map(),
-        commitExecutionByAttackId: new Map(),
-        executedCommitAttackIds: [],
-        commitCompletedPlayers: new Set(),
-        commitAnimationCompletedPlayers: new Set(),
-        commitAllRolledAt: null,
-        lastDotDamageEvents: [],
-        activeSpellResolution: null,
-        npcSpellCardsCastThisTurn: new Set(),
-        createdAt: Date.now(),
-      };
-      this.phaseMatches.set(matchId, match);
-      this.phaseMatchmakingState.set(opponentId, { status: 'matched', matchId });
-      this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
+      const match = await createMatchState(players, preferredDeckByPlayer);
+      this.phaseMatches.set(match.id, match);
+      this.phaseMatchmakingState.set(opponentId, { status: 'matched', matchId: match.id });
+      this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId: match.id });
       return this.getPlayerPhaseStatus(playerId);
     }
 
     if (useNpcOpponent) {
       const npcPlayerId = `npc-${randomUUID().slice(0, 8)}`;
-      const matchId = `match-${randomUUID().slice(0, 8)}`;
       const players = [npcPlayerId, playerId];
       const preferredDeckByPlayer = new Map([
         [npcPlayerId, []],
         [playerId, preferredDeckCardIds],
       ]);
-      const cardsByPlayer = new Map();
-      let catalogCards = [];
-
-      try {
-        const loadedCards = await this.options.catalogProvider();
-        catalogCards = Array.isArray(loadedCards) ? loadedCards : [];
-      } catch (error) {
-        catalogCards = [];
-      }
-
-      players.forEach((id) => {
-        const preferredDeck = preferredDeckByPlayer.get(id) || [];
-        const cards = this.buildDeckFromCatalog(id, catalogCards, preferredDeck);
-        const openingZones = this.buildOpeningZones(cards);
-        cardsByPlayer.set(id, {
-          allCards: cards,
-          hand: openingZones.hand,
-          board: [],
-          discard: [],
-          deck: openingZones.deck,
-          upkeepTotal: 1,
-          upkeep: 1,
-          spentUpkeepOnSpellsThisTurn: 0,
-        });
-      });
-
-      const match = {
-        id: matchId,
-        players,
-        cardsByPlayer,
-        turnNumber: 1,
-        phase: 1,
-        phaseStartedAt: Date.now(),
-        phaseEndsAt: null,
-        readyPlayers: new Set(),
-        lastDrawnCardsByPlayer: new Map(),
-        pendingCommitAttacksByPlayer: new Map(),
-        commitRollsByAttackId: new Map(),
-        commitExecutionByAttackId: new Map(),
-        executedCommitAttackIds: [],
-        commitCompletedPlayers: new Set(),
-        commitAnimationCompletedPlayers: new Set(),
-        commitAllRolledAt: null,
-        lastDotDamageEvents: [],
-        activeSpellResolution: null,
-        npcSpellCardsCastThisTurn: new Set(),
-        createdAt: Date.now(),
-      };
-      this.phaseMatches.set(matchId, match);
-      this.phaseMatchmakingState.set(npcPlayerId, { status: 'matched', matchId });
-      this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId });
+      const match = await createMatchState(players, preferredDeckByPlayer);
+      this.phaseMatches.set(match.id, match);
+      this.phaseMatchmakingState.set(npcPlayerId, { status: 'matched', matchId: match.id });
+      this.phaseMatchmakingState.set(playerId, { status: 'matched', matchId: match.id });
       this.initializeNpcAutomationForMatch(match, { withStartDelay: true });
       this.autoPlayNpcDecisionPhase(match);
       return this.getPlayerPhaseStatus(playerId);
@@ -2757,6 +2866,7 @@ class PhaseManagerServer {
 
     playerState.upkeep = Math.max(0, availableUpkeep - upkeepCost);
     playerState.spentUpkeepOnSpellsThisTurn = this.getPlayerSpellUpkeepSpentValue(playerState) + upkeepCost;
+    this.recordMatchMetric(match, playerId, 'totalSpellsPlayed', 1);
 
     const parsedDieSides = Number.parseInt(dieSides, 10);
     const spellId = `spell-${randomUUID().slice(0, 8)}`;
@@ -2994,6 +3104,7 @@ class PhaseManagerServer {
     }
 
     active.completedAt = Date.now();
+    this.finalizeMatchIfGameOver(match);
     return { payload: this.getPlayerPhaseStatus(playerId), statusCode: 200 };
   }
 }
