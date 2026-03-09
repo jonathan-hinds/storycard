@@ -2094,6 +2094,10 @@ export class CardGameClient {
       card.userData.fireStacks = Number.isInteger(cfg.fireStacks) ? cfg.fireStacks : 0;
       card.userData.frostbiteTurnsRemaining = Number.isInteger(cfg.frostbiteTurnsRemaining) ? cfg.frostbiteTurnsRemaining : 0;
       card.userData.frostbiteStacks = Number.isInteger(cfg.frostbiteStacks) ? cfg.frostbiteStacks : 0;
+      card.userData.focalMarkTurnsRemaining = Number.isInteger(cfg.focalMarkTurnsRemaining) ? cfg.focalMarkTurnsRemaining : 0;
+      card.userData.focalMarkBonusDamage = Number.isFinite(Number(cfg.focalMarkBonusDamage))
+        ? Math.max(0, Math.floor(Number(cfg.focalMarkBonusDamage)))
+        : 0;
       card.userData.disruptionDebuffTurnsRemaining = Number.isInteger(cfg.disruptionDebuffTurnsRemaining)
         ? cfg.disruptionDebuffTurnsRemaining
         : 0;
