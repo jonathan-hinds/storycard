@@ -75,6 +75,7 @@ const BUFF_SILENCE = 'silence';
 const BUFF_POISON = 'poison';
 const BUFF_FIRE = 'fire';
 const BUFF_FROSTBITE = 'frostbite';
+const BUFF_FOCAL_MARK = 'focal_mark';
 const BUFF_DISRUPTION = 'disruption';
 
 export class CardGameClient {
@@ -251,6 +252,9 @@ export class CardGameClient {
     if (Number.isInteger(card?.userData?.frostbiteTurnsRemaining) && card.userData.frostbiteTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FROSTBITE)) {
       activeBuffs.push(BUFF_FROSTBITE);
     }
+    if (Number.isInteger(card?.userData?.focalMarkTurnsRemaining) && card.userData.focalMarkTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FOCAL_MARK)) {
+      activeBuffs.push(BUFF_FOCAL_MARK);
+    }
     if (Number.isInteger(card?.userData?.disruptionDebuffTurnsRemaining) && card.userData.disruptionDebuffTurnsRemaining > 0 && !activeBuffs.includes(BUFF_DISRUPTION)) {
       activeBuffs.push(BUFF_DISRUPTION);
     }
@@ -403,6 +407,9 @@ export class CardGameClient {
     }
     if (buffId === BUFF_FROSTBITE) {
       return Number.isInteger(card.userData.frostbiteTurnsRemaining) ? Math.max(0, card.userData.frostbiteTurnsRemaining) : 0;
+    }
+    if (buffId === BUFF_FOCAL_MARK) {
+      return Number.isInteger(card.userData.focalMarkTurnsRemaining) ? Math.max(0, card.userData.focalMarkTurnsRemaining) : 0;
     }
     if (buffId === BUFF_DISRUPTION) {
       return Number.isInteger(card.userData.disruptionDebuffTurnsRemaining) ? Math.max(0, card.userData.disruptionDebuffTurnsRemaining) : 0;
@@ -2651,7 +2658,12 @@ export class CardGameClient {
             ? Math.max(0, animation.buffDurationTurns)
             : 0;
           const shouldApplyBuff = buffDuration > 0
-            && (animation.buffId === BUFF_TAUNT || animation.buffId === BUFF_SILENCE || animation.buffId === BUFF_POISON || animation.buffId === BUFF_FIRE || animation.buffId === BUFF_FROSTBITE);
+            && (animation.buffId === BUFF_TAUNT
+              || animation.buffId === BUFF_SILENCE
+              || animation.buffId === BUFF_POISON
+              || animation.buffId === BUFF_FIRE
+              || animation.buffId === BUFF_FROSTBITE
+              || animation.buffId === BUFF_FOCAL_MARK);
           if (shouldApplyBuff) {
             const buffRecipient = animation.buffTarget === 'self'
               ? card
@@ -2677,6 +2689,9 @@ export class CardGameClient {
                 buffRecipient.userData.frostbiteTurnsRemaining = buffDuration;
                 const currentStacks = Number.isInteger(buffRecipient.userData.frostbiteStacks) ? buffRecipient.userData.frostbiteStacks : 0;
                 buffRecipient.userData.frostbiteStacks = currentStacks > 0 ? currentStacks + 1 : 1;
+              }
+              if (animation.buffId === BUFF_FOCAL_MARK) {
+                buffRecipient.userData.focalMarkTurnsRemaining = buffDuration;
               }
               this.updateCardBuffBadges(buffRecipient);
             }
