@@ -20,6 +20,32 @@ function getLocalStorage() {
 }
 const backButton = document.getElementById('user-match-back-button');
 let hasRequestedExit = false;
+let hasPlayedBattleCloseout = false;
+
+function playBattleCloseoutTransition({ didPlayerWin = false } = {}) {
+  if (hasPlayedBattleCloseout) return;
+  hasPlayedBattleCloseout = true;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'battle-closeout-overlay';
+  overlay.innerHTML = `
+    <div class="battle-closeout-center">
+      <p class="battle-closeout-label">${didPlayerWin ? 'VICTORY!' : 'DEFEAT!'}</p>
+      <p class="battle-closeout-sub">Returning to home…</p>
+    </div>
+    <div class="battle-closeout-shutter battle-closeout-shutter-top"></div>
+    <div class="battle-closeout-shutter battle-closeout-shutter-bottom"></div>
+  `;
+  document.body.appendChild(overlay);
+
+  window.setTimeout(() => {
+    overlay.classList.add('is-active');
+  }, 30);
+
+  window.setTimeout(() => {
+    window.location.href = '/public/projects/user/home.html';
+  }, 2200);
+}
 
 function loadSession() {
   try {
@@ -74,6 +100,10 @@ if (!session) {
       playerId,
       matchmakingPayload: {
         deckCardIds: Array.isArray(session.user.deck?.cards) ? session.user.deck.cards : [],
+      },
+      onMatchComplete: ({ outcome } = {}) => {
+        requestMatchExit(playerId);
+        playBattleCloseoutTransition({ didPlayerWin: Boolean(outcome?.didPlayerWin) });
       },
       cardGameOptions: {
         viewportHeightOffset: 0,
