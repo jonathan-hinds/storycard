@@ -385,3 +385,25 @@ console.log('phase manager spell effects checks passed');
   server.advanceMatchToDecisionPhase(match);
   assert.equal(match.cardsByPlayer.get('p2').board[0].silenceTurnsRemaining, 1, 'silence debuff duration should decrement at the start of the next decision phase');
 }
+
+
+{
+  const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
+    targetHealth: 20,
+    rollOutcome: 7,
+    ability: {
+      effectId: 'damage_enemy',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
+
+  defenderCard.focalMarkTurnsRemaining = 2;
+  defenderCard.focalMarkBonusDamage = 8;
+
+  const result = server.completeSpellResolution({ playerId, spellId });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(defenderCard.catalogCard.health, 5, 'focal mark should add bonus damage on top of spell damage (7 + 8)');
+  assert.equal(match.activeSpellResolution.resolvedDamage, 15, 'resolved spell damage metadata should include focal mark bonus damage');
+}

@@ -1745,6 +1745,50 @@ class PhaseManagerServer {
     return friendlyBoardCards[selectedIndex] || null;
   }
 
+
+  applyFocalMarkBonusDamage({
+    match,
+    casterId,
+    targetSide,
+    targetSlotIndex,
+    baseDamageApplied,
+  }) {
+    const normalizedBaseDamage = Number.isFinite(baseDamageApplied)
+      ? Math.max(0, Math.floor(baseDamageApplied))
+      : 0;
+    if (!match || !casterId || normalizedBaseDamage <= 0 || targetSide !== 'opponent' || !Number.isInteger(targetSlotIndex)) {
+      return 0;
+    }
+
+    const defenderId = match.players.find((id) => id !== casterId);
+    const defenderState = defenderId ? match.cardsByPlayer.get(defenderId) : null;
+    const defenderCard = defenderState?.board?.find((card) => card.slotIndex === targetSlotIndex) || null;
+    const markDuration = Number.isInteger(defenderCard?.focalMarkTurnsRemaining) ? defenderCard.focalMarkTurnsRemaining : 0;
+    const markBonus = Number(defenderCard?.focalMarkBonusDamage);
+    const normalizedMarkBonus = Number.isFinite(markBonus) ? Math.max(0, Math.floor(markBonus)) : 0;
+    if (markDuration <= 0 || normalizedMarkBonus <= 0 || !defenderCard?.catalogCard) {
+      return 0;
+    }
+
+    const defenderHealth = Number(defenderCard.catalogCard.health);
+    if (!Number.isFinite(defenderHealth)) {
+      return 0;
+    }
+
+    const nextHealth = defenderHealth - normalizedMarkBonus;
+    defenderCard.catalogCard.health = nextHealth;
+    if (nextHealth <= 0 && defenderState) {
+      const defeated = this.removeDefeatedCreaturesFromBoard(match, defenderId);
+      if (defeated.length) {
+        this.recordMatchMetric(match, casterId, 'totalCreaturesKilled', defeated.length);
+        this.recordMatchMetric(match, defenderId, 'totalCreaturesLost', defeated.length);
+      }
+      this.finalizeMatchIfGameOver(match);
+    }
+
+    return normalizedMarkBonus;
+  }
+
   applyResolvedAbilityEffect({
     match,
     casterId,
@@ -2029,32 +2073,16 @@ class PhaseManagerServer {
       resolvedAttack.resolvedLifeStealHealing = resolvedAttack.effectId === 'life_steal' ? executedResolvedValue : 0;
 
       if (executionResult.executed !== false
-        && (resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback')
-        && tauntAdjustedAttack.targetSide === 'opponent'
-        && Number.isInteger(tauntAdjustedAttack.targetSlotIndex)) {
-        const defenderId = match.players.find((id) => id !== attackerId);
-        const defenderState = defenderId ? match.cardsByPlayer.get(defenderId) : null;
-        const defenderCard = defenderState?.board?.find((card) => card.slotIndex === tauntAdjustedAttack.targetSlotIndex) || null;
-        const markDuration = Number.isInteger(defenderCard?.focalMarkTurnsRemaining) ? defenderCard.focalMarkTurnsRemaining : 0;
-        const markBonus = Number(defenderCard?.focalMarkBonusDamage);
-        const normalizedMarkBonus = Number.isFinite(markBonus) ? Math.max(0, Math.floor(markBonus)) : 0;
-        if (markDuration > 0 && normalizedMarkBonus > 0 && defenderCard?.catalogCard) {
-          const defenderHealth = Number(defenderCard.catalogCard.health);
-          if (Number.isFinite(defenderHealth)) {
-            const nextHealth = defenderHealth - normalizedMarkBonus;
-            defenderCard.catalogCard.health = nextHealth;
-            if (nextHealth <= 0 && defenderState) {
-              const defeated = this.removeDefeatedCreaturesFromBoard(match, defenderId);
-              if (defeated.length) {
-                this.recordMatchMetric(match, attackerId, 'totalCreaturesKilled', defeated.length);
-                this.recordMatchMetric(match, defenderId, 'totalCreaturesLost', defeated.length);
-              }
-              this.finalizeMatchIfGameOver(match);
-            }
-            resolvedAttack.resolvedValue += normalizedMarkBonus;
-            resolvedAttack.resolvedDamage += normalizedMarkBonus;
-          }
-        }
+        && (resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback')) {
+        const focalMarkBonusDamage = this.applyFocalMarkBonusDamage({
+          match,
+          casterId: attackerId,
+          targetSide: tauntAdjustedAttack.targetSide,
+          targetSlotIndex: tauntAdjustedAttack.targetSlotIndex,
+          baseDamageApplied: resolvedAttack.resolvedDamage,
+        });
+        resolvedAttack.resolvedValue += focalMarkBonusDamage;
+        resolvedAttack.resolvedDamage += focalMarkBonusDamage;
       }
 
       const buffResult = executionResult.executed === false
@@ -3053,8 +3081,21 @@ class PhaseManagerServer {
     active.disruptionAdjustedOutcome = Number.isFinite(spellDisruptionResult?.disruptionAdjustedOutcome)
       ? spellDisruptionResult.disruptionAdjustedOutcome
       : null;
-    active.resolvedDamage = (effectId === 'damage_enemy' || effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback') && executionResult.executed !== false ? resolvedValue : 0;
-    active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false ? resolvedValue : 0;
+    active.resolvedDamage = (effectId === 'damage_enemy' || effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback') && executionResult.executed !== false
+      ? (Number.isFinite(executionResult.appliedValue) ? executionResult.appliedValue : resolvedValue)
+      : 0;
+    if (active.resolvedDamage > 0) {
+      active.resolvedDamage += this.applyFocalMarkBonusDamage({
+        match,
+        casterId: playerId,
+        targetSide: active.targetSide,
+        targetSlotIndex: active.targetSlotIndex,
+        baseDamageApplied: active.resolvedDamage,
+      });
+    }
+    active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false
+      ? (Number.isFinite(executionResult.appliedValue) ? executionResult.appliedValue : resolvedValue)
+      : 0;
     if (effectId === 'life_steal' && executionResult.executed !== false) {
       const casterState = match.cardsByPlayer.get(playerId);
       const selectedSlotIndex = Number.isInteger(active.lifeStealHealingTargetSlotIndex)
