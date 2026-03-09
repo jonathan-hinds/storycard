@@ -1274,6 +1274,7 @@ export class PhaseManagerClient {
           onSpellRollResolved: ({ spellId, rollOutcome, rollData }) => this.submitSpellRoll({ spellId, rollOutcome, rollData }),
           onSpellResolutionFinished: ({ spellId }) => this.completeSpellResolution({ spellId }),
           getSpellResolutionSnapshot: () => this.getActiveSpellResolution(),
+          getAvailableUpkeep: () => this.match?.upkeep,
           previewTuning: this.previewTuning,
           cardAnimationHooks: [
             createDeckToHandDealHook({

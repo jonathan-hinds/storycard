@@ -98,6 +98,7 @@ export class CardGameClient {
     this.onSpellRollResolved = options.onSpellRollResolved;
     this.onSpellResolutionFinished = options.onSpellResolutionFinished;
     this.getSpellResolutionSnapshot = options.getSpellResolutionSnapshot;
+    this.getAvailableUpkeep = options.getAvailableUpkeep;
     this.cardAnimationHooks = Array.isArray(options.cardAnimationHooks) ? options.cardAnimationHooks : [];
     this.net = new CardGameHttpClient(options.net || {});
 
@@ -1090,6 +1091,19 @@ export class CardGameClient {
     return resolveCardKind(card?.userData?.catalogCard?.cardKind) === 'Spell';
   }
 
+  getAbilityUpkeepCost(ability) {
+    const parsedCost = Number.parseInt(ability?.cost, 10);
+    if (!Number.isFinite(parsedCost)) return 0;
+    return Math.max(0, parsedCost);
+  }
+
+  canAffordAbility(ability) {
+    if (typeof this.getAvailableUpkeep !== 'function') return true;
+    const availableUpkeep = Number(this.getAvailableUpkeep());
+    if (!Number.isFinite(availableUpkeep)) return true;
+    return this.getAbilityUpkeepCost(ability) <= Math.max(0, Math.floor(availableUpkeep));
+  }
+
   canInteractWithCardAbilities(card) {
     if (!card || this.options?.interactionLocked || this.state.spellResolutionInProgress) return false;
     if (this.isSpellCard(card)) {
@@ -1102,6 +1116,10 @@ export class CardGameClient {
     const card = this.state.activeCard;
     if (!card || this.state.mode !== 'preview') return;
     if (!this.canInteractWithCardAbilities(card)) return;
+    if (!this.canAffordAbility(ability)) {
+      this.setStatus(`Not enough upkeep to use ${ability?.name || `Ability ${index + 1}`}.`);
+      return;
+    }
     const targetType = this.getAbilityTargetType(ability);
     card.userData.selectedAbilityIndex = index;
     this.refreshCardFace(card);
@@ -1515,6 +1533,11 @@ export class CardGameClient {
         spellResolutionId = response?.id || null;
       } catch (error) {
         this.setStatus(`Spell start sync failed: ${error.message}`);
+        this.state.pendingAbilitySelection = null;
+        this.clearHighlights();
+        if (this.state.activeCard === card && (this.state.mode === 'preview' || this.state.mode === 'preview-return')) {
+          this.clearActiveCard({ restore: true, preserveSelectedAbility: false });
+        }
         return;
       }
     }
