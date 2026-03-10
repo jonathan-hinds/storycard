@@ -1195,7 +1195,7 @@ export class PhaseManagerClient {
 
     overlayEl.hidden = true;
     overlayEl.style.pointerEvents = 'auto';
-    if (this.match.youAreReady && this.match.phase !== 2) {
+    if (this.match.phase === 1 && this.match.youAreReady) {
       overlayEl.hidden = false;
       overlayEl.textContent = 'Waiting for opponent to ready…';
     }
@@ -1342,7 +1342,9 @@ export class PhaseManagerClient {
       ? (this.match.youAreReady
         ? 'You are readied up. Waiting for opponent to ready…'
         : 'Decision phase: click/tap a ready board card to preview it, choose an ability, then choose a valid target and click Ready Up.')
-      : 'Commit phase: roll each die overlay to resolve attacks.';
+      : (this.match.phase === 2
+        ? 'Commit phase: roll each die overlay to resolve attacks.'
+        : 'Match complete.');
 
     this.setReadyLockState();
     this.updateSummaryPanels();
