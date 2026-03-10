@@ -208,6 +208,9 @@ class PhaseManagerServer {
     });
 
     if (defeated.length) {
+      if (!Array.isArray(playerState.discard)) {
+        playerState.discard = [];
+      }
       playerState.discard.push(...defeated);
     }
 
@@ -1218,31 +1221,27 @@ class PhaseManagerServer {
 
         if (totalDamage < 1) return;
 
-        const currentHealth = Number(card?.catalogCard?.health);
-        if (!Number.isFinite(currentHealth)) return;
-        const nextHealth = currentHealth - totalDamage;
-        card.catalogCard.health = nextHealth;
+        const damageResult = this.applyDamageToCard({
+          match,
+          targetPlayerId: playerId,
+          targetSlotIndex: card.slotIndex,
+          damage: totalDamage,
+          sourcePlayerId: null,
+          applyFocalMarkBonus: true,
+        });
+        if (damageResult.executed === false) return;
         events.push({
           playerId,
           cardId: card.id,
           slotIndex: Number.isInteger(card.slotIndex) ? card.slotIndex : null,
-          damage: totalDamage,
+          damage: Number.isFinite(damageResult.totalDamageApplied) ? damageResult.totalDamageApplied : totalDamage,
+          baseDamage: totalDamage,
+          focalMarkBonusDamage: Number.isFinite(damageResult.focalMarkBonusDamage) ? damageResult.focalMarkBonusDamage : 0,
           appliedDebuffs,
-          resultingHealth: nextHealth,
+          resultingHealth: damageResult.resultingHealth,
         });
       });
     });
-
-    if (events.length) {
-      for (const playerId of match.players || []) {
-        const defeated = this.removeDefeatedCreaturesFromBoard(match, playerId);
-        if (!defeated.length) continue;
-        const opponentId = (match.players || []).find((id) => id !== playerId) || null;
-        if (opponentId) this.recordMatchMetric(match, opponentId, 'totalCreaturesKilled', defeated.length);
-        this.recordMatchMetric(match, playerId, 'totalCreaturesLost', defeated.length);
-      }
-      this.finalizeMatchIfGameOver(match);
-    }
 
     return events;
   }
@@ -1746,47 +1745,61 @@ class PhaseManagerServer {
   }
 
 
-  applyFocalMarkBonusDamage({
+  applyDamageToCard({
     match,
-    casterId,
-    targetSide,
+    targetPlayerId,
     targetSlotIndex,
-    baseDamageApplied,
+    damage,
+    sourcePlayerId = null,
+    applyFocalMarkBonus = true,
   }) {
-    const normalizedBaseDamage = Number.isFinite(baseDamageApplied)
-      ? Math.max(0, Math.floor(baseDamageApplied))
+    const normalizedDamage = Number.isFinite(damage)
+      ? Math.max(0, Math.floor(damage))
       : 0;
-    if (!match || !casterId || normalizedBaseDamage <= 0 || targetSide !== 'opponent' || !Number.isInteger(targetSlotIndex)) {
-      return 0;
+    if (!match || !targetPlayerId || !Number.isInteger(targetSlotIndex)) {
+      return { executed: false, reason: 'target_missing', appliedValue: 0, focalMarkBonusDamage: 0, totalDamageApplied: 0 };
+    }
+    if (normalizedDamage < 1) {
+      return { executed: true, reason: 'no_value', appliedValue: 0, focalMarkBonusDamage: 0, totalDamageApplied: 0 };
     }
 
-    const defenderId = match.players.find((id) => id !== casterId);
-    const defenderState = defenderId ? match.cardsByPlayer.get(defenderId) : null;
-    const defenderCard = defenderState?.board?.find((card) => card.slotIndex === targetSlotIndex) || null;
-    const markDuration = Number.isInteger(defenderCard?.focalMarkTurnsRemaining) ? defenderCard.focalMarkTurnsRemaining : 0;
-    const markBonus = Number(defenderCard?.focalMarkBonusDamage);
-    const normalizedMarkBonus = Number.isFinite(markBonus) ? Math.max(0, Math.floor(markBonus)) : 0;
-    if (markDuration <= 0 || normalizedMarkBonus <= 0 || !defenderCard?.catalogCard) {
-      return 0;
+    const targetState = match.cardsByPlayer.get(targetPlayerId);
+    const targetCard = targetState?.board?.find((card) => card.slotIndex === targetSlotIndex) || null;
+    const currentHealth = Number(targetCard?.catalogCard?.health);
+    if (!targetCard?.catalogCard || !Number.isFinite(currentHealth)) {
+      return { executed: false, reason: 'target_invalid', appliedValue: 0, focalMarkBonusDamage: 0, totalDamageApplied: 0 };
     }
 
-    const defenderHealth = Number(defenderCard.catalogCard.health);
-    if (!Number.isFinite(defenderHealth)) {
-      return 0;
-    }
+    const markDuration = Number.isInteger(targetCard.focalMarkTurnsRemaining) ? targetCard.focalMarkTurnsRemaining : 0;
+    const markBonus = Number.isFinite(targetCard.focalMarkBonusDamage)
+      ? Math.max(0, Math.floor(targetCard.focalMarkBonusDamage))
+      : 0;
+    const focalMarkBonusDamage = applyFocalMarkBonus && markDuration > 0 && markBonus > 0
+      ? markBonus
+      : 0;
+    const totalDamageApplied = normalizedDamage + focalMarkBonusDamage;
+    const nextHealth = currentHealth - totalDamageApplied;
+    targetCard.catalogCard.health = nextHealth;
 
-    const nextHealth = defenderHealth - normalizedMarkBonus;
-    defenderCard.catalogCard.health = nextHealth;
-    if (nextHealth <= 0 && defenderState) {
-      const defeated = this.removeDefeatedCreaturesFromBoard(match, defenderId);
+    if (nextHealth <= 0) {
+      const defeated = this.removeDefeatedCreaturesFromBoard(match, targetPlayerId);
       if (defeated.length) {
-        this.recordMatchMetric(match, casterId, 'totalCreaturesKilled', defeated.length);
-        this.recordMatchMetric(match, defenderId, 'totalCreaturesLost', defeated.length);
+        if (sourcePlayerId) {
+          this.recordMatchMetric(match, sourcePlayerId, 'totalCreaturesKilled', defeated.length);
+        }
+        this.recordMatchMetric(match, targetPlayerId, 'totalCreaturesLost', defeated.length);
       }
       this.finalizeMatchIfGameOver(match);
     }
 
-    return normalizedMarkBonus;
+    return {
+      executed: true,
+      reason: 'effect_applied',
+      appliedValue: normalizedDamage,
+      focalMarkBonusDamage,
+      totalDamageApplied,
+      resultingHealth: nextHealth,
+    };
   }
 
   applyResolvedAbilityEffect({
@@ -1875,29 +1888,31 @@ class PhaseManagerServer {
       }
     }
 
+    if (effectId === 'damage_enemy' || effectId === 'life_steal' || effectId === 'disruption') {
+      const damageResult = this.applyDamageToCard({
+        match,
+        targetPlayerId: defenderId,
+        targetSlotIndex,
+        damage: adjustedResolvedValue,
+        sourcePlayerId: casterId,
+        applyFocalMarkBonus: true,
+      });
+      return {
+        ...damageResult,
+        reason: effectId === 'disruption' ? 'disruption_damage_fallback' : damageResult.reason,
+      };
+    }
+
     const currentHealth = Number(defenderCard.catalogCard.health);
     if (!Number.isFinite(currentHealth)) {
       return { executed: false, reason: 'target_invalid' };
     }
-
-    const nextHealth = (effectId === 'damage_enemy' || effectId === 'life_steal' || effectId === 'disruption')
-      ? currentHealth - adjustedResolvedValue
-      : currentHealth + adjustedResolvedValue;
-    defenderCard.catalogCard.health = nextHealth;
-
-    if (nextHealth <= 0) {
-      const defeated = this.removeDefeatedCreaturesFromBoard(match, defenderId);
-      if (defeated.length) {
-        this.recordMatchMetric(match, casterId, 'totalCreaturesKilled', defeated.length);
-        this.recordMatchMetric(match, defenderId, 'totalCreaturesLost', defeated.length);
-      }
-      this.finalizeMatchIfGameOver(match);
-    }
+    defenderCard.catalogCard.health = currentHealth + adjustedResolvedValue;
 
     return {
       executed: true,
       appliedValue: adjustedResolvedValue,
-      reason: effectId === 'disruption' ? 'disruption_damage_fallback' : 'effect_applied',
+      reason: 'effect_applied',
     };
   }
 
@@ -2074,15 +2089,10 @@ class PhaseManagerServer {
 
       if (executionResult.executed !== false
         && (resolvedAttack.effectId === 'damage_enemy' || resolvedAttack.effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback')) {
-        const focalMarkBonusDamage = this.applyFocalMarkBonusDamage({
-          match,
-          casterId: attackerId,
-          targetSide: tauntAdjustedAttack.targetSide,
-          targetSlotIndex: tauntAdjustedAttack.targetSlotIndex,
-          baseDamageApplied: resolvedAttack.resolvedDamage,
-        });
-        resolvedAttack.resolvedValue += focalMarkBonusDamage;
-        resolvedAttack.resolvedDamage += focalMarkBonusDamage;
+        resolvedAttack.resolvedValue = Number.isFinite(executionResult.totalDamageApplied)
+          ? executionResult.totalDamageApplied
+          : resolvedAttack.resolvedValue;
+        resolvedAttack.resolvedDamage = resolvedAttack.resolvedValue;
       }
 
       const buffResult = executionResult.executed === false
@@ -3082,17 +3092,10 @@ class PhaseManagerServer {
       ? spellDisruptionResult.disruptionAdjustedOutcome
       : null;
     active.resolvedDamage = (effectId === 'damage_enemy' || effectId === 'life_steal' || executionResult.reason === 'disruption_damage_fallback') && executionResult.executed !== false
-      ? (Number.isFinite(executionResult.appliedValue) ? executionResult.appliedValue : resolvedValue)
+      ? (Number.isFinite(executionResult.totalDamageApplied)
+        ? executionResult.totalDamageApplied
+        : (Number.isFinite(executionResult.appliedValue) ? executionResult.appliedValue : resolvedValue))
       : 0;
-    if (active.resolvedDamage > 0) {
-      active.resolvedDamage += this.applyFocalMarkBonusDamage({
-        match,
-        casterId: playerId,
-        targetSide: active.targetSide,
-        targetSlotIndex: active.targetSlotIndex,
-        baseDamageApplied: active.resolvedDamage,
-      });
-    }
     active.resolvedHealing = effectId === 'heal_target' && executionResult.executed !== false
       ? (Number.isFinite(executionResult.appliedValue) ? executionResult.appliedValue : resolvedValue)
       : 0;
