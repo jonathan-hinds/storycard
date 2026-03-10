@@ -1209,36 +1209,28 @@ class PhaseManagerServer {
       if (!playerState?.board?.length) return;
 
       playerState.board.forEach((card) => {
-        const appliedDebuffs = [];
-        let totalDamage = 0;
-
         Object.entries(DOT_HANDLERS).forEach(([dotId, dotHandler]) => {
           const dotDamage = dotHandler.tick(card);
           if (dotDamage < 1) return;
-          appliedDebuffs.push(dotId);
-          totalDamage += dotDamage;
-        });
-
-        if (totalDamage < 1) return;
-
-        const damageResult = this.applyDamageToCard({
-          match,
-          targetPlayerId: playerId,
-          targetSlotIndex: card.slotIndex,
-          damage: totalDamage,
-          sourcePlayerId: null,
-          applyFocalMarkBonus: true,
-        });
-        if (damageResult.executed === false) return;
-        events.push({
-          playerId,
-          cardId: card.id,
-          slotIndex: Number.isInteger(card.slotIndex) ? card.slotIndex : null,
-          damage: Number.isFinite(damageResult.totalDamageApplied) ? damageResult.totalDamageApplied : totalDamage,
-          baseDamage: totalDamage,
-          focalMarkBonusDamage: Number.isFinite(damageResult.focalMarkBonusDamage) ? damageResult.focalMarkBonusDamage : 0,
-          appliedDebuffs,
-          resultingHealth: damageResult.resultingHealth,
+          const damageResult = this.applyDamageToCard({
+            match,
+            targetPlayerId: playerId,
+            targetSlotIndex: card.slotIndex,
+            damage: dotDamage,
+            sourcePlayerId: null,
+            applyFocalMarkBonus: true,
+          });
+          if (damageResult.executed === false) return;
+          events.push({
+            playerId,
+            cardId: card.id,
+            slotIndex: Number.isInteger(card.slotIndex) ? card.slotIndex : null,
+            damage: Number.isFinite(damageResult.totalDamageApplied) ? damageResult.totalDamageApplied : dotDamage,
+            baseDamage: dotDamage,
+            focalMarkBonusDamage: Number.isFinite(damageResult.focalMarkBonusDamage) ? damageResult.focalMarkBonusDamage : 0,
+            appliedDebuffs: [dotId],
+            resultingHealth: damageResult.resultingHealth,
+          });
         });
       });
     });
