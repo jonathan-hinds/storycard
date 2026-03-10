@@ -1626,24 +1626,36 @@ export class CardGameClient {
         sourceCard: card,
         targetCard,
       });
+      const latestResolution = spellResolutionId && typeof this.getSpellResolutionSnapshot === 'function'
+        ? this.getSpellResolutionSnapshot()
+        : null;
+      const hasAuthoritativeResolution = latestResolution?.id === spellResolutionId;
+      const resolvedDamage = hasAuthoritativeResolution && Number.isFinite(latestResolution?.resolvedDamage)
+        ? Math.max(0, Math.floor(Number(latestResolution.resolvedDamage)))
+        : (selectedAbility?.effectId === 'damage_enemy' || selectedAbility?.effectId === 'life_steal'
+          ? resolvedValue
+          : null);
+      const resolvedHealing = hasAuthoritativeResolution && Number.isFinite(latestResolution?.resolvedHealing)
+        ? Math.max(0, Math.floor(Number(latestResolution.resolvedHealing)))
+        : (selectedAbility?.effectId === 'heal_target' ? resolvedValue : null);
+      const resolvedLifeStealHealing = hasAuthoritativeResolution && Number.isFinite(latestResolution?.resolvedLifeStealHealing)
+        ? Math.max(0, Math.floor(Number(latestResolution.resolvedLifeStealHealing)))
+        : (selectedAbility?.effectId === 'life_steal' ? resolvedValue : null);
       let lifeStealHealingCard = null;
-      if (selectedAbility?.effectId === 'life_steal' && spellResolutionId && typeof this.getSpellResolutionSnapshot === 'function') {
-        const latestResolution = this.getSpellResolutionSnapshot();
-        if (latestResolution?.id === spellResolutionId) {
+      if (selectedAbility?.effectId === 'life_steal' && hasAuthoritativeResolution) {
           lifeStealHealingCard = this.resolveBoardCardFromSideSlot(
             latestResolution.lifeStealHealingTargetSide,
             latestResolution.lifeStealHealingTargetSlotIndex,
           );
-        }
       }
       if (selectedAbility?.effectId === 'life_steal' && !lifeStealHealingCard) {
         lifeStealHealingCard = this.selectRandomFriendlyBoardCard();
       }
 
-      targetCard.userData.pendingSpellDamage = selectedAbility?.effectId === 'damage_enemy' || selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
-      targetCard.userData.pendingSpellHealing = selectedAbility?.effectId === 'heal_target' ? resolvedValue : null;
+      targetCard.userData.pendingSpellDamage = resolvedDamage;
+      targetCard.userData.pendingSpellHealing = resolvedHealing;
       if (lifeStealHealingCard?.userData) {
-        lifeStealHealingCard.userData.pendingSpellLifeStealHealing = selectedAbility?.effectId === 'life_steal' ? resolvedValue : null;
+        lifeStealHealingCard.userData.pendingSpellLifeStealHealing = resolvedLifeStealHealing;
       }
       this.queueSpellAttackAnimation(card, targetCard, { lifeStealHealingCard });
       await new Promise((resolve) => window.setTimeout(resolve, 760));
