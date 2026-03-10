@@ -1770,13 +1770,10 @@ class PhaseManagerServer {
       return { executed: false, reason: 'target_invalid', appliedValue: 0, focalMarkBonusDamage: 0, totalDamageApplied: 0 };
     }
 
-    const markDuration = Number.isInteger(targetCard.focalMarkTurnsRemaining) ? targetCard.focalMarkTurnsRemaining : 0;
-    const markBonus = Number.isFinite(targetCard.focalMarkBonusDamage)
-      ? Math.max(0, Math.floor(targetCard.focalMarkBonusDamage))
-      : 0;
-    const focalMarkBonusDamage = applyFocalMarkBonus && markDuration > 0 && markBonus > 0
-      ? markBonus
-      : 0;
+    const focalMarkBonusDamage = this.getFocalMarkBonusDamageForCard({
+      card: targetCard,
+      applyFocalMarkBonus,
+    });
     const totalDamageApplied = normalizedDamage + focalMarkBonusDamage;
     const nextHealth = currentHealth - totalDamageApplied;
     targetCard.catalogCard.health = nextHealth;
@@ -1800,6 +1797,15 @@ class PhaseManagerServer {
       totalDamageApplied,
       resultingHealth: nextHealth,
     };
+  }
+
+  getFocalMarkBonusDamageForCard({ card, applyFocalMarkBonus = true }) {
+    if (!applyFocalMarkBonus || !card) return 0;
+    const markDuration = Number.isInteger(card.focalMarkTurnsRemaining) ? card.focalMarkTurnsRemaining : 0;
+    const markBonus = Number.isFinite(card.focalMarkBonusDamage)
+      ? Math.max(0, Math.floor(card.focalMarkBonusDamage))
+      : 0;
+    return markDuration > 0 && markBonus > 0 ? markBonus : 0;
   }
 
   applyResolvedAbilityEffect({
@@ -2998,7 +3004,19 @@ class PhaseManagerServer {
     });
     active.effectId = effectId;
     active.resolvedValue = resolvedValue;
-    active.resolvedDamage = effectId === 'damage_enemy' || effectId === 'life_steal' ? resolvedValue : 0;
+    const previewTargetCard = this.getTargetCardForEffect({
+      match,
+      casterId: playerId,
+      targetSide: active.targetSide,
+      targetSlotIndex: active.targetSlotIndex,
+    });
+    const focalMarkPreviewBonus = this.getFocalMarkBonusDamageForCard({
+      card: previewTargetCard,
+      applyFocalMarkBonus: effectId === 'damage_enemy' || effectId === 'life_steal',
+    });
+    active.resolvedDamage = effectId === 'damage_enemy' || effectId === 'life_steal'
+      ? Math.max(0, resolvedValue + focalMarkPreviewBonus)
+      : 0;
     active.resolvedHealing = effectId === 'heal_target' ? resolvedValue : 0;
     if (effectId === 'life_steal') {
       const lifeStealTarget = this.selectRandomFriendlyLifeStealTarget({

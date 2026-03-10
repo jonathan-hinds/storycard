@@ -201,6 +201,31 @@ function createSpellMatch({
   const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
     targetHealth: 10,
     rollOutcome: 3,
+    ability: {
+      effectId: 'damage_enemy',
+      valueSourceType: 'roll',
+      valueSourceStat: 'efct',
+    },
+  });
+
+  defenderCard.focalMarkTurnsRemaining = 2;
+  defenderCard.focalMarkBonusDamage = 2;
+
+  const rollResult = server.submitSpellRoll({ playerId, spellId, rollOutcome: 3, rollData: null });
+  assert.equal(rollResult.statusCode, 200);
+  assert.equal(match.activeSpellResolution.resolvedDamage, 5, 'spell damage preview should include focal mark bonus damage on the target');
+
+  const result = server.completeSpellResolution({ playerId, spellId });
+  assert.equal(result.statusCode, 200);
+  assert.equal(defenderCard.catalogCard.health, 5, 'spell damage should include focal mark bonus damage when applied');
+  assert.equal(match.activeSpellResolution.resolvedDamage, 5, 'completed spell metadata should include focal mark bonus damage');
+}
+
+
+{
+  const { server, match, playerId, spellId, defenderCard } = createSpellMatch({
+    targetHealth: 10,
+    rollOutcome: 3,
     spellType: 'Fire',
     targetType: 'Nature',
     ability: {
