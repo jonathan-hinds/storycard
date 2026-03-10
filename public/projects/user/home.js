@@ -186,6 +186,7 @@ let deckBuilderScene = null;
 let phaseManager = null;
 let matchmakingPollTimer = 0;
 let hasRequestedExit = false;
+let hasPlayedBattleCloseout = false;
 let pendingSavePromise = null;
 let currentMatchRequestMode = null;
 
@@ -292,6 +293,32 @@ async function requestMatchExit(playerId) {
   }).catch(() => {});
 }
 
+function playBattleCloseoutTransition({ didPlayerWin = false } = {}) {
+  if (hasPlayedBattleCloseout) return;
+  hasPlayedBattleCloseout = true;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'battle-closeout-overlay';
+  overlay.innerHTML = `
+    <div class="battle-closeout-center">
+      <p class="battle-closeout-label">${didPlayerWin ? 'VICTORY!' : 'DEFEAT!'}</p>
+      <p class="battle-closeout-sub">Returning to home…</p>
+    </div>
+    <div class="battle-closeout-shutter battle-closeout-shutter-top"></div>
+    <div class="battle-closeout-shutter battle-closeout-shutter-bottom"></div>
+  `;
+  document.body.appendChild(overlay);
+
+  window.setTimeout(() => {
+    overlay.classList.add('is-active');
+  }, 30);
+
+  window.setTimeout(() => {
+    overlay.remove();
+    showHome();
+  }, 2200);
+}
+
 function teardownAll() {
   stopPolling();
   if (homeScene) {
@@ -379,6 +406,7 @@ function showMatch() {
   teardownAll();
   overlayEl.hidden = false;
   backButton.hidden = false;
+  hasPlayedBattleCloseout = false;
 
   phaseManager = new PhaseManagerClient({
     elements: createPhaseManagerElements({ canvas, overlayEl }),
@@ -386,6 +414,10 @@ function showMatch() {
       playerId: session.user.id,
       matchmakingPayload: {
         deckCardIds: Array.isArray(session.user.deck?.cards) ? session.user.deck.cards : [],
+      },
+      onMatchComplete: ({ outcome } = {}) => {
+        requestMatchExit(session.user.id);
+        playBattleCloseoutTransition({ didPlayerWin: Boolean(outcome?.didPlayerWin) });
       },
       cardGameOptions: {
         viewportHeightOffset: 0,
