@@ -9,7 +9,7 @@ function createMatch() {
   const target = {
     id: 'target',
     slotIndex: 0,
-    catalogCard: { health: 12, ability1: null, ability2: null },
+    catalogCard: { health: 20, ability1: null, ability2: null },
     poisonTurnsRemaining: 0,
     poisonStacks: 0,
     fireTurnsRemaining: 0,
@@ -50,6 +50,9 @@ function createMatch() {
 {
   const { match, p1, p2 } = createMatch();
   const targetCard = () => match.cardsByPlayer.get(p2).board[0];
+
+  targetCard().focalMarkTurnsRemaining = 2;
+  targetCard().focalMarkBonusDamage = 4;
 
   const poisonResult = server.applyResolvedAbilityBuff({
     match,
@@ -125,7 +128,7 @@ function createMatch() {
 
   server.advanceMatchToDecisionPhase(match);
 
-  assert.equal(targetCard().catalogCard.health, 9, 'poison + amplified fire should deal 3 total damage');
+  assert.equal(targetCard().catalogCard.health, 13, 'poison + amplified fire should deal 3 base damage plus 4 focal mark bonus damage');
   assert.equal(targetCard().poisonTurnsRemaining, 2, 'poison duration should tick down each phase change');
   assert.equal(targetCard().poisonStacks, 2, 'poison stack counter should persist while poison is active');
   assert.equal(targetCard().fireTurnsRemaining, 1, 'fire duration should tick down each phase change');
@@ -133,7 +136,9 @@ function createMatch() {
   assert.equal(targetCard().frostbiteTurnsRemaining, 1, 'frostbite duration should tick down each phase change');
   assert.equal(targetCard().frostbiteStacks, 2, 'frostbite stacks should persist while active');
   assert.equal(match.lastDotDamageEvents.length, 1, 'dot tick should be surfaced as a match event');
-  assert.equal(match.lastDotDamageEvents[0].damage, 3);
+  assert.equal(match.lastDotDamageEvents[0].baseDamage, 3, 'dot events should expose base damage before focal mark bonus');
+  assert.equal(match.lastDotDamageEvents[0].focalMarkBonusDamage, 4, 'dot events should expose focal mark bonus damage');
+  assert.equal(match.lastDotDamageEvents[0].damage, 7, 'dot events should report total damage including focal mark bonus');
   assert.deepEqual(match.lastDotDamageEvents[0].appliedDebuffs.sort(), ['fire', 'poison']);
 
   server.advanceMatchToDecisionPhase(match);
