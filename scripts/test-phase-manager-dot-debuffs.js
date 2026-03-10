@@ -9,7 +9,7 @@ function createMatch() {
   const target = {
     id: 'target',
     slotIndex: 0,
-    catalogCard: { health: 20, ability1: null, ability2: null },
+    catalogCard: { health: 30, ability1: null, ability2: null },
     poisonTurnsRemaining: 0,
     poisonStacks: 0,
     fireTurnsRemaining: 0,
@@ -128,21 +128,24 @@ function createMatch() {
 
   server.advanceMatchToDecisionPhase(match);
 
-  assert.equal(targetCard().catalogCard.health, 13, 'poison + amplified fire should deal 3 base damage plus 4 focal mark bonus damage');
+  assert.equal(targetCard().catalogCard.health, 19, 'poison + amplified fire should each receive focal mark as separate hits');
   assert.equal(targetCard().poisonTurnsRemaining, 2, 'poison duration should tick down each phase change');
   assert.equal(targetCard().poisonStacks, 2, 'poison stack counter should persist while poison is active');
   assert.equal(targetCard().fireTurnsRemaining, 1, 'fire duration should tick down each phase change');
   assert.equal(targetCard().fireStacks, 2, 'fire damage amplification should persist while the effect is active');
   assert.equal(targetCard().frostbiteTurnsRemaining, 1, 'frostbite duration should tick down each phase change');
   assert.equal(targetCard().frostbiteStacks, 2, 'frostbite stacks should persist while active');
-  assert.equal(match.lastDotDamageEvents.length, 1, 'dot tick should be surfaced as a match event');
-  assert.equal(match.lastDotDamageEvents[0].baseDamage, 3, 'dot events should expose base damage before focal mark bonus');
-  assert.equal(match.lastDotDamageEvents[0].focalMarkBonusDamage, 4, 'dot events should expose focal mark bonus damage');
-  assert.equal(match.lastDotDamageEvents[0].damage, 7, 'dot events should report total damage including focal mark bonus');
-  assert.deepEqual(match.lastDotDamageEvents[0].appliedDebuffs.sort(), ['fire', 'poison']);
+  assert.equal(match.lastDotDamageEvents.length, 2, 'each active dot should surface as a separate damage event');
+  const firstTickByDebuff = new Map(match.lastDotDamageEvents.map((event) => [event.appliedDebuffs[0], event]));
+  assert.equal(firstTickByDebuff.get('poison').baseDamage, 1, 'poison should remain a single base damage event');
+  assert.equal(firstTickByDebuff.get('poison').focalMarkBonusDamage, 4, 'poison should receive focal mark bonus as its own hit');
+  assert.equal(firstTickByDebuff.get('poison').damage, 5, 'poison event total should include focal mark bonus');
+  assert.equal(firstTickByDebuff.get('fire').baseDamage, 2, 'fire should deal stacked base damage as its own event');
+  assert.equal(firstTickByDebuff.get('fire').focalMarkBonusDamage, 4, 'fire should also receive focal mark bonus independently');
+  assert.equal(firstTickByDebuff.get('fire').damage, 6, 'fire event total should include focal mark bonus');
 
   server.advanceMatchToDecisionPhase(match);
-  assert.equal(targetCard().catalogCard.health, 6, 'second tick should still apply amplified fire before fire expires');
+  assert.equal(targetCard().catalogCard.health, 8, 'second tick should still apply amplified fire before fire expires');
   assert.equal(targetCard().poisonTurnsRemaining, 1, 'poison should still be active after second tick');
   assert.equal(targetCard().fireTurnsRemaining, 0, 'fire should expire when its duration runs out');
   assert.equal(targetCard().fireStacks, 0, 'fire amplification should reset once the effect expires');
@@ -151,6 +154,7 @@ function createMatch() {
   assert.equal(targetCard().poisonStacks, 2, 'poison stack counter should persist until poison expires');
 
   server.advanceMatchToDecisionPhase(match);
+  assert.equal(targetCard().catalogCard.health, 7, 'third tick should apply poison after focal mark has expired');
   assert.equal(targetCard().poisonTurnsRemaining, 0, 'poison should expire after extended duration elapses');
   assert.equal(targetCard().poisonStacks, 0, 'poison stack counter should reset once poison expires');
 
