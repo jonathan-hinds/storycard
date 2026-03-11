@@ -342,21 +342,29 @@ function normalizeBattleMetricsInput(metrics = {}) {
 
 async function recordBattleMetrics(userId, metrics = {}) {
   const { ObjectId } = getMongoClientConstructor();
-  if (typeof userId !== 'string' || !ObjectId.isValid(userId)) {
+  if (typeof userId !== 'string') {
     throw new Error('invalid user id');
   }
 
   const collection = await getCollection();
   const now = new Date().toISOString();
-  const objectId = new ObjectId(userId);
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    throw new Error('invalid user id');
+  }
+
+  const identifierQuery = ObjectId.isValid(normalizedUserId)
+    ? { _id: new ObjectId(normalizedUserId) }
+    : { username: normalizedUserId };
 
   const existingUser = await collection.findOne(
-    { _id: objectId },
-    { projection: { metrics: 1 } },
+    identifierQuery,
+    { projection: { _id: 1, metrics: 1 } },
   );
   if (!existingUser) {
     throw new Error('user not found');
   }
+  const objectId = existingUser._id;
 
   const hasMetricsObject = existingUser.metrics && typeof existingUser.metrics === 'object' && !Array.isArray(existingUser.metrics);
   if (!hasMetricsObject) {
