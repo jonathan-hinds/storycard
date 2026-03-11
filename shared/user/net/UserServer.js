@@ -4,13 +4,15 @@ class UserServer {
     this.getUserById = options.getUserById;
     this.loginUser = options.loginUser;
     this.updateUserDeck = options.updateUserDeck;
+    this.incrementUserMetrics = options.incrementUserMetrics;
     if (
       typeof this.createUser !== 'function'
       || typeof this.getUserById !== 'function'
       || typeof this.loginUser !== 'function'
       || typeof this.updateUserDeck !== 'function'
+      || typeof this.incrementUserMetrics !== 'function'
     ) {
-      throw new Error('UserServer requires createUser, getUserById, loginUser, and updateUserDeck handlers');
+      throw new Error('UserServer requires createUser, getUserById, loginUser, updateUserDeck, and incrementUserMetrics handlers');
     }
   }
 
@@ -31,6 +33,13 @@ class UserServer {
 
   async saveDeck({ userId, deck } = {}) {
     const user = await this.updateUserDeck(userId, deck);
+    return { user };
+  }
+
+  async incrementMetrics({ userId, metricKey, increment, metricIncrements } = {}) {
+    const user = metricIncrements
+      ? await this.incrementUserMetrics({ userId, metricIncrements })
+      : await this.incrementUserMetrics({ userId, metricKey, increment });
     return { user };
   }
 }
