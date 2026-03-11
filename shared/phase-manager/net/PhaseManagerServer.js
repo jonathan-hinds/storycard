@@ -141,6 +141,7 @@ class PhaseManagerServer {
       ...DEFAULT_OPTIONS,
       catalogProvider: typeof options.catalogProvider === 'function' ? options.catalogProvider : async () => [],
       onBattleMetrics: typeof options.onBattleMetrics === 'function' ? options.onBattleMetrics : null,
+      onBattleMetricIncrement: typeof options.onBattleMetricIncrement === 'function' ? options.onBattleMetricIncrement : null,
       ...options,
     };
     this.phaseQueue = [];
@@ -190,6 +191,17 @@ class PhaseManagerServer {
     const increment = Number.isFinite(Number(amount)) ? Math.max(0, Math.floor(Number(amount))) : 0;
     if (increment < 1) return;
     metrics[metricKey] += increment;
+
+    if (typeof this.options.onBattleMetricIncrement === 'function') {
+      Promise.resolve(this.options.onBattleMetricIncrement({
+        matchId: match.id,
+        mode: match.mode || 'matchmaking',
+        playerId,
+        metricKey,
+        increment,
+        metrics: { ...metrics },
+      })).catch(() => {});
+    }
   }
 
   removeDefeatedCreaturesFromBoard(match, playerId) {

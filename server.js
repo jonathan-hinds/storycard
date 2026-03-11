@@ -63,13 +63,12 @@ const diceStore = new Map();
 const dieRollerServer = new DieRollerServer();
 const phaseManagerServer = new PhaseManagerServer({
   catalogProvider: async () => listCatalogCards(),
-  onBattleMetrics: async ({ metricsByPlayer = {} } = {}) => {
-    const tasks = Object.entries(metricsByPlayer)
-      .filter(([playerId]) => typeof playerId === 'string' && !playerId.startsWith('npc-'))
-      .map(([playerId, metrics]) => recordBattleMetrics(playerId, metrics).catch(() => null));
-    if (tasks.length) {
-      await Promise.all(tasks);
-    }
+  onBattleMetricIncrement: async ({ playerId, metricKey, increment } = {}) => {
+    if (typeof playerId !== 'string' || playerId.startsWith('npc-')) return;
+    if (typeof metricKey !== 'string') return;
+    const value = Number.isFinite(Number(increment)) ? Math.max(0, Math.floor(Number(increment))) : 0;
+    if (value < 1) return;
+    await recordBattleMetrics(playerId, { [metricKey]: value });
   },
 });
 const cardGameServer = new CardGameServer({
