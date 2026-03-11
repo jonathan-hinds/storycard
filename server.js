@@ -38,7 +38,7 @@ const {
   listBuffIcons,
   updateBuffIcons,
 } = require('./shared/buff-icons/store');
-const { UserServer } = require('./shared/user');
+const { UserServer, UserMetricsService } = require('./shared/user');
 const {
   createUser,
   getUserById,
@@ -61,14 +61,18 @@ const MIME_TYPES = {
 
 const diceStore = new Map();
 const dieRollerServer = new DieRollerServer();
+const userMetricsService = new UserMetricsService({
+  recordBattleMetrics,
+});
 const phaseManagerServer = new PhaseManagerServer({
   catalogProvider: async () => listCatalogCards(),
   onBattleMetricIncrement: async ({ playerId, metricKey, increment } = {}) => {
     if (typeof playerId !== 'string' || playerId.startsWith('npc-')) return;
-    if (typeof metricKey !== 'string') return;
-    const value = Number.isFinite(Number(increment)) ? Math.max(0, Math.floor(Number(increment))) : 0;
-    if (value < 1) return;
-    await recordBattleMetrics(playerId, { [metricKey]: value });
+    await userMetricsService.incrementMetric({
+      userId: playerId,
+      metricKey,
+      increment,
+    });
   },
 });
 const cardGameServer = new CardGameServer({
@@ -84,6 +88,12 @@ const userServer = new UserServer({
   getUserById,
   loginUser,
   updateUserDeck,
+  incrementUserMetrics: (payload) => {
+    if (payload && payload.metricIncrements) {
+      return userMetricsService.incrementMetrics(payload);
+    }
+    return userMetricsService.incrementMetric(payload);
+  },
 });
 
 function sendJson(res, statusCode, payload) {
@@ -270,6 +280,28 @@ async function handleApi(req, res, pathname) {
   }
 
   const userDeckMatch = pathname.match(/^\/api\/users\/([^/]+)\/deck$/);
+  const userMetricsMatch = pathname.match(/^\/api\/users\/([^/]+)\/metrics\/increment$/);
+  if (req.method === 'POST' && userMetricsMatch) {
+    try {
+      const body = await readRequestJson(req);
+      const result = await userServer.incrementMetrics({
+        userId: userMetricsMatch[1],
+        metricKey: body.metricKey,
+        increment: body.increment,
+        metricIncrements: body.metricIncrements,
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('invalid user id')
+        || error.message.includes('invalid metric key')
+        || error.message.includes('at least one metric increment is required');
+      const statusCode = error.message === 'user not found' ? 404 : isValidationError ? 400 : 500;
+      sendJson(res, statusCode, { error: error.message || 'Unable to increment metrics' });
+    }
+    return true;
+  }
+
   if (req.method === 'PUT' && userDeckMatch) {
     try {
       const body = await readRequestJson(req);
