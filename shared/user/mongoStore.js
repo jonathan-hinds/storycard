@@ -348,9 +348,34 @@ async function recordBattleMetrics(userId, metrics = {}) {
 
   const collection = await getCollection();
   const now = new Date().toISOString();
+  const objectId = new ObjectId(userId);
+
+  const existingUser = await collection.findOne(
+    { _id: objectId },
+    { projection: { metrics: 1 } },
+  );
+  if (!existingUser) {
+    throw new Error('user not found');
+  }
+
+  const hasMetricsObject = existingUser.metrics && typeof existingUser.metrics === 'object' && !Array.isArray(existingUser.metrics);
+  if (!hasMetricsObject) {
+    await collection.updateOne(
+      { _id: objectId },
+      {
+        $set: {
+          metrics: {
+            ...createDefaultPlayerMetrics(),
+            updatedAt: now,
+          },
+        },
+      },
+    );
+  }
+
   const increments = normalizeBattleMetricsInput(metrics);
   const result = await collection.findOneAndUpdate(
-    { _id: new ObjectId(userId) },
+    { _id: objectId },
     {
       $inc: {
         'metrics.totalGamesPlayed': increments.totalGamesPlayed,
