@@ -25,6 +25,12 @@ async function run() {
     },
   });
 
+  await service.incrementMetric({
+    userId: { toString: () => '  user-2  ' },
+    metricKey: 'totalWins',
+    increment: 1,
+  });
+
   assert.deepEqual(calls[0], {
     userId: 'user-1',
     metrics: { totalSpellsPlayed: 1 },
@@ -36,6 +42,10 @@ async function run() {
       totalCreaturesLost: 1,
     },
   });
+  assert.deepEqual(calls[2], {
+    userId: 'user-2',
+    metrics: { totalWins: 1 },
+  });
 
   await assert.rejects(
     () => service.incrementMetric({ userId: 'user-1', metricKey: 'badKey', increment: 1 }),
@@ -45,6 +55,11 @@ async function run() {
   await assert.rejects(
     () => service.incrementMetrics({ userId: 'user-1', metricIncrements: { invalidKey: 2 } }),
     /at least one metric increment is required/,
+  );
+
+  await assert.rejects(
+    () => service.incrementMetric({ userId: { toString: () => '[object Object]' }, metricKey: 'totalWins', increment: 1 }),
+    /invalid user id/,
   );
 
   console.log('user metrics service checks passed');

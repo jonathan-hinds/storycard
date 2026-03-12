@@ -64,15 +64,35 @@ const dieRollerServer = new DieRollerServer();
 const userMetricsService = new UserMetricsService({
   recordBattleMetrics,
 });
+
+function normalizeMetricsPlayerId(playerId) {
+  if (typeof playerId === 'string') return playerId.trim();
+  if (playerId && typeof playerId.toString === 'function') {
+    const normalized = playerId.toString().trim();
+    return normalized === '[object Object]' ? '' : normalized;
+  }
+  return '';
+}
+
 const phaseManagerServer = new PhaseManagerServer({
   catalogProvider: async () => listCatalogCards(),
   onBattleMetricIncrement: async ({ playerId, metricKey, increment } = {}) => {
-    if (typeof playerId !== 'string' || playerId.startsWith('npc-')) return;
-    await userMetricsService.incrementMetric({
-      userId: playerId,
-      metricKey,
-      increment,
-    });
+    const normalizedPlayerId = normalizeMetricsPlayerId(playerId);
+    if (!normalizedPlayerId || normalizedPlayerId.startsWith('npc-')) return;
+    try {
+      await userMetricsService.incrementMetric({
+        userId: normalizedPlayerId,
+        metricKey,
+        increment,
+      });
+    } catch (error) {
+      console.warn('Failed to persist battle metric increment', {
+        playerId: normalizedPlayerId,
+        metricKey,
+        increment,
+        error: error?.message || 'unknown error',
+      });
+    }
   },
 });
 const cardGameServer = new CardGameServer({

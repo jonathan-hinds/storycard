@@ -14,6 +14,15 @@ class UserMetricsService {
     ]);
   }
 
+  normalizeUserId(userId) {
+    if (typeof userId === 'string') return userId.trim();
+    if (userId && typeof userId.toString === 'function') {
+      const normalized = userId.toString().trim();
+      return normalized === '[object Object]' ? '' : normalized;
+    }
+    return '';
+  }
+
   normalizeIncrement(value) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
@@ -32,7 +41,8 @@ class UserMetricsService {
   }
 
   async incrementMetrics({ userId, metricIncrements } = {}) {
-    if (typeof userId !== 'string' || !userId.trim()) {
+    const normalizedUserId = this.normalizeUserId(userId);
+    if (!normalizedUserId) {
       throw new Error('invalid user id');
     }
 
@@ -41,7 +51,7 @@ class UserMetricsService {
       throw new Error('at least one metric increment is required');
     }
 
-    return this.recordBattleMetrics(userId, normalizedIncrements);
+    return this.recordBattleMetrics(normalizedUserId, normalizedIncrements);
   }
 
   async incrementMetric({ userId, metricKey, increment = 1 } = {}) {
