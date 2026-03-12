@@ -92,6 +92,7 @@ const phaseManagerServer = new PhaseManagerServer({
         increment,
         error: error?.message || 'unknown error',
       });
+      throw error;
     }
   },
 });
