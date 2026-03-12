@@ -200,8 +200,53 @@ class PhaseManagerServer {
         metricKey,
         increment,
         metrics: { ...metrics },
-      })).catch(() => {});
+      }))
+        .then(() => {
+          if (metricKey !== 'totalSpellsPlayed') return;
+          this.enqueueMetricUpdateEvent(match, playerId, {
+            metricKey,
+            increment,
+            success: true,
+          });
+        })
+        .catch((error) => {
+          if (metricKey !== 'totalSpellsPlayed') return;
+          this.enqueueMetricUpdateEvent(match, playerId, {
+            metricKey,
+            increment,
+            success: false,
+            error: error?.message || 'unknown error',
+          });
+        });
     }
+  }
+
+  enqueueMetricUpdateEvent(match, playerId, event = {}) {
+    if (!match || !playerId || !event || typeof event !== 'object') return;
+    if (!(match.metricUpdateEventsByPlayer instanceof Map)) {
+      match.metricUpdateEventsByPlayer = new Map();
+    }
+    if (!match.metricUpdateEventsByPlayer.has(playerId)) {
+      match.metricUpdateEventsByPlayer.set(playerId, []);
+    }
+    const queue = match.metricUpdateEventsByPlayer.get(playerId);
+    if (!Array.isArray(queue)) return;
+    queue.push({
+      metricKey: event.metricKey,
+      increment: Number.isFinite(Number(event.increment)) ? Math.max(0, Math.floor(Number(event.increment))) : 0,
+      success: event.success === true,
+      error: typeof event.error === 'string' ? event.error : null,
+      emittedAt: Date.now(),
+    });
+  }
+
+  takeMetricUpdateEvents(match, playerId) {
+    if (!match || !playerId) return [];
+    if (!(match.metricUpdateEventsByPlayer instanceof Map)) return [];
+    const queued = match.metricUpdateEventsByPlayer.get(playerId);
+    if (!Array.isArray(queued) || queued.length === 0) return [];
+    match.metricUpdateEventsByPlayer.set(playerId, []);
+    return queued.map((event) => ({ ...event }));
   }
 
   removeDefeatedCreaturesFromBoard(match, playerId) {
@@ -1157,6 +1202,8 @@ class PhaseManagerServer {
       }
     }
 
+    const metricUpdateEvents = this.takeMetricUpdateEvents(match, playerId);
+
     return {
       id: match.id,
       turnNumber: match.turnNumber,
@@ -1198,6 +1245,7 @@ class PhaseManagerServer {
           ...rollEntry,
           attackerSide: rollEntry.attackerId === playerId ? 'player' : 'opponent',
         })),
+        metricUpdateEvents,
       },
     };
   }
@@ -2723,6 +2771,7 @@ class PhaseManagerServer {
         commitAllRolledAt: null,
         lastDotDamageEvents: [],
         activeSpellResolution: null,
+        metricUpdateEventsByPlayer: new Map(),
         npcSpellCardsCastThisTurn: new Set(),
         createdAt: Date.now(),
       };
