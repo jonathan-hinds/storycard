@@ -397,12 +397,6 @@ async function recordBattleMetrics(userId, metrics = {}) {
         'metrics.updatedAt': now,
         updatedAt: now,
       },
-      $setOnInsert: {
-        metrics: {
-          ...createDefaultPlayerMetrics(),
-          updatedAt: now,
-        },
-      },
     },
     { returnDocument: 'after' },
   );
