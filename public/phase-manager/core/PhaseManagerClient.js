@@ -1125,6 +1125,40 @@ export class PhaseManagerClient {
     return this.match?.meta?.activeSpellResolution || null;
   }
 
+  getTopLeftCombatTextWorldPoint() {
+    if (!this.client?.camera) return null;
+    const ndcPoint = new THREE.Vector3(-0.9, 0.82, 0.1);
+    return ndcPoint.unproject(this.client.camera);
+  }
+
+  processMetricUpdateEvents(metricUpdateEvents = []) {
+    if (!Array.isArray(metricUpdateEvents) || metricUpdateEvents.length === 0) return;
+    metricUpdateEvents.forEach((event) => {
+      if (!event || event.metricKey !== 'totalSpellsPlayed') return;
+
+      if (event.success === true) {
+        const worldPoint = this.getTopLeftCombatTextWorldPoint();
+        if (!worldPoint || !this.client || typeof this.client.spawnCombatNumberPopup !== 'function') return;
+        const increment = Number.isFinite(Number(event.increment)) ? Math.max(1, Math.floor(Number(event.increment))) : 1;
+        this.client.spawnCombatNumberPopup({
+          amount: 0,
+          text: `+${increment} Spell Cast`,
+          worldPoint,
+          time: performance.now(),
+          variant: 'beneficial',
+          driftDistanceScale: 0.55,
+        });
+        return;
+      }
+
+      console.error('Failed to update user metric totalSpellsPlayed', {
+        metricEvent: event,
+        playerId: this.playerId,
+        matchId: this.match?.id || null,
+      });
+    });
+  }
+
   async requestSpellResolutionStart({ card, targetCard, selectedAbility, rollType, dieSides }) {
     const targetSlotIndex = Number.isInteger(targetCard?.userData?.slotIndex)
       ? (targetCard.userData.owner === PLAYER_SIDE ? targetCard.userData.slotIndex - BOARD_SLOTS_PER_SIDE : targetCard.userData.slotIndex)
@@ -1140,6 +1174,7 @@ export class PhaseManagerClient {
       dieSides,
     });
     this.match = status.matchState || this.match;
+    this.processMetricUpdateEvents(this.match?.meta?.metricUpdateEvents || []);
     return this.match?.meta?.activeSpellResolution || null;
   }
 
@@ -1580,12 +1615,14 @@ export class PhaseManagerClient {
         if (shouldRefreshScene) {
           this.renderMatch();
           this.playDotDamageEvents(this.match?.meta?.dotDamageEvents || []);
+          this.processMetricUpdateEvents(this.match?.meta?.metricUpdateEvents || []);
         } else {
           this.syncCardBuffStateFromMatch(this.match);
           this.playDotDamageEvents(this.match?.meta?.dotDamageEvents || []);
           this.setReadyLockState();
           this.updateSummaryPanels();
           this.triggerRemoteSpellPlayback();
+          this.processMetricUpdateEvents(this.match?.meta?.metricUpdateEvents || []);
         }
       } else {
         this.handleMatchCompleted(this.match);
@@ -1594,6 +1631,7 @@ export class PhaseManagerClient {
         this.setReadyLockState();
         this.updateSummaryPanels();
         this.triggerRemoteSpellPlayback();
+        this.processMetricUpdateEvents(this.match?.meta?.metricUpdateEvents || []);
       }
       return;
     }
