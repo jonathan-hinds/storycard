@@ -21,6 +21,11 @@ const DEFAULT_READY_BUTTON_TEXT_SCALE = 0.5;
 const DEFAULT_READY_BUTTON_BACKGROUND_ASSET_PATH = '/public/assets/readyup2.png';
 const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
 const READY_BUTTON_LABEL = 'READY UP';
+const AVATAR_PANEL_CANVAS_SIZE = { width: 768, height: 192 };
+const DEFAULT_AVATAR_PANEL_SIZE = { width: 1.7, height: 0.34 };
+const DEFAULT_AVATAR_PLAYER_POSITION = { x: 0.12, y: 0.11, z: -5.48 };
+const DEFAULT_AVATAR_OPPONENT_POSITION = { x: 0.88, y: 0.11, z: -5.48 };
+const MAX_AVATAR_NAME_LENGTH = 16;
 
 function getFrustumHalfExtents(fovDegrees, aspect, depth) {
   const safeDepth = Math.max(Math.abs(depth), 0.001);
@@ -78,6 +83,11 @@ export class PhaseManagerClient {
     this.readyButtonBackgroundImage = null;
     this.backgroundAssetCache = new Map();
     this.availableBackgroundAssets = [];
+    this.avatarDisplay = null;
+    this.playerProfile = { username: 'You', avatarImagePath: null };
+    this.opponentProfile = { username: 'Opponent', avatarImagePath: null };
+    this.avatarImageCache = new Map();
+    this.avatarRenderToken = 0;
     this.boundControlListeners = [];
     this.playedRemoteSpellResolutionIds = new Set();
     this.lastPlayedDotEventKey = null;
@@ -103,14 +113,44 @@ export class PhaseManagerClient {
     this.handleCanvasPointerUp = this.handleCanvasPointerUp.bind(this);
   }
 
+  setPlayerProfile(profile = {}) {
+    this.playerProfile = {
+      username: this.normalizeAvatarName(profile.username, 'You'),
+      avatarImagePath: this.normalizeAvatarPath(profile.avatarImagePath),
+    };
+    this.syncAvatarDisplay();
+  }
+
+  setOpponentProfile(profile = {}) {
+    this.opponentProfile = {
+      username: this.normalizeAvatarName(profile.username, 'Opponent'),
+      avatarImagePath: this.normalizeAvatarPath(profile.avatarImagePath),
+    };
+    this.syncAvatarDisplay();
+  }
+
+  normalizeAvatarName(name, fallback = 'Player') {
+    const normalized = String(name || '').trim();
+    if (!normalized) return fallback;
+    return normalized.slice(0, MAX_AVATAR_NAME_LENGTH);
+  }
+
+  normalizeAvatarPath(path) {
+    if (typeof path !== 'string') return null;
+    const normalized = path.trim();
+    return normalized || null;
+  }
+
   handleWindowResize() {
     this.positionUpkeepDisplay();
     this.positionReadyButtonDisplay();
+    this.positionAvatarDisplay();
     this.syncUpkeepPositionInputs();
     this.syncBuffBadgeLayoutInputs();
     window.requestAnimationFrame(() => {
       this.positionUpkeepDisplay();
       this.positionReadyButtonDisplay();
+      this.positionAvatarDisplay();
       this.syncUpkeepPositionInputs();
     });
   }
@@ -488,6 +528,7 @@ export class PhaseManagerClient {
     }
     this.teardownUpkeepDisplay();
     this.teardownReadyButtonDisplay();
+    this.teardownAvatarDisplay();
   }
 
   createDisplayTexture(size) {
@@ -696,6 +737,164 @@ export class PhaseManagerClient {
     textMaterial.dispose();
     textTexture.dispose();
     this.readyButtonDisplay = null;
+  }
+
+  ensureAvatarDisplay() {
+    if (!this.client?.camera || !this.client?.scene) return;
+    if (this.avatarDisplay) return;
+    if (this.client.camera.parent !== this.client.scene) {
+      this.client.scene.add(this.client.camera);
+    }
+
+    const createAvatarMesh = () => {
+      const { canvas, texture } = this.createDisplayTexture(AVATAR_PANEL_CANVAS_SIZE);
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(DEFAULT_AVATAR_PANEL_SIZE.width, DEFAULT_AVATAR_PANEL_SIZE.height), material);
+      mesh.renderOrder = 1010;
+      this.client.camera.add(mesh);
+      return { canvas, texture, material, mesh };
+    };
+
+    this.avatarDisplay = {
+      player: createAvatarMesh(),
+      opponent: createAvatarMesh(),
+    };
+  }
+
+  teardownAvatarDisplay() {
+    if (!this.avatarDisplay) return;
+    ['player', 'opponent'].forEach((side) => {
+      const display = this.avatarDisplay[side];
+      if (!display) return;
+      display.mesh.parent?.remove(display.mesh);
+      display.mesh.geometry.dispose();
+      display.material.dispose();
+      display.texture.dispose();
+    });
+    this.avatarDisplay = null;
+  }
+
+  positionAvatarDisplay() {
+    if (!this.avatarDisplay || !this.client?.camera) return;
+    const depth = Math.max(Math.abs(DEFAULT_AVATAR_PLAYER_POSITION.z), 0.001);
+    const referenceFrustum = getFrustumHalfExtents(UPKEEP_REFERENCE_CAMERA.fov, UPKEEP_REFERENCE_CAMERA.aspect, depth);
+    const currentFrustum = getFrustumHalfExtents(this.client.camera.fov, this.client.camera.aspect, depth);
+    const scaleFactor = currentFrustum.halfHeight / referenceFrustum.halfHeight;
+
+    const positionAvatar = (display, anchor) => {
+      const panelWorldWidth = DEFAULT_AVATAR_PANEL_SIZE.width * scaleFactor;
+      const panelWorldHeight = DEFAULT_AVATAR_PANEL_SIZE.height * scaleFactor;
+      const panelHalfNormalizedX = panelWorldWidth / Math.max(currentFrustum.halfWidth * 2, 0.001);
+      const panelHalfNormalizedY = panelWorldHeight / Math.max(currentFrustum.halfHeight * 2, 0.001);
+      const targetNormalizedX = THREE.MathUtils.clamp((anchor.x * 2) - 1, -1 + panelHalfNormalizedX, 1 - panelHalfNormalizedX);
+      const targetNormalizedY = THREE.MathUtils.clamp(1 - (anchor.y * 2), -1 + panelHalfNormalizedY, 1 - panelHalfNormalizedY);
+      display.mesh.position.set(targetNormalizedX * currentFrustum.halfWidth, targetNormalizedY * currentFrustum.halfHeight, anchor.z);
+      display.mesh.scale.set(scaleFactor, scaleFactor, 1);
+      display.mesh.rotation.set(0, 0, 0);
+    };
+
+    positionAvatar(this.avatarDisplay.player, DEFAULT_AVATAR_PLAYER_POSITION);
+    positionAvatar(this.avatarDisplay.opponent, DEFAULT_AVATAR_OPPONENT_POSITION);
+  }
+
+  async getAvatarImage(path) {
+    if (!path) return null;
+    if (this.avatarImageCache.has(path)) return this.avatarImageCache.get(path);
+    const imagePromise = new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => resolve(null);
+      image.src = path;
+    });
+    this.avatarImageCache.set(path, imagePromise);
+    return imagePromise;
+  }
+
+  drawAvatarPanel(display, profile, { align = 'left' } = {}) {
+    if (!display) return Promise.resolve();
+    const ctx = display.canvas.getContext('2d');
+    if (!ctx) return Promise.resolve();
+
+    const token = this.avatarRenderToken;
+    const avatarPath = this.normalizeAvatarPath(profile.avatarImagePath);
+    return this.getAvatarImage(avatarPath).then((avatarImage) => {
+      if (!this.avatarDisplay || token !== this.avatarRenderToken) return;
+      ctx.clearRect(0, 0, display.canvas.width, display.canvas.height);
+      const panelHeight = display.canvas.height;
+      const panelWidth = display.canvas.width;
+      const avatarDiameter = panelHeight * 0.76;
+      const avatarRadius = avatarDiameter / 2;
+      const avatarCenterY = panelHeight / 2;
+      const avatarCenterX = align === 'left' ? (panelHeight * 0.5) : (panelWidth - (panelHeight * 0.5));
+      const namePadding = 22;
+      const nameX = align === 'left'
+        ? avatarCenterX + avatarRadius + namePadding
+        : avatarCenterX - avatarRadius - namePadding;
+
+      ctx.fillStyle = 'rgba(8, 11, 18, 0.66)';
+      ctx.strokeStyle = 'rgba(245, 248, 255, 0.86)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(2, 8, panelWidth - 4, panelHeight - 16, 28);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(avatarCenterX, avatarCenterY, avatarRadius, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      if (avatarImage) {
+        ctx.drawImage(avatarImage, avatarCenterX - avatarRadius, avatarCenterY - avatarRadius, avatarDiameter, avatarDiameter);
+      } else {
+        const gradient = ctx.createRadialGradient(avatarCenterX - avatarRadius * 0.35, avatarCenterY - avatarRadius * 0.35, avatarRadius * 0.18, avatarCenterX, avatarCenterY, avatarRadius);
+        gradient.addColorStop(0, '#f1f4ff');
+        gradient.addColorStop(1, '#697089');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(avatarCenterX - avatarRadius, avatarCenterY - avatarRadius, avatarDiameter, avatarDiameter);
+        const glyph = this.normalizeAvatarName(profile.username, '?').charAt(0).toUpperCase();
+        ctx.fillStyle = '#0f1322';
+        ctx.font = `700 ${Math.round(avatarDiameter * 0.44)}px Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(glyph, avatarCenterX, avatarCenterY + 2);
+      }
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.arc(avatarCenterX, avatarCenterY, avatarRadius, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.stroke();
+
+      ctx.fillStyle = '#f7f8ff';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 44px Arial, sans-serif';
+      ctx.textAlign = align === 'left' ? 'left' : 'right';
+      ctx.fillText(this.normalizeAvatarName(profile.username, align === 'left' ? 'You' : 'Opponent'), nameX, avatarCenterY + 2);
+
+      display.texture.needsUpdate = true;
+    });
+  }
+
+  syncAvatarDisplay() {
+    if (!this.client || !this.match) return;
+    this.ensureAvatarDisplay();
+    this.positionAvatarDisplay();
+    this.avatarRenderToken += 1;
+    const token = this.avatarRenderToken;
+    Promise.all([
+      this.drawAvatarPanel(this.avatarDisplay?.player, this.playerProfile, { align: 'left' }),
+      this.drawAvatarPanel(this.avatarDisplay?.opponent, this.opponentProfile, { align: 'right' }),
+    ]).catch(() => {}).finally(() => {
+      if (token !== this.avatarRenderToken) return;
+    });
   }
 
   positionReadyButtonDisplay() {
@@ -1300,6 +1499,7 @@ export class PhaseManagerClient {
       statusEl.textContent = 'Click matchmaking to create a 1v1 phase test.';
       this.teardownUpkeepDisplay();
       this.teardownReadyButtonDisplay();
+      this.teardownAvatarDisplay();
       this.setReadyLockState();
       this.updateSummaryPanels();
       return;
@@ -1356,6 +1556,7 @@ export class PhaseManagerClient {
 
     this.syncUpkeepDisplay();
     this.syncReadyButtonDisplay();
+    this.syncAvatarDisplay();
 
     if (shouldAnimateInitialDeal) this.lastAnimatedMatchId = this.match.id;
     if (shouldAnimateTurnDraw) this.lastAnimatedTurnKey = turnAnimationKey;

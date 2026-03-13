@@ -27,20 +27,8 @@ function getLocalStorage() {
   }
 }
 const backButton = document.getElementById('user-match-back-button');
-const playerAvatarEl = document.getElementById('match-player-avatar');
-const opponentAvatarEl = document.getElementById('match-opponent-avatar');
-const playerNameEl = document.getElementById('match-player-name');
-const opponentNameEl = document.getElementById('match-opponent-name');
 let hasRequestedExit = false;
 let hasPlayedBattleCloseout = false;
-
-function setAvatarElement(el, { avatarImagePath = null, username = '' } = {}) {
-  if (!el) return;
-  const normalizedName = String(username || '').trim();
-  const glyph = normalizedName.charAt(0).toUpperCase() || '?';
-  el.style.backgroundImage = avatarImagePath ? `url(${avatarImagePath})` : 'none';
-  el.textContent = avatarImagePath ? '' : glyph;
-}
 
 function pickNpcAvatarPath(assets, npcId) {
   const sourceAssets = Array.isArray(assets) && assets.length ? assets : NPC_AVATAR_ASSET_FALLBACKS;
@@ -142,19 +130,10 @@ if (!session) {
   const playerName = String(session.user.username || 'You').trim() || 'You';
   let loadedAvatarAssetPaths = null;
 
-  playerNameEl.textContent = playerName;
-  setAvatarElement(playerAvatarEl, {
-    avatarImagePath: session.user.avatarImagePath || null,
-    username: playerName,
-  });
-  setAvatarElement(opponentAvatarEl, { username: 'Opponent' });
-  opponentNameEl.textContent = 'Opponent';
-
   const updateOpponentProfile = async ({ opponentId = null } = {}) => {
     const normalizedOpponentId = typeof opponentId === 'string' ? opponentId.trim() : '';
     if (!normalizedOpponentId) {
-      opponentNameEl.textContent = 'Opponent';
-      setAvatarElement(opponentAvatarEl, { username: 'Opponent' });
+      phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
       return;
     }
 
@@ -162,10 +141,9 @@ if (!session) {
       if (!loadedAvatarAssetPaths) {
         loadedAvatarAssetPaths = await loadImageAssetPaths();
       }
-      opponentNameEl.textContent = 'NPC Opponent';
-      setAvatarElement(opponentAvatarEl, {
+      phaseManager.setOpponentProfile({
         avatarImagePath: pickNpcAvatarPath(loadedAvatarAssetPaths, normalizedOpponentId),
-        username: 'NPC',
+        username: 'NPC Opponent',
       });
       return;
     }
@@ -176,16 +154,12 @@ if (!session) {
       if (!response.ok) throw new Error(payload.error || 'Unable to fetch user');
       const user = payload?.user || {};
       const username = String(user.username || 'Opponent').trim() || 'Opponent';
-      opponentNameEl.textContent = username;
-      setAvatarElement(opponentAvatarEl, {
+      phaseManager.setOpponentProfile({
         avatarImagePath: user.avatarImagePath || null,
         username,
       });
     } catch (error) {
-      opponentNameEl.textContent = 'Opponent';
-      setAvatarElement(opponentAvatarEl, {
-        username: 'Opponent',
-      });
+      phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
     }
   };
 
@@ -215,6 +189,12 @@ if (!session) {
       },
     },
   });
+
+  phaseManager.setPlayerProfile({
+    username: playerName,
+    avatarImagePath: session.user.avatarImagePath || null,
+  });
+  phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
 
   phaseManager.start();
 
