@@ -10,8 +10,14 @@ const AVATAR_CENTER_Y = 116;
 const AVATAR_RADIUS = 70;
 const PICKER_RECT = { x: 40, y: 248, width: 740, height: 396 };
 const PICKER_SAVE_BUTTON = { x: 558, y: 86, width: 218, height: 54 };
-const TILE_MIN_SIZE = 148;
-const TILE_GAP = 14;
+const TILE_COLUMNS = 2;
+const TILE_GAP = 20;
+
+function getPickerGridLayout() {
+  const cols = TILE_COLUMNS;
+  const tileSize = Math.floor((PICKER_RECT.width - (TILE_GAP * (cols - 1))) / cols);
+  return { cols, tileSize };
+}
 
 function createCanvasTexture(width, height) {
   const canvas = document.createElement('canvas');
@@ -136,8 +142,7 @@ function drawPanelTexture(canvas, state) {
     ctx.lineWidth = 2;
     ctx.strokeRect(PICKER_RECT.x, PICKER_RECT.y, PICKER_RECT.width, PICKER_RECT.height);
 
-    const cols = Math.max(2, Math.floor((PICKER_RECT.width + TILE_GAP) / (TILE_MIN_SIZE + TILE_GAP)));
-    const tileSize = Math.floor((PICKER_RECT.width - (TILE_GAP * (cols - 1))) / cols);
+    const { cols, tileSize } = getPickerGridLayout();
     const rows = Math.ceil(assets.length / cols);
     const contentHeight = rows * (tileSize + TILE_GAP) - TILE_GAP;
     const maxScrollY = Math.max(contentHeight - PICKER_RECT.height, 0);
@@ -264,10 +269,12 @@ export class ProfilePanelScene {
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerMove = this.onPointerMove.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
+    this.onWheel = this.onWheel.bind(this);
     this.canvas.addEventListener('pointerdown', this.onPointerDown);
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointercancel', this.onPointerUp);
+    this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
 
     this.resizeObserver = new ResizeObserver(this.onResize);
     this.resizeObserver.observe(this.canvas);
@@ -332,6 +339,15 @@ export class ProfilePanelScene {
     this.lastPointerY = event.clientY;
   }
 
+  onWheel(event) {
+    if (!this.pickerOpen) return;
+    const point = this.canvasPointFromEvent(event);
+    if (!point || !inRect(point.x, point.y, PICKER_RECT)) return;
+    this.pickerScrollY = THREE.MathUtils.clamp(this.pickerScrollY + event.deltaY, 0, this.pickerMaxScrollY);
+    this.redraw();
+    event.preventDefault();
+  }
+
   async onPointerUp(event) {
     if (this.activePointerId !== event.pointerId) return;
     if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
@@ -358,8 +374,7 @@ export class ProfilePanelScene {
 
     if (!inRect(point.x, point.y, PICKER_RECT)) return;
 
-    const cols = Math.max(2, Math.floor((PICKER_RECT.width + TILE_GAP) / (TILE_MIN_SIZE + TILE_GAP)));
-    const tileSize = Math.floor((PICKER_RECT.width - (TILE_GAP * (cols - 1))) / cols);
+    const { cols, tileSize } = getPickerGridLayout();
     const localX = point.x - PICKER_RECT.x;
     const localY = point.y - PICKER_RECT.y + this.pickerScrollY;
     const col = Math.floor(localX / (tileSize + TILE_GAP));
@@ -400,6 +415,7 @@ export class ProfilePanelScene {
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('pointercancel', this.onPointerUp);
+    this.canvas.removeEventListener('wheel', this.onWheel);
     this.renderer?.dispose();
     this.panelTexture?.dispose();
   }
