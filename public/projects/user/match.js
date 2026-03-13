@@ -2,6 +2,14 @@ import { PhaseManagerClient } from '/public/phase-manager/index.js';
 import { createPhaseManagerElements } from '/public/projects/user/canvasShared.js';
 
 const USER_SESSION_KEY = 'storycard-user-session';
+const NPC_AVATAR_ASSET_FALLBACKS = [
+  '/public/assets/mossling.png',
+  '/public/assets/bramblekit.png',
+  '/public/assets/cinderling.png',
+  '/public/assets/runelet.png',
+  '/public/assets/embermote.png',
+  '/public/assets/sootboundwelp.png',
+];
 
 function getSessionStorage() {
   try {
@@ -19,8 +27,48 @@ function getLocalStorage() {
   }
 }
 const backButton = document.getElementById('user-match-back-button');
+const playerAvatarEl = document.getElementById('match-player-avatar');
+const opponentAvatarEl = document.getElementById('match-opponent-avatar');
+const playerNameEl = document.getElementById('match-player-name');
+const opponentNameEl = document.getElementById('match-opponent-name');
 let hasRequestedExit = false;
 let hasPlayedBattleCloseout = false;
+
+function setAvatarElement(el, { avatarImagePath = null, username = '' } = {}) {
+  if (!el) return;
+  const normalizedName = String(username || '').trim();
+  const glyph = normalizedName.charAt(0).toUpperCase() || '?';
+  el.style.backgroundImage = avatarImagePath ? `url(${avatarImagePath})` : 'none';
+  el.textContent = avatarImagePath ? '' : glyph;
+}
+
+function pickNpcAvatarPath(assets, npcId) {
+  const sourceAssets = Array.isArray(assets) && assets.length ? assets : NPC_AVATAR_ASSET_FALLBACKS;
+  if (!sourceAssets.length) return null;
+  const normalizedNpcId = String(npcId || 'npc').trim();
+  let hash = 0;
+  for (let index = 0; index < normalizedNpcId.length; index += 1) {
+    hash = ((hash << 5) - hash + normalizedNpcId.charCodeAt(index)) | 0;
+  }
+  const selectedIndex = Math.abs(hash) % sourceAssets.length;
+  return sourceAssets[selectedIndex];
+}
+
+async function loadImageAssetPaths() {
+  try {
+    const response = await fetch('/api/assets');
+    const payload = await response.json();
+    if (!response.ok) return NPC_AVATAR_ASSET_FALLBACKS;
+    const assets = Array.isArray(payload?.assets)
+      ? payload.assets
+        .filter((asset) => asset && typeof asset.path === 'string')
+        .map((asset) => asset.path)
+      : [];
+    return assets.length ? assets : NPC_AVATAR_ASSET_FALLBACKS;
+  } catch (error) {
+    return NPC_AVATAR_ASSET_FALLBACKS;
+  }
+}
 
 function playBattleCloseoutTransition({ didPlayerWin = false } = {}) {
   if (hasPlayedBattleCloseout) return;
@@ -91,6 +139,56 @@ if (!session) {
   window.location.replace('/public/projects/user/index.html');
 } else {
   const playerId = session.user.id;
+  const playerName = String(session.user.username || 'You').trim() || 'You';
+  let loadedAvatarAssetPaths = null;
+
+  playerNameEl.textContent = playerName;
+  setAvatarElement(playerAvatarEl, {
+    avatarImagePath: session.user.avatarImagePath || null,
+    username: playerName,
+  });
+  setAvatarElement(opponentAvatarEl, { username: 'Opponent' });
+  opponentNameEl.textContent = 'Opponent';
+
+  const updateOpponentProfile = async ({ opponentId = null } = {}) => {
+    const normalizedOpponentId = typeof opponentId === 'string' ? opponentId.trim() : '';
+    if (!normalizedOpponentId) {
+      opponentNameEl.textContent = 'Opponent';
+      setAvatarElement(opponentAvatarEl, { username: 'Opponent' });
+      return;
+    }
+
+    if (normalizedOpponentId.startsWith('npc-')) {
+      if (!loadedAvatarAssetPaths) {
+        loadedAvatarAssetPaths = await loadImageAssetPaths();
+      }
+      opponentNameEl.textContent = 'NPC Opponent';
+      setAvatarElement(opponentAvatarEl, {
+        avatarImagePath: pickNpcAvatarPath(loadedAvatarAssetPaths, normalizedOpponentId),
+        username: 'NPC',
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/users/${encodeURIComponent(normalizedOpponentId)}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to fetch user');
+      const user = payload?.user || {};
+      const username = String(user.username || 'Opponent').trim() || 'Opponent';
+      opponentNameEl.textContent = username;
+      setAvatarElement(opponentAvatarEl, {
+        avatarImagePath: user.avatarImagePath || null,
+        username,
+      });
+    } catch (error) {
+      opponentNameEl.textContent = 'Opponent';
+      setAvatarElement(opponentAvatarEl, {
+        username: 'Opponent',
+      });
+    }
+  };
+
   const phaseManager = new PhaseManagerClient({
     elements: createPhaseManagerElements({
       canvas: document.getElementById('phase-manager-canvas'),
@@ -100,6 +198,13 @@ if (!session) {
       playerId,
       matchmakingPayload: {
         deckCardIds: Array.isArray(session.user.deck?.cards) ? session.user.deck.cards : [],
+      },
+      onMatchmakingStatus: ({ status } = {}) => {
+        if (status?.status === 'matched') {
+          updateOpponentProfile({ opponentId: status.opponentId });
+          return;
+        }
+        updateOpponentProfile({ opponentId: null });
       },
       onMatchComplete: ({ outcome } = {}) => {
         requestMatchExit(playerId);

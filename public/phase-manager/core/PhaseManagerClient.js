@@ -1592,6 +1592,9 @@ export class PhaseManagerClient {
 
   applyMatchmakingStatus(status) {
     const { matchmakingBtn, statusEl } = this.elements;
+    if (typeof this.options.onMatchmakingStatus === 'function') {
+      this.options.onMatchmakingStatus({ status, match: this.match });
+    }
     this.updateQueueSummary(status);
 
     if (status.status === 'matched') {
