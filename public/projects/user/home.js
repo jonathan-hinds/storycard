@@ -2,6 +2,7 @@ import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
 import { DeckBuilderScene } from '/public/projects/card-library/DeckBuilderScene.js';
 import { PhaseManagerClient } from '/public/phase-manager/index.js';
 import { createPhaseManagerElements } from '/public/projects/user/canvasShared.js';
+import { ProfilePanelScene } from '/public/projects/profile-sandbox/src/ProfilePanelScene.js';
 
 const USER_SESSION_KEY = 'storycard-user-session';
 const POLL_INTERVAL_MS = 1500;
@@ -47,12 +48,13 @@ function saveSession(session) {
 }
 
 class HomeCanvasScene {
-  constructor({ canvas, interactionTarget, username, onDecks, onFindMatch, onChallengeMode }) {
+  constructor({ canvas, interactionTarget, username, onDecks, onFindMatch, onChallengeMode, onProfile }) {
     this.canvas = canvas;
     this.interactionTarget = interactionTarget;
     this.onDecks = onDecks;
     this.onFindMatch = onFindMatch;
     this.onChallengeMode = onChallengeMode;
+    this.onProfile = onProfile;
     this.pointer = new THREE.Vector2();
     this.raycaster = new THREE.Raycaster();
     this.hitTargets = [];
@@ -83,6 +85,7 @@ class HomeCanvasScene {
     this.decksButton = this.createButton('Decks', -3.4, -0.4);
     this.matchButton = this.createButton('Find Match', 0, -0.4, { secondary: true });
     this.challengeButton = this.createButton('Challenge Mode', 3.4, -0.4, { secondary: true });
+    this.profileButton = this.createButton('Profile', 0, -2.05);
 
     this.onPointerUp = this.onPointerUp.bind(this);
     this.onResize = this.onResize.bind(this);
@@ -91,6 +94,32 @@ class HomeCanvasScene {
 
     this.onResize();
     this.renderer.setAnimationLoop(() => this.renderer.render(this.scene, this.camera));
+  }
+
+  applyResponsiveLayout() {
+    const width = Math.max(window.innerWidth, 320);
+    const isMobile = width <= 840;
+
+    if (isMobile) {
+      this.titleSprite.scale.set(8.6, 1.2, 1);
+      this.titleSprite.position.set(0, 2.7, 0.1);
+      this.subtitleSprite.scale.set(6.2, 0.8, 1);
+      this.subtitleSprite.position.set(0, 1.8, 0.1);
+      this.decksButton.position.set(-2.05, 0.45, 0.2);
+      this.matchButton.position.set(2.05, 0.45, 0.2);
+      this.challengeButton.position.set(-2.05, -1.2, 0.2);
+      this.profileButton.position.set(2.05, -1.2, 0.2);
+      return;
+    }
+
+    this.titleSprite.scale.set(8.2, 1.4, 1);
+    this.titleSprite.position.set(0, 2.5, 0.1);
+    this.subtitleSprite.scale.set(5.8, 0.9, 1);
+    this.subtitleSprite.position.set(0, 1.55, 0.1);
+    this.decksButton.position.set(-3.4, -0.4, 0.2);
+    this.matchButton.position.set(0, -0.4, 0.2);
+    this.challengeButton.position.set(3.4, -0.4, 0.2);
+    this.profileButton.position.set(0, -2.05, 0.2);
   }
 
   createTextSprite(text, { width = 1200, height = 300, fontSize = 72, color = '#e7eeff' } = {}) {
@@ -155,12 +184,14 @@ class HomeCanvasScene {
     if (hit.object === this.decksButton) this.onDecks();
     if (hit.object === this.matchButton) this.onFindMatch();
     if (hit.object === this.challengeButton) this.onChallengeMode();
+    if (hit.object === this.profileButton) this.onProfile();
   }
 
   onResize() {
     const width = Math.max(window.innerWidth, 320);
     const height = Math.max(window.innerHeight, 320);
     this.renderer.setSize(width, height, false);
+    this.applyResponsiveLayout();
   }
 
   destroy() {
@@ -184,6 +215,7 @@ if (!session) {
 let homeScene = null;
 let deckBuilderScene = null;
 let phaseManager = null;
+let profileScene = null;
 let matchmakingPollTimer = 0;
 let hasRequestedExit = false;
 let hasPlayedBattleCloseout = false;
@@ -333,7 +365,29 @@ function teardownAll() {
     phaseManager.destroy();
     phaseManager = null;
   }
+  if (profileScene) {
+    profileScene.dispose();
+    profileScene = null;
+  }
   canvas.hidden = false;
+}
+
+function normalizeMetrics(user) {
+  const metrics = user?.metrics || {};
+  const totalGamesPlayed = Number.isFinite(Number(metrics.totalGamesPlayed)) ? Number(metrics.totalGamesPlayed) : 0;
+  const totalWins = Number.isFinite(Number(metrics.totalWins)) ? Number(metrics.totalWins) : 0;
+  const totalLosses = Number.isFinite(Number(metrics.totalLosses)) ? Number(metrics.totalLosses) : 0;
+  const totalCreaturesKilled = Number.isFinite(Number(metrics.totalCreaturesKilled)) ? Number(metrics.totalCreaturesKilled) : 0;
+  const totalCreaturesLost = Number.isFinite(Number(metrics.totalCreaturesLost)) ? Number(metrics.totalCreaturesLost) : 0;
+  const totalSpellsPlayed = Number.isFinite(Number(metrics.totalSpellsPlayed)) ? Number(metrics.totalSpellsPlayed) : 0;
+  return [
+    { name: 'Total Games Played', value: totalGamesPlayed },
+    { name: 'Total Games Won', value: totalWins },
+    { name: 'Total Games Lost', value: totalLosses },
+    { name: 'Creatures Killed', value: totalCreaturesKilled },
+    { name: 'Creatures Lost', value: totalCreaturesLost },
+    { name: 'Spells Played', value: totalSpellsPlayed },
+  ];
 }
 
 function showHome() {
@@ -350,9 +404,50 @@ function showHome() {
     onDecks: () => showDecks(),
     onFindMatch: () => startFindMatchFromHome(),
     onChallengeMode: () => startChallengeModeFromHome(),
+    onProfile: () => showProfile(),
   });
 
   pollMatchStatusUntilMatched();
+}
+
+async function showProfile() {
+  teardownAll();
+  overlayEl.hidden = true;
+  backButton.hidden = false;
+
+  await refreshUserDeck();
+
+  profileScene = new ProfilePanelScene({
+    canvas,
+    initialProfile: {
+      username: session.user.username,
+      avatarImagePath: session.user.avatarImagePath || null,
+      metrics: normalizeMetrics(session.user),
+    },
+    onAvatarSave: async (avatarImagePath) => {
+      const response = await fetch(`/api/users/${encodeURIComponent(session.user.id)}/avatar`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarImagePath }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to save avatar');
+      if (payload?.user) {
+        session.user = payload.user;
+        saveSession(session);
+        profileScene.setProfile({
+          username: session.user.username,
+          avatarImagePath: session.user.avatarImagePath || null,
+          metrics: normalizeMetrics(session.user),
+        });
+      }
+    },
+  });
+
+  const assetsResponse = await fetch('/api/assets');
+  const assetsPayload = await assetsResponse.json();
+  if (!assetsResponse.ok) throw new Error(assetsPayload.error || 'Unable to load assets');
+  await profileScene.setAssets(assetsPayload.assets || []);
 }
 
 async function showDecks() {
@@ -513,7 +608,7 @@ function startChallengeModeFromHome() {
 }
 
 backButton.addEventListener('click', () => {
-  requestMatchExit(session.user.id);
+  if (phaseManager) requestMatchExit(session.user.id);
   showHome();
 });
 
