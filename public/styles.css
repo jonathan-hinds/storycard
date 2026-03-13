@@ -1148,6 +1148,7 @@ button {
 }
 
 .profile-sandbox-auth-card select,
+.profile-sandbox-auth-card input,
 .profile-sandbox-auth-card button {
   border-color: #5b5b5b;
   background: #000000;
