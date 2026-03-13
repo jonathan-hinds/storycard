@@ -1261,6 +1261,7 @@ class PhaseManagerServer {
   applyDamageOverTimeAtPhaseChange(match) {
     if (!match?.cardsByPlayer) return [];
     const events = [];
+    const getOpponentId = (playerId) => match.players.find((id) => id !== playerId) || null;
 
     match.players.forEach((playerId) => {
       const playerState = match.cardsByPlayer.get(playerId);
@@ -1275,7 +1276,7 @@ class PhaseManagerServer {
             targetPlayerId: playerId,
             targetSlotIndex: card.slotIndex,
             damage: dotDamage,
-            sourcePlayerId: null,
+            sourcePlayerId: getOpponentId(playerId),
             applyFocalMarkBonus: true,
           });
           if (damageResult.executed === false) return;
