@@ -71,6 +71,58 @@ async function main() {
   assert.equal(byKey('player-b', 'totalGamesPlayed'), 1, 'loser should increment games played');
   assert.equal(byKey('player-b', 'totalLosses'), 1, 'loser should increment losses');
 
+  await server.findMatch('player-c');
+  const dotStatus = await server.findMatch('player-d');
+  assert.equal(dotStatus.status, 'matched', 'dot test players should be matched');
+  const dotMatch = server.phaseMatches.get(dotStatus.matchId);
+  assert.ok(dotMatch, 'dot test match should exist');
+
+  const playerDState = dotMatch.cardsByPlayer.get('player-d');
+  playerDState.board = [{
+    id: 'd-creature-1',
+    slotIndex: 0,
+    catalogCard: {
+      cardKind: 'Creature',
+      health: 1,
+    },
+    poisonTurnsRemaining: 1,
+    poisonStacks: 1,
+  }];
+  dotMatch.initialCreatureCountByPlayer.set('player-d', 1);
+
+  const dotEvents = server.applyDamageOverTimeAtPhaseChange(dotMatch);
+  assert.equal(dotEvents.length, 1, 'dot should produce one damage event');
+  assert.equal(dotMatch.phase, 3, 'dot lethal damage should complete match');
+  assert.equal(byKey('player-c', 'totalCreaturesKilled'), 1, 'dot kills should increment kills for opposing player');
+  assert.equal(byKey('player-d', 'totalCreaturesLost'), 1, 'dot target should increment creatures lost');
+
+  const challengeStatus = await server.findMatch('player-e', { opponentType: 'npc', mode: 'challenge' });
+  assert.equal(challengeStatus.status, 'matched', 'challenge player should be matched with npc');
+  const challengeMatch = server.phaseMatches.get(challengeStatus.matchId);
+  assert.ok(challengeMatch, 'challenge match should exist');
+
+  const challengeNpcId = challengeMatch.players.find((id) => id !== 'player-e');
+  assert.ok(challengeNpcId && challengeNpcId.startsWith('npc-'), 'challenge opponent should be npc');
+
+  const challengeNpcState = challengeMatch.cardsByPlayer.get(challengeNpcId);
+  challengeNpcState.board = [{
+    id: 'npc-creature-1',
+    slotIndex: 0,
+    catalogCard: {
+      cardKind: 'Creature',
+      health: 1,
+    },
+    fireTurnsRemaining: 1,
+    fireStacks: 1,
+  }];
+  challengeMatch.initialCreatureCountByPlayer.set(challengeNpcId, 1);
+
+  const challengeDotEvents = server.applyDamageOverTimeAtPhaseChange(challengeMatch);
+  assert.equal(challengeDotEvents.length, 1, 'challenge dot should produce one damage event');
+  assert.equal(challengeMatch.phase, 3, 'challenge dot lethal damage should complete match');
+  assert.equal(byKey('player-e', 'totalCreaturesKilled'), 1, 'challenge dot kills should increment kills for player');
+  assert.equal(byKey(challengeNpcId, 'totalCreaturesLost'), 1, 'challenge npc should increment creatures lost');
+
   console.log('phase manager metric increment callback checks passed');
 }
 
