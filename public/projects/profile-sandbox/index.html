@@ -2,10 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Dice UV Editor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profile Sandbox Project</title>
     <link rel="stylesheet" href="/public/styles.css" />
   </head>
-  <body data-page="dice-uv-editor">
+  <body data-page="profile-sandbox-project">
     <header class="top-nav-wrap">
       <nav class="top-nav" aria-label="Primary">
         <a class="brand" href="/">Storycard Sandbox</a>
@@ -18,6 +19,7 @@
               <li><a href="/public/projects/cards.html">Cards</a></li>
               <li><a href="/public/projects/abilities.html">Creature Abilities</a></li>
               <li><a href="/public/projects/spell-abilities.html">Spell Abilities</a></li>
+              <li><a href="/public/projects/buff-icons.html">Buff Icon Manager</a></li>
               <li><a href="/public/card/single-card/index.html">Card / Single Card</a></li>
               <li><a href="/public/projects/phase-manager/index.html">Phase Manager</a></li>
               <li><a href="/public/projects/profile-sandbox/index.html">Profile Sandbox</a></li>
@@ -44,17 +46,28 @@
       </nav>
     </header>
 
-    <main class="layout tools-layout">
-      <section class="controls tools-controls">
-        <h1>Dice UV Editor</h1>
-        <p>Pick a die + texture, drag UV points, then export JSON to share updates.</p>
-        <div id="dice-uv-controls" class="tools-slider-grid"></div>
+    <main class="layout single-card-layout">
+      <section class="controls">
+        <h1>Profile Sandbox Project</h1>
+        <p>
+          Sandbox for a canvas-only profile module: floating profile panel mesh, retro monochrome styling, and a sign-in harness for fast testing before integration into user gameplay scenes.
+        </p>
+
+        <div class="card profile-sandbox-auth-card">
+          <h2>Test User Sign In</h2>
+          <label for="profile-sandbox-user-select">User</label>
+          <select id="profile-sandbox-user-select" aria-label="Select sandbox user"></select>
+          <button id="profile-sandbox-sign-in" type="button">Sign In</button>
+          <button id="profile-sandbox-sign-out" type="button" class="secondary-action">Sign Out</button>
+          <p id="profile-sandbox-auth-status" class="debug-pill">No user signed in.</p>
+        </div>
       </section>
-      <section class="dice-uv-stage-wrap">
-        <canvas id="dice-uv-canvas" class="dice-uv-canvas" width="1024" height="1024" aria-label="Dice UV editor"></canvas>
+
+      <section class="single-card-stage-wrap profile-sandbox-stage-wrap">
+        <canvas id="profile-sandbox-canvas" class="single-card-canvas" aria-label="Profile sandbox canvas"></canvas>
       </section>
     </main>
 
-    <script type="module" src="/public/tools/dice-uv-editor/index.js"></script>
+    <script type="module" src="/public/projects/profile-sandbox/src/app.js"></script>
   </body>
 </html>

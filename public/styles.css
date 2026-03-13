@@ -1132,3 +1132,47 @@ button {
   0% { opacity: 0.2; }
   100% { opacity: 1; }
 }
+
+.profile-sandbox-auth-card {
+  border: 1px solid #3a3a3a;
+  background: #0a0a0a;
+}
+
+.profile-sandbox-auth-card h2 {
+  margin: 0;
+}
+
+.profile-sandbox-auth-card label {
+  font-size: 0.85rem;
+  color: #e8e8e8;
+}
+
+.profile-sandbox-auth-card select,
+.profile-sandbox-auth-card button {
+  border-color: #5b5b5b;
+  background: #000000;
+  color: #f5f5f5;
+}
+
+.profile-sandbox-stage-wrap {
+  background: radial-gradient(circle at center, #111111 0%, #000000 65%);
+}
+
+body[data-page='profile-sandbox-project'] {
+  background: #050505;
+  color: #f2f2f2;
+}
+
+body[data-page='profile-sandbox-project'] .controls {
+  border-right-color: #2f2f2f;
+  background: #0b0b0b;
+}
+
+body[data-page='profile-sandbox-project'] .card {
+  background: #111111;
+}
+
+body[data-page='profile-sandbox-project'] .single-card-canvas {
+  border-color: #4a4a4a;
+  image-rendering: pixelated;
+}
