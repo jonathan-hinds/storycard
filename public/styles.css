@@ -1177,3 +1177,22 @@ body[data-page='profile-sandbox-project'] .single-card-canvas {
   border-color: #4a4a4a;
   image-rendering: pixelated;
 }
+
+.npc-deck-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  width: min(960px, 100%);
+  margin: 0 auto 0.9rem;
+}
+
+.npc-deck-toolbar label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.npc-deck-toolbar select,
+.npc-deck-toolbar input {
+  width: 100%;
+}

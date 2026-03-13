@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NPC Deck Builder</title>
+    <link rel="stylesheet" href="/public/styles.css" />
+  </head>
+  <body data-page="npc-decks">
+    <main class="cards-list-wrap user-decks-layout" aria-live="polite">
+      <h1>NPC Deck Builder</h1>
+      <p class="cards-library-caption">Build and manage multiple NPC decks for challenge mode matchmaking.</p>
+      <p id="npc-deck-status" class="cards-library-caption user-deck-status"></p>
+      <section class="npc-deck-toolbar" aria-label="NPC deck controls">
+        <label>
+          NPC Deck
+          <select id="npc-deck-select">
+            <option value="">New deck</option>
+          </select>
+        </label>
+        <label>
+          Deck Name
+          <input id="npc-deck-name" type="text" maxlength="64" placeholder="e.g. Fire Aggro Alpha" />
+        </label>
+      </section>
+      <div id="npc-card-list" class="cards-list">
+        <div id="npc-card-library-stage" class="cards-library-stage-wrap">
+          <canvas id="npc-card-library-canvas" class="cards-library-canvas" aria-label="NPC deck builder 3D card library scene"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="/public/projects/npc-decks/index.js"></script>
+  </body>
+</html>

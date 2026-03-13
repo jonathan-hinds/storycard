@@ -47,6 +47,11 @@ const {
   updateUserAvatar,
   recordBattleMetrics,
 } = require('./shared/user/mongoStore');
+const {
+  listNpcDecks,
+  createNpcDeck,
+  updateNpcDeck,
+} = require('./shared/npc-decks/mongoStore');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -77,6 +82,7 @@ function normalizeMetricsPlayerId(playerId) {
 
 const phaseManagerServer = new PhaseManagerServer({
   catalogProvider: async () => listCatalogCards(),
+  npcDeckProvider: async () => listNpcDecks(),
   onBattleMetricIncrement: async ({ playerId, metricKey, increment } = {}) => {
     const normalizedPlayerId = normalizeMetricsPlayerId(playerId);
     if (!normalizedPlayerId || normalizedPlayerId.startsWith('npc-')) return;
@@ -357,6 +363,56 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('deck must include exactly 3 creature cards');
       const statusCode = error.message === 'user not found' ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to save deck' });
+    }
+    return true;
+  }
+
+  const npcDeckMatch = pathname.match(/^\/api\/npc-decks\/([^/]+)$/);
+
+  if (req.method === 'GET' && pathname === '/api/npc-decks') {
+    try {
+      const npcDecks = await listNpcDecks();
+      sendJson(res, 200, { npcDecks });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || 'Unable to load NPC decks' });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/npc-decks') {
+    try {
+      const body = await readRequestJson(req);
+      const npcDeck = await createNpcDeck({
+        name: body.name,
+        deck: body.deck || {},
+      });
+      sendJson(res, 201, { npcDeck });
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('deck cannot exceed')
+        || error.message.includes('deck must include exactly 3 creature cards')
+        || error.message.includes('deck name');
+      sendJson(res, isValidationError ? 400 : 500, { error: error.message || 'Unable to create NPC deck' });
+    }
+    return true;
+  }
+
+  if (req.method === 'PUT' && npcDeckMatch) {
+    try {
+      const body = await readRequestJson(req);
+      const npcDeck = await updateNpcDeck(npcDeckMatch[1], {
+        name: body.name,
+        deck: body.deck || {},
+      });
+      sendJson(res, 200, { npcDeck });
+    } catch (error) {
+      const isValidationError =
+        error.message.includes('invalid deck id')
+        || error.message.includes('deck cannot exceed')
+        || error.message.includes('deck must include exactly 3 creature cards')
+        || error.message.includes('deck name');
+      const statusCode = error.message === 'deck not found' ? 404 : isValidationError ? 400 : 500;
+      sendJson(res, statusCode, { error: error.message || 'Unable to update NPC deck' });
     }
     return true;
   }

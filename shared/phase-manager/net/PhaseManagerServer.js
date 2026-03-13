@@ -140,6 +140,7 @@ class PhaseManagerServer {
     this.options = {
       ...DEFAULT_OPTIONS,
       catalogProvider: typeof options.catalogProvider === 'function' ? options.catalogProvider : async () => [],
+      npcDeckProvider: typeof options.npcDeckProvider === 'function' ? options.npcDeckProvider : async () => [],
       onBattleMetrics: typeof options.onBattleMetrics === 'function' ? options.onBattleMetrics : null,
       onBattleMetricIncrement: typeof options.onBattleMetricIncrement === 'function' ? options.onBattleMetricIncrement : null,
       ...options,
@@ -2700,6 +2701,28 @@ class PhaseManagerServer {
     return { status: 'idle', queueCount: this.phaseQueue.length };
   }
 
+  async getRandomNpcDeckCardIds() {
+    let npcDecks = [];
+    try {
+      const loadedDecks = await this.options.npcDeckProvider();
+      npcDecks = Array.isArray(loadedDecks) ? loadedDecks : [];
+    } catch (error) {
+      npcDecks = [];
+    }
+
+    const candidateDecks = npcDecks
+      .map((deck) => (Array.isArray(deck?.deck?.cards) ? deck.deck.cards : []))
+      .map((cards) => cards.filter((cardId) => typeof cardId === 'string' && cardId.trim()).map((cardId) => cardId.trim()))
+      .filter((cards) => cards.length > 0);
+
+    if (!candidateDecks.length) {
+      return [];
+    }
+
+    const randomIndex = Math.floor(Math.random() * candidateDecks.length);
+    return candidateDecks[randomIndex];
+  }
+
   async findMatch(playerId, options = {}) {
     const existing = this.getPlayerPhaseStatus(playerId);
     if (existing.status === 'matched' || existing.status === 'searching') {
@@ -2793,9 +2816,10 @@ class PhaseManagerServer {
 
     if (useNpcOpponent) {
       const npcPlayerId = `npc-${randomUUID().slice(0, 8)}`;
+      const npcDeckCardIds = await this.getRandomNpcDeckCardIds();
       const players = [npcPlayerId, playerId];
       const preferredDeckByPlayer = new Map([
-        [npcPlayerId, []],
+        [npcPlayerId, npcDeckCardIds],
         [playerId, preferredDeckCardIds],
       ]);
       const match = await createMatchState(players, preferredDeckByPlayer);
