@@ -9,12 +9,37 @@ const signInBtn = document.getElementById('profile-sandbox-sign-in');
 const signOutBtn = document.getElementById('profile-sandbox-sign-out');
 const authStatus = document.getElementById('profile-sandbox-auth-status');
 
+let activeUser = null;
+
 const scene = new ProfilePanelScene({
   canvas,
+  onAvatarSave: async (avatarImagePath) => {
+    if (!activeUser?.id) {
+      setStatus('Sign in before saving an avatar.', true);
+      return;
+    }
+    setStatus('Saving avatar...');
+    try {
+      const response = await fetch(`/api/users/${activeUser.id}/avatar`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarImagePath }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to save avatar');
+      activeUser = payload.user;
+      saveUserSession(activeUser);
+      setSignedInUser(activeUser);
+      setStatus(`Avatar saved for ${activeUser.username}.`);
+    } catch (error) {
+      setStatus(error.message || 'Unable to save avatar', true);
+    }
+  },
 });
 
 const guestProfile = {
   username: 'Guest User',
+  avatarImagePath: null,
   metrics: [
     { name: 'Total Games Played', value: 0 },
     { name: 'Total Games Won', value: 0 },
@@ -49,26 +74,16 @@ function getLocalStorage() {
 function saveUserSession(user) {
   const serialized = JSON.stringify({ user });
   const sessionStorageRef = getSessionStorage();
-  if (sessionStorageRef) {
-    sessionStorageRef.setItem(USER_SESSION_KEY, serialized);
-  }
-
+  if (sessionStorageRef) sessionStorageRef.setItem(USER_SESSION_KEY, serialized);
   const localStorageRef = getLocalStorage();
-  if (localStorageRef) {
-    localStorageRef.removeItem(USER_SESSION_KEY);
-  }
+  if (localStorageRef) localStorageRef.removeItem(USER_SESSION_KEY);
 }
 
 function clearUserSession() {
   const sessionStorageRef = getSessionStorage();
-  if (sessionStorageRef) {
-    sessionStorageRef.removeItem(USER_SESSION_KEY);
-  }
-
+  if (sessionStorageRef) sessionStorageRef.removeItem(USER_SESSION_KEY);
   const localStorageRef = getLocalStorage();
-  if (localStorageRef) {
-    localStorageRef.removeItem(USER_SESSION_KEY);
-  }
+  if (localStorageRef) localStorageRef.removeItem(USER_SESSION_KEY);
 }
 
 function normalizeMetrics(user) {
@@ -90,16 +105,30 @@ function normalizeMetrics(user) {
 }
 
 function setSignedInUser(user) {
+  activeUser = user;
   scene.setProfile({
     username: user.username,
+    avatarImagePath: user.avatarImagePath || null,
     metrics: normalizeMetrics(user),
   });
   setStatus(`Signed in as ${user.username}`);
 }
 
 function setSignedOutUser() {
+  activeUser = null;
   scene.setProfile(guestProfile);
   setStatus('No user signed in.');
+}
+
+async function loadAssets() {
+  try {
+    const response = await fetch('/api/assets');
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Unable to load assets');
+    await scene.setAssets(payload.assets || []);
+  } catch (error) {
+    setStatus(error.message || 'Unable to load assets', true);
+  }
 }
 
 async function signIn() {
@@ -121,9 +150,7 @@ async function signIn() {
       body: JSON.stringify({ username, password }),
     });
     const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || 'Unable to sign in');
-    }
+    if (!response.ok) throw new Error(payload.error || 'Unable to sign in');
 
     saveUserSession(payload.user);
     setSignedInUser(payload.user);
@@ -151,6 +178,7 @@ signOutBtn.addEventListener('click', () => {
 });
 
 setSignedOutUser();
+loadAssets();
 
 window.addEventListener('beforeunload', () => {
   scene.dispose();
