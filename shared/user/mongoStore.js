@@ -184,18 +184,6 @@ function normalizePlayerMetricsFromDocument(document = {}) {
   return normalized;
 }
 
-function normalizeAvatarImagePath(avatarImagePath) {
-  if (typeof avatarImagePath !== 'string') throw new Error('avatar image path is required');
-  const normalized = avatarImagePath.trim();
-  if (!normalized.startsWith('/public/assets/')) {
-    throw new Error('avatar image path must be inside /public/assets');
-  }
-  if (normalized.includes('..')) {
-    throw new Error('avatar image path is invalid');
-  }
-  return normalized;
-}
-
 function toPublicUser(document) {
   const deck = normalizeDeckFromDocument(document);
   const metrics = normalizePlayerMetricsFromDocument(document);
@@ -204,7 +192,6 @@ function toPublicUser(document) {
     username: document.username,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt ?? null,
-    avatarImagePath: typeof document.avatarImagePath === 'string' ? document.avatarImagePath : null,
     deck,
     metrics,
   };
@@ -231,7 +218,6 @@ async function createUser(input = {}) {
         ...createDefaultPlayerMetrics(),
         updatedAt: now,
       },
-      avatarImagePath: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -321,37 +307,6 @@ async function updateUserDeck(userId, deck = {}) {
   if (!updatedUser) {
     throw new Error('user not found');
   }
-  return toPublicUser(updatedUser);
-}
-
-
-async function updateUserAvatar(userId, avatarImagePath) {
-  const { ObjectId } = getMongoClientConstructor();
-  if (typeof userId !== 'string' || !ObjectId.isValid(userId)) {
-    throw new Error('invalid user id');
-  }
-
-  const normalizedAvatarImagePath = normalizeAvatarImagePath(avatarImagePath);
-  const collection = await getCollection();
-  const updatedAt = new Date().toISOString();
-  const result = await collection.findOneAndUpdate(
-    { _id: new ObjectId(userId) },
-    {
-      $set: {
-        avatarImagePath: normalizedAvatarImagePath,
-        updatedAt,
-      },
-    },
-    { returnDocument: 'after' },
-  );
-
-  const updatedUser = result && typeof result === 'object' && 'value' in result
-    ? result.value
-    : result;
-  if (!updatedUser) {
-    throw new Error('user not found');
-  }
-
   return toPublicUser(updatedUser);
 }
 
@@ -477,6 +432,4 @@ module.exports = {
   updateUserDeck,
   normalizeUsername,
   normalizePassword,
-  normalizeAvatarImagePath,
-  updateUserAvatar,
 };

@@ -44,7 +44,6 @@ const {
   getUserById,
   loginUser,
   updateUserDeck,
-  updateUserAvatar,
   recordBattleMetrics,
 } = require('./shared/user/mongoStore');
 
@@ -110,7 +109,6 @@ const userServer = new UserServer({
   getUserById,
   loginUser,
   updateUserDeck,
-  updateUserAvatar,
   incrementUserMetrics: (payload) => {
     if (payload && payload.metricIncrements) {
       return userMetricsService.incrementMetrics(payload);
@@ -118,17 +116,6 @@ const userServer = new UserServer({
     return userMetricsService.incrementMetric(payload);
   },
 });
-
-
-
-function listAvatarAssetPaths() {
-  const assetsDir = path.join(PUBLIC_DIR, 'assets');
-  const allowedExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
-  return fs.readdirSync(assetsDir)
-    .filter((fileName) => allowedExtensions.has(path.extname(fileName).toLowerCase()))
-    .sort((left, right) => left.localeCompare(right))
-    .map((fileName) => `/public/assets/${fileName}`);
-}
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': MIME_TYPES['.json'] });
@@ -270,16 +257,6 @@ async function handleApi(req, res, pathname) {
   }
 
 
-  if (req.method === 'GET' && pathname === '/api/assets/avatar-list') {
-    try {
-      sendJson(res, 200, { assets: listAvatarAssetPaths() });
-    } catch (error) {
-      sendJson(res, 500, { error: 'Unable to load avatar assets' });
-    }
-    return true;
-  }
-
-
   if (req.method === 'POST' && pathname === '/api/users/register') {
     try {
       const body = await readRequestJson(req);
@@ -324,7 +301,6 @@ async function handleApi(req, res, pathname) {
   }
 
   const userDeckMatch = pathname.match(/^\/api\/users\/([^/]+)\/deck$/);
-  const userAvatarMatch = pathname.match(/^\/api\/users\/([^/]+)\/avatar$/);
   const userMetricsMatch = pathname.match(/^\/api\/users\/([^/]+)\/metrics\/increment$/);
   if (req.method === 'POST' && userMetricsMatch) {
     try {
@@ -343,22 +319,6 @@ async function handleApi(req, res, pathname) {
         || error.message.includes('at least one metric increment is required');
       const statusCode = error.message === 'user not found' ? 404 : isValidationError ? 400 : 500;
       sendJson(res, statusCode, { error: error.message || 'Unable to increment metrics' });
-    }
-    return true;
-  }
-
-
-  if (req.method === 'PUT' && userAvatarMatch) {
-    try {
-      const body = await readRequestJson(req);
-      const result = await userServer.saveAvatar({ userId: userAvatarMatch[1], avatarImagePath: body.avatarImagePath });
-      sendJson(res, 200, result);
-    } catch (error) {
-      const isValidationError =
-        error.message.includes('invalid user id')
-        || error.message.includes('avatar image path');
-      const statusCode = error.message === 'user not found' ? 404 : isValidationError ? 400 : 500;
-      sendJson(res, statusCode, { error: error.message || 'Unable to save avatar' });
     }
     return true;
   }
