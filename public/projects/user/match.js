@@ -26,6 +26,18 @@ function getLocalStorage() {
     return null;
   }
 }
+
+function normalizeMetrics(metricsInput = null) {
+  const metrics = metricsInput && typeof metricsInput === 'object' ? metricsInput : {};
+  return {
+    totalGamesPlayed: Number.isFinite(Number(metrics.totalGamesPlayed)) ? Number(metrics.totalGamesPlayed) : 0,
+    totalWins: Number.isFinite(Number(metrics.totalWins)) ? Number(metrics.totalWins) : 0,
+    totalLosses: Number.isFinite(Number(metrics.totalLosses)) ? Number(metrics.totalLosses) : 0,
+    totalCreaturesKilled: Number.isFinite(Number(metrics.totalCreaturesKilled)) ? Number(metrics.totalCreaturesKilled) : 0,
+    totalCreaturesLost: Number.isFinite(Number(metrics.totalCreaturesLost)) ? Number(metrics.totalCreaturesLost) : 0,
+    totalSpellsPlayed: Number.isFinite(Number(metrics.totalSpellsPlayed)) ? Number(metrics.totalSpellsPlayed) : 0,
+  };
+}
 const backButton = document.getElementById('user-match-back-button');
 let hasRequestedExit = false;
 let hasPlayedBattleCloseout = false;
@@ -133,7 +145,7 @@ if (!session) {
   const updateOpponentProfile = async ({ opponentId = null } = {}) => {
     const normalizedOpponentId = typeof opponentId === 'string' ? opponentId.trim() : '';
     if (!normalizedOpponentId) {
-      phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
+      phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null, metrics: normalizeMetrics() });
       return;
     }
 
@@ -144,6 +156,7 @@ if (!session) {
       phaseManager.setOpponentProfile({
         avatarImagePath: pickNpcAvatarPath(loadedAvatarAssetPaths, normalizedOpponentId),
         username: 'NPC Opponent',
+        metrics: normalizeMetrics(),
       });
       return;
     }
@@ -157,9 +170,10 @@ if (!session) {
       phaseManager.setOpponentProfile({
         avatarImagePath: user.avatarImagePath || null,
         username,
+        metrics: normalizeMetrics(user.metrics),
       });
     } catch (error) {
-      phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
+      phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null, metrics: normalizeMetrics() });
     }
   };
 
@@ -193,8 +207,9 @@ if (!session) {
   phaseManager.setPlayerProfile({
     username: playerName,
     avatarImagePath: session.user.avatarImagePath || null,
+    metrics: normalizeMetrics(session.user.metrics),
   });
-  phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
+  phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null, metrics: normalizeMetrics() });
 
   phaseManager.start();
 

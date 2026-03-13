@@ -28,6 +28,14 @@ const DEFAULT_AVATAR_PLAYER_POSITION = { x: 0.12, y: DEFAULT_AVATAR_PANEL_Y, z: 
 const DEFAULT_AVATAR_OPPONENT_POSITION = { x: 0.88, y: DEFAULT_AVATAR_PANEL_Y, z: -5.48 };
 const DEFAULT_AVATAR_PANEL_OPACITY_PERCENT = 0;
 const MAX_AVATAR_NAME_LENGTH = 16;
+const PROFILE_METRIC_KEYS = [
+  { key: 'totalGamesPlayed', label: 'Total Games Played' },
+  { key: 'totalWins', label: 'Total Games Won' },
+  { key: 'totalLosses', label: 'Total Games Lost' },
+  { key: 'totalCreaturesKilled', label: 'Creatures Killed' },
+  { key: 'totalCreaturesLost', label: 'Creatures Lost' },
+  { key: 'totalSpellsPlayed', label: 'Spells Played' },
+];
 
 function getFrustumHalfExtents(fovDegrees, aspect, depth) {
   const safeDepth = Math.max(Math.abs(depth), 0.001);
@@ -88,10 +96,12 @@ export class PhaseManagerClient {
     this.avatarDisplay = null;
     this.avatarPanelY = DEFAULT_AVATAR_PANEL_Y;
     this.avatarPanelOpacityPercent = DEFAULT_AVATAR_PANEL_OPACITY_PERCENT;
-    this.playerProfile = { username: 'You', avatarImagePath: null };
-    this.opponentProfile = { username: 'Opponent', avatarImagePath: null };
+    this.playerProfile = { username: 'You', avatarImagePath: null, metrics: this.normalizeProfileMetrics() };
+    this.opponentProfile = { username: 'Opponent', avatarImagePath: null, metrics: this.normalizeProfileMetrics() };
     this.avatarImageCache = new Map();
     this.avatarRenderToken = 0;
+    this.profileTooltipEl = null;
+    this.profileTooltipOpenSide = null;
     this.boundControlListeners = [];
     this.playedRemoteSpellResolutionIds = new Set();
     this.lastPlayedDotEventKey = null;
@@ -123,16 +133,29 @@ export class PhaseManagerClient {
     this.playerProfile = {
       username: this.normalizeAvatarName(profile.username, 'You'),
       avatarImagePath: this.normalizeAvatarPath(profile.avatarImagePath),
+      metrics: this.normalizeProfileMetrics(profile.metrics),
     };
     this.syncAvatarDisplay();
+    this.renderProfileTooltip();
   }
 
   setOpponentProfile(profile = {}) {
     this.opponentProfile = {
       username: this.normalizeAvatarName(profile.username, 'Opponent'),
       avatarImagePath: this.normalizeAvatarPath(profile.avatarImagePath),
+      metrics: this.normalizeProfileMetrics(profile.metrics),
     };
     this.syncAvatarDisplay();
+    this.renderProfileTooltip();
+  }
+
+  normalizeProfileMetrics(metricsInput = null) {
+    const metrics = metricsInput && typeof metricsInput === 'object' ? metricsInput : {};
+    return PROFILE_METRIC_KEYS.map(({ key, label }) => {
+      const rawValue = metrics?.[key];
+      const value = Number.isFinite(Number(rawValue)) ? Math.max(0, Math.floor(Number(rawValue))) : 0;
+      return { key, label, value };
+    });
   }
 
   normalizeAvatarName(name, fallback = 'Player') {
@@ -145,6 +168,15 @@ export class PhaseManagerClient {
     if (typeof path !== 'string') return null;
     const normalized = path.trim();
     return normalized || null;
+  }
+
+  escapeHtml(value) {
+    return String(value || '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
   }
 
   handleWindowResize() {
@@ -559,6 +591,9 @@ export class PhaseManagerClient {
     this.teardownUpkeepDisplay();
     this.teardownReadyButtonDisplay();
     this.teardownAvatarDisplay();
+    this.profileTooltipEl?.remove();
+    this.profileTooltipEl = null;
+    this.profileTooltipOpenSide = null;
   }
 
   createDisplayTexture(size) {
@@ -1042,9 +1077,75 @@ export class PhaseManagerClient {
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(pointer, this.client.camera);
+
+    const clickedPlayerAvatar = this.avatarDisplay?.player?.mesh ? raycaster.intersectObject(this.avatarDisplay.player.mesh, false).length > 0 : false;
+    const clickedOpponentAvatar = this.avatarDisplay?.opponent?.mesh ? raycaster.intersectObject(this.avatarDisplay.opponent.mesh, false).length > 0 : false;
+    if (clickedPlayerAvatar) {
+      this.toggleProfileTooltip('player');
+      return;
+    }
+    if (clickedOpponentAvatar) {
+      this.toggleProfileTooltip('opponent');
+      return;
+    }
+
+    if (this.profileTooltipOpenSide) {
+      this.hideProfileTooltip();
+      return;
+    }
+
     const hits = raycaster.intersectObject(this.readyButtonDisplay.panelMesh, false);
     if (!hits.length) return;
     this.readyUp();
+  }
+
+  ensureProfileTooltip() {
+    if (this.profileTooltipEl || !this.elements.canvas) return;
+    const host = this.elements.canvas.parentElement;
+    if (!host) return;
+    const tooltip = document.createElement('div');
+    tooltip.className = 'phase-manager-profile-tooltip';
+    tooltip.hidden = true;
+    tooltip.setAttribute('role', 'dialog');
+    tooltip.setAttribute('aria-modal', 'false');
+    tooltip.setAttribute('aria-label', 'Player profile metrics');
+    host.appendChild(tooltip);
+    this.profileTooltipEl = tooltip;
+  }
+
+  toggleProfileTooltip(side) {
+    if (this.profileTooltipOpenSide === side) {
+      this.hideProfileTooltip();
+      return;
+    }
+    this.profileTooltipOpenSide = side === 'opponent' ? 'opponent' : 'player';
+    this.renderProfileTooltip();
+  }
+
+  hideProfileTooltip() {
+    this.profileTooltipOpenSide = null;
+    if (this.profileTooltipEl) {
+      this.profileTooltipEl.hidden = true;
+    }
+  }
+
+  renderProfileTooltip() {
+    this.ensureProfileTooltip();
+    if (!this.profileTooltipEl) return;
+    if (!this.profileTooltipOpenSide) {
+      this.profileTooltipEl.hidden = true;
+      return;
+    }
+    const profile = this.profileTooltipOpenSide === 'opponent' ? this.opponentProfile : this.playerProfile;
+    const metricCells = (profile.metrics || [])
+      .map((metric) => `<div class="phase-manager-profile-tooltip__cell"><span class="phase-manager-profile-tooltip__label">${this.escapeHtml(metric.label)}</span><span class="phase-manager-profile-tooltip__value">${this.escapeHtml(metric.value)}</span></div>`)
+      .join('');
+    this.profileTooltipEl.innerHTML = `
+      <p class="phase-manager-profile-tooltip__name">${this.escapeHtml(this.normalizeAvatarName(profile.username, 'Player'))}</p>
+      <div class="phase-manager-profile-tooltip__grid">${metricCells}</div>
+    `;
+    this.profileTooltipEl.dataset.side = this.profileTooltipOpenSide;
+    this.profileTooltipEl.hidden = false;
   }
 
   syncUpkeepDisplay() {
