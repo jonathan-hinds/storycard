@@ -6,6 +6,14 @@ import { ProfilePanelScene } from '/public/projects/profile-sandbox/src/ProfileP
 
 const USER_SESSION_KEY = 'storycard-user-session';
 const POLL_INTERVAL_MS = 1500;
+const NPC_AVATAR_ASSET_FALLBACKS = [
+  '/public/assets/mossling.png',
+  '/public/assets/bramblekit.png',
+  '/public/assets/cinderling.png',
+  '/public/assets/runelet.png',
+  '/public/assets/embermote.png',
+  '/public/assets/sootboundwelp.png',
+];
 
 function getSessionStorage() {
   try {
@@ -221,6 +229,68 @@ let hasRequestedExit = false;
 let hasPlayedBattleCloseout = false;
 let pendingSavePromise = null;
 let currentMatchRequestMode = null;
+let loadedAvatarAssetPaths = null;
+
+function pickNpcAvatarPath(assets, npcId) {
+  const sourceAssets = Array.isArray(assets) && assets.length ? assets : NPC_AVATAR_ASSET_FALLBACKS;
+  if (!sourceAssets.length) return null;
+  const normalizedNpcId = String(npcId || 'npc').trim();
+  let hash = 0;
+  for (let index = 0; index < normalizedNpcId.length; index += 1) {
+    hash = ((hash << 5) - hash + normalizedNpcId.charCodeAt(index)) | 0;
+  }
+  const selectedIndex = Math.abs(hash) % sourceAssets.length;
+  return sourceAssets[selectedIndex];
+}
+
+async function loadImageAssetPaths() {
+  try {
+    const response = await fetch('/api/assets');
+    const payload = await response.json();
+    if (!response.ok) return NPC_AVATAR_ASSET_FALLBACKS;
+    const assets = Array.isArray(payload?.assets)
+      ? payload.assets
+        .filter((asset) => asset && typeof asset.path === 'string')
+        .map((asset) => asset.path)
+      : [];
+    return assets.length ? assets : NPC_AVATAR_ASSET_FALLBACKS;
+  } catch (error) {
+    return NPC_AVATAR_ASSET_FALLBACKS;
+  }
+}
+
+async function updateOpponentProfile(opponentId = null) {
+  if (!phaseManager) return;
+  const normalizedOpponentId = typeof opponentId === 'string' ? opponentId.trim() : '';
+  if (!normalizedOpponentId) {
+    phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
+    return;
+  }
+
+  if (normalizedOpponentId.startsWith('npc-')) {
+    if (!loadedAvatarAssetPaths) {
+      loadedAvatarAssetPaths = await loadImageAssetPaths();
+    }
+    phaseManager.setOpponentProfile({
+      avatarImagePath: pickNpcAvatarPath(loadedAvatarAssetPaths, normalizedOpponentId),
+      username: 'NPC Opponent',
+    });
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/users/${encodeURIComponent(normalizedOpponentId)}`);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Unable to fetch user');
+    const user = payload?.user || {};
+    phaseManager.setOpponentProfile({
+      avatarImagePath: user.avatarImagePath || null,
+      username: String(user.username || 'Opponent').trim() || 'Opponent',
+    });
+  } catch (error) {
+    phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
+  }
+}
 
 function stopPolling() {
   if (!matchmakingPollTimer) return;
@@ -514,11 +584,23 @@ function showMatch() {
         requestMatchExit(session.user.id);
         playBattleCloseoutTransition({ didPlayerWin: Boolean(outcome?.didPlayerWin) });
       },
+      onMatchmakingStatus: ({ status } = {}) => {
+        if (status?.status === 'matched') {
+          updateOpponentProfile(status.opponentId);
+          return;
+        }
+        updateOpponentProfile(null);
+      },
       cardGameOptions: {
         viewportHeightOffset: 0,
       },
     },
   });
+  phaseManager.setPlayerProfile({
+    username: String(session.user.username || 'You').trim() || 'You',
+    avatarImagePath: session.user.avatarImagePath || null,
+  });
+  phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
   phaseManager.start();
 }
 
