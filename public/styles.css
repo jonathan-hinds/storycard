@@ -389,6 +389,69 @@ button {
   display: none;
 }
 
+
+.phase-manager-profile-tooltip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100% - 2.5rem));
+  padding: 0.7rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(0, 0, 0, 0.78);
+  color: #ffffff;
+  z-index: 4;
+  pointer-events: none;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+.phase-manager-profile-tooltip__name {
+  margin: 0 0 0.55rem;
+  font-size: clamp(0.96rem, 1.7vw, 1.1rem);
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.phase-manager-profile-tooltip__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.phase-manager-profile-tooltip__cell {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 0.45rem;
+  background: rgba(12, 12, 12, 0.72);
+  padding: 0.4rem 0.5rem;
+  min-height: 3.7rem;
+  display: grid;
+  align-content: space-between;
+  gap: 0.35rem;
+}
+
+.phase-manager-profile-tooltip__label {
+  display: block;
+  font-size: clamp(0.63rem, 1.2vw, 0.73rem);
+  color: #e7e7e7;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.phase-manager-profile-tooltip__value {
+  display: block;
+  font-size: clamp(1rem, 2vw, 1.18rem);
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (max-width: 700px) {
+  .phase-manager-profile-tooltip__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .card-roller-overlay-layer {
   position: absolute;
   inset: 0;
