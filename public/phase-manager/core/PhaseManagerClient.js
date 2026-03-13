@@ -1133,16 +1133,28 @@ export class PhaseManagerClient {
 
   processMetricUpdateEvents(metricUpdateEvents = []) {
     if (!Array.isArray(metricUpdateEvents) || metricUpdateEvents.length === 0) return;
+    const metricTextByKey = {
+      totalGamesPlayed: { singular: 'Game Played', plural: 'Games Played' },
+      totalWins: { singular: 'Win', plural: 'Wins' },
+      totalLosses: { singular: 'Loss', plural: 'Losses' },
+      totalCreaturesKilled: { singular: 'Creature Killed', plural: 'Creatures Killed' },
+      totalCreaturesLost: { singular: 'Creature Lost', plural: 'Creatures Lost' },
+      totalSpellsPlayed: { singular: 'Spell Cast', plural: 'Spells Cast' },
+    };
+
     metricUpdateEvents.forEach((event) => {
-      if (!event || event.metricKey !== 'totalSpellsPlayed') return;
+      if (!event || !metricTextByKey[event.metricKey]) return;
+      const increment = Number.isFinite(Number(event.increment)) ? Math.max(1, Math.floor(Number(event.increment))) : 1;
+      const metricText = increment === 1
+        ? metricTextByKey[event.metricKey].singular
+        : metricTextByKey[event.metricKey].plural;
 
       if (event.success === true) {
         const worldPoint = this.getTopLeftCombatTextWorldPoint();
         if (!worldPoint || !this.client || typeof this.client.spawnCombatNumberPopup !== 'function') return;
-        const increment = Number.isFinite(Number(event.increment)) ? Math.max(1, Math.floor(Number(event.increment))) : 1;
         this.client.spawnCombatNumberPopup({
           amount: 0,
-          text: `+${increment} Spell Cast`,
+          text: `+${increment} ${metricText}`,
           worldPoint,
           time: performance.now(),
           variant: 'beneficial',
@@ -1151,7 +1163,7 @@ export class PhaseManagerClient {
         return;
       }
 
-      console.error('Failed to update user metric totalSpellsPlayed', {
+      console.error(`Failed to update user metric ${event.metricKey}`, {
         metricEvent: event,
         playerId: this.playerId,
         matchId: this.match?.id || null,
