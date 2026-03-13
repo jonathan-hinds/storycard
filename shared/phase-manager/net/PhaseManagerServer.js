@@ -12,6 +12,15 @@ const DEFAULT_OPTIONS = {
   npcStartDelayMs: 1800,
 };
 
+const PROFILE_METRIC_KEYS = Object.freeze([
+  'totalGamesPlayed',
+  'totalWins',
+  'totalLosses',
+  'totalCreaturesKilled',
+  'totalCreaturesLost',
+  'totalSpellsPlayed',
+]);
+
 const MAX_UPKEEP = 10;
 const TYPE_ADVANTAGE_MULTIPLIER = 1.5;
 const TYPE_ADVANTAGE_BY_ATTACKER = {
@@ -141,6 +150,7 @@ class PhaseManagerServer {
       ...DEFAULT_OPTIONS,
       catalogProvider: typeof options.catalogProvider === 'function' ? options.catalogProvider : async () => [],
       npcDeckProvider: typeof options.npcDeckProvider === 'function' ? options.npcDeckProvider : async () => [],
+      playerProfileProvider: typeof options.playerProfileProvider === 'function' ? options.playerProfileProvider : async () => null,
       onBattleMetrics: typeof options.onBattleMetrics === 'function' ? options.onBattleMetrics : null,
       onBattleMetricIncrement: typeof options.onBattleMetricIncrement === 'function' ? options.onBattleMetricIncrement : null,
       ...options,
@@ -172,6 +182,65 @@ class PhaseManagerServer {
       totalCreaturesLost: 0,
       totalSpellsPlayed: 0,
     };
+  }
+
+  normalizeProfileMetrics(metricsInput = null) {
+    const metrics = metricsInput && typeof metricsInput === 'object' ? metricsInput : {};
+    return PROFILE_METRIC_KEYS.reduce((accumulator, metricKey) => {
+      const numericValue = Number(metrics[metricKey]);
+      accumulator[metricKey] = Number.isFinite(numericValue) ? Math.max(0, Math.floor(numericValue)) : 0;
+      return accumulator;
+    }, {});
+  }
+
+  createDefaultPlayerProfile(playerId) {
+    const normalizedPlayerId = typeof playerId === 'string' ? playerId.trim() : '';
+    const isNpc = normalizedPlayerId.startsWith('npc-');
+    return {
+      playerId: normalizedPlayerId || null,
+      username: isNpc ? 'NPC Opponent' : 'Player',
+      avatarImagePath: null,
+      metrics: this.normalizeProfileMetrics(),
+    };
+  }
+
+  normalizePlayerProfile(playerId, profileInput = null) {
+    const fallback = this.createDefaultPlayerProfile(playerId);
+    const profile = profileInput && typeof profileInput === 'object' ? profileInput : {};
+    const normalizedUsername = typeof profile.username === 'string' ? profile.username.trim() : '';
+    const normalizedAvatarPath = typeof profile.avatarImagePath === 'string' ? profile.avatarImagePath.trim() : '';
+    return {
+      playerId: fallback.playerId,
+      username: normalizedUsername || fallback.username,
+      avatarImagePath: normalizedAvatarPath || null,
+      metrics: this.normalizeProfileMetrics(profile.metrics),
+    };
+  }
+
+  async loadPlayerProfile(playerId) {
+    const fallback = this.createDefaultPlayerProfile(playerId);
+    const normalizedPlayerId = fallback.playerId;
+    if (!normalizedPlayerId || normalizedPlayerId.startsWith('npc-')) {
+      return fallback;
+    }
+
+    try {
+      const profile = await this.options.playerProfileProvider(normalizedPlayerId);
+      return this.normalizePlayerProfile(normalizedPlayerId, profile);
+    } catch (error) {
+      return fallback;
+    }
+  }
+
+  getMatchProfile(match, playerId) {
+    if (!match || !playerId) return null;
+    if (!(match.profilesByPlayer instanceof Map)) {
+      match.profilesByPlayer = new Map();
+    }
+    if (!match.profilesByPlayer.has(playerId)) {
+      match.profilesByPlayer.set(playerId, this.createDefaultPlayerProfile(playerId));
+    }
+    return match.profilesByPlayer.get(playerId) || null;
   }
 
   getMatchMetricsForPlayer(match, playerId) {
@@ -2689,10 +2758,14 @@ class PhaseManagerServer {
         this.processNpcDecisionPhase(match);
       }
       const opponentId = match.players.find((id) => id !== playerId) || null;
+      const playerProfile = this.getMatchProfile(match, playerId);
+      const opponentProfile = this.getMatchProfile(match, opponentId);
       return {
         status: 'matched',
         matchId: match.id,
         opponentId,
+        playerProfile,
+        opponentProfile,
         queueCount: this.phaseQueue.length,
         matchState: this.serializeMatchForPlayer(match, playerId),
       };
@@ -2738,6 +2811,7 @@ class PhaseManagerServer {
 
     const createMatchState = async (players, preferredDeckByPlayer) => {
       const cardsByPlayer = new Map();
+      const profilesByPlayer = new Map();
       let catalogCards = [];
       try {
         const loadedCards = await this.options.catalogProvider();
@@ -2771,9 +2845,16 @@ class PhaseManagerServer {
         initialCreatureCountByPlayer.set(id, creatureCount);
       });
 
+      const loadedProfiles = await Promise.all(players.map((id) => this.loadPlayerProfile(id)));
+      loadedProfiles.forEach((profile, index) => {
+        const playerIdForProfile = players[index];
+        profilesByPlayer.set(playerIdForProfile, this.normalizePlayerProfile(playerIdForProfile, profile));
+      });
+
       return {
         id: `match-${randomUUID().slice(0, 8)}`,
         players,
+        profilesByPlayer,
         cardsByPlayer,
         metricsByPlayer,
         initialCreatureCountByPlayer,
