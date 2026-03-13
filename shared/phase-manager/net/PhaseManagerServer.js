@@ -202,7 +202,6 @@ class PhaseManagerServer {
         metrics: { ...metrics },
       }))
         .then(() => {
-          if (metricKey !== 'totalSpellsPlayed') return;
           this.enqueueMetricUpdateEvent(match, playerId, {
             metricKey,
             increment,
@@ -210,7 +209,6 @@ class PhaseManagerServer {
           });
         })
         .catch((error) => {
-          if (metricKey !== 'totalSpellsPlayed') return;
           this.enqueueMetricUpdateEvent(match, playerId, {
             metricKey,
             increment,

@@ -382,24 +382,34 @@ async function recordBattleMetrics(userId, metrics = {}) {
   }
 
   const increments = normalizeBattleMetricsInput(metrics);
-  const result = await collection.findOneAndUpdate(
-    { _id: objectId },
-    {
-      $inc: {
-        'metrics.totalGamesPlayed': increments.totalGamesPlayed,
-        'metrics.totalWins': increments.totalWins,
-        'metrics.totalLosses': increments.totalLosses,
-        'metrics.totalCreaturesKilled': increments.totalCreaturesKilled,
-        'metrics.totalCreaturesLost': increments.totalCreaturesLost,
-        'metrics.totalSpellsPlayed': increments.totalSpellsPlayed,
+  let result;
+  try {
+    result = await collection.findOneAndUpdate(
+      { _id: objectId },
+      {
+        $inc: {
+          'metrics.totalGamesPlayed': increments.totalGamesPlayed,
+          'metrics.totalWins': increments.totalWins,
+          'metrics.totalLosses': increments.totalLosses,
+          'metrics.totalCreaturesKilled': increments.totalCreaturesKilled,
+          'metrics.totalCreaturesLost': increments.totalCreaturesLost,
+          'metrics.totalSpellsPlayed': increments.totalSpellsPlayed,
+        },
+        $set: {
+          'metrics.updatedAt': now,
+          updatedAt: now,
+        },
       },
-      $set: {
-        'metrics.updatedAt': now,
-        updatedAt: now,
-      },
-    },
-    { returnDocument: 'after' },
-  );
+      { returnDocument: 'after' },
+    );
+  } catch (error) {
+    console.error('Failed to record battle metrics', {
+      userId: normalizedUserId,
+      metrics: increments,
+      error: error?.message || 'unknown error',
+    });
+    throw error;
+  }
 
   const updatedUser = result && typeof result === 'object' && 'value' in result
     ? result.value
