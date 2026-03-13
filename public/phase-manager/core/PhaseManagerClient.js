@@ -23,9 +23,10 @@ const UPKEEP_REFERENCE_CAMERA = { fov: 45, aspect: 16 / 9 };
 const READY_BUTTON_LABEL = 'READY UP';
 const AVATAR_PANEL_CANVAS_SIZE = { width: 768, height: 192 };
 const DEFAULT_AVATAR_PANEL_SIZE = { width: 1.7, height: 0.34 };
-const DEFAULT_AVATAR_PLAYER_POSITION = { x: 0.12, y: 0.11, z: -5.48 };
-const DEFAULT_AVATAR_OPPONENT_POSITION = { x: 0.88, y: 0.11, z: -5.48 };
-const DEFAULT_AVATAR_PANEL_OPACITY_PERCENT = 66;
+const DEFAULT_AVATAR_PANEL_Y = 0.153;
+const DEFAULT_AVATAR_PLAYER_POSITION = { x: 0.12, y: DEFAULT_AVATAR_PANEL_Y, z: -5.48 };
+const DEFAULT_AVATAR_OPPONENT_POSITION = { x: 0.88, y: DEFAULT_AVATAR_PANEL_Y, z: -5.48 };
+const DEFAULT_AVATAR_PANEL_OPACITY_PERCENT = 0;
 const MAX_AVATAR_NAME_LENGTH = 16;
 
 function getFrustumHalfExtents(fovDegrees, aspect, depth) {
@@ -85,7 +86,7 @@ export class PhaseManagerClient {
     this.backgroundAssetCache = new Map();
     this.availableBackgroundAssets = [];
     this.avatarDisplay = null;
-    this.avatarPanelY = DEFAULT_AVATAR_PLAYER_POSITION.y;
+    this.avatarPanelY = DEFAULT_AVATAR_PANEL_Y;
     this.avatarPanelOpacityPercent = DEFAULT_AVATAR_PANEL_OPACITY_PERCENT;
     this.playerProfile = { username: 'You', avatarImagePath: null };
     this.opponentProfile = { username: 'Opponent', avatarImagePath: null };
