@@ -1180,19 +1180,26 @@ body[data-page='profile-sandbox-project'] .single-card-canvas {
 
 .npc-deck-toolbar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem;
-  width: min(960px, 100%);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 320px));
+  gap: 0.65rem;
+  align-items: start;
+  justify-content: center;
+  width: min(760px, calc(100% - 2rem));
   margin: 0 auto 0.9rem;
 }
 
 .npc-deck-toolbar label {
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
   font-size: 0.85rem;
+  line-height: 1.2;
+  color: #c6d0e7;
 }
 
 .npc-deck-toolbar select,
 .npc-deck-toolbar input {
   width: 100%;
+  font-size: 0.95rem;
+  padding: 0.4rem 0.55rem;
 }
