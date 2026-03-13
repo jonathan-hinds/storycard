@@ -7,14 +7,21 @@ const usernameInput = document.getElementById('profile-sandbox-username');
 const passwordInput = document.getElementById('profile-sandbox-password');
 const signInBtn = document.getElementById('profile-sandbox-sign-in');
 const signOutBtn = document.getElementById('profile-sandbox-sign-out');
+const saveAvatarBtn = document.getElementById('profile-sandbox-save-avatar');
 const authStatus = document.getElementById('profile-sandbox-auth-status');
+
+let activeUser = null;
 
 const scene = new ProfilePanelScene({
   canvas,
+  onRequestSaveAvatar: () => {
+    saveAvatar();
+  },
 });
 
 const guestProfile = {
   username: 'Guest User',
+  avatarImagePath: null,
   metrics: [
     { name: 'Total Games Played', value: 0 },
     { name: 'Total Games Won', value: 0 },
@@ -90,16 +97,35 @@ function normalizeMetrics(user) {
 }
 
 function setSignedInUser(user) {
+  activeUser = user;
   scene.setProfile({
+    id: user.id,
     username: user.username,
+    avatarImagePath: user.avatarImagePath || null,
     metrics: normalizeMetrics(user),
   });
   setStatus(`Signed in as ${user.username}`);
+  saveAvatarBtn.disabled = false;
 }
 
 function setSignedOutUser() {
+  activeUser = null;
   scene.setProfile(guestProfile);
   setStatus('No user signed in.');
+  saveAvatarBtn.disabled = true;
+}
+
+async function loadAvatarAssets() {
+  try {
+    const response = await fetch('/api/assets/avatar-list');
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Unable to load avatar assets');
+    }
+    scene.setAvatarAssets(payload.assets || []);
+  } catch (error) {
+    setStatus(error.message || 'Unable to load avatar assets', true);
+  }
 }
 
 async function signIn() {
@@ -112,6 +138,7 @@ async function signIn() {
 
   signInBtn.disabled = true;
   signOutBtn.disabled = true;
+  saveAvatarBtn.disabled = true;
   setStatus('Signing in...');
 
   try {
@@ -135,6 +162,42 @@ async function signIn() {
   }
 }
 
+async function saveAvatar() {
+  if (!activeUser?.id) {
+    setStatus('Sign in to save avatar changes.', true);
+    return;
+  }
+
+  const avatarImagePath = scene.profile?.avatarImagePath;
+  if (!avatarImagePath) {
+    setStatus('Select an avatar first.', true);
+    return;
+  }
+
+  saveAvatarBtn.disabled = true;
+  setStatus('Saving avatar...');
+  try {
+    const response = await fetch(`/api/users/${encodeURIComponent(activeUser.id)}/avatar`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avatarImagePath }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Unable to save avatar');
+    }
+
+    activeUser = payload.user;
+    saveUserSession(payload.user);
+    setSignedInUser(payload.user);
+    setStatus('Avatar saved.');
+  } catch (error) {
+    setStatus(error.message || 'Unable to save avatar', true);
+  } finally {
+    saveAvatarBtn.disabled = false;
+  }
+}
+
 signInBtn.addEventListener('click', () => {
   signIn();
 });
@@ -150,7 +213,26 @@ signOutBtn.addEventListener('click', () => {
   setSignedOutUser();
 });
 
+saveAvatarBtn.addEventListener('click', () => {
+  saveAvatar();
+});
+
+canvas.addEventListener('pointerdown', (event) => {
+  const handled = scene.onPointerDown(event);
+  if (handled) {
+    event.preventDefault();
+  }
+});
+
+canvas.addEventListener('wheel', (event) => {
+  const handled = scene.onWheel(event);
+  if (handled) {
+    event.preventDefault();
+  }
+}, { passive: false });
+
 setSignedOutUser();
+loadAvatarAssets();
 
 window.addEventListener('beforeunload', () => {
   scene.dispose();
