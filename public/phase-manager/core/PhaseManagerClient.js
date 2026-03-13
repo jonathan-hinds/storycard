@@ -25,6 +25,7 @@ const AVATAR_PANEL_CANVAS_SIZE = { width: 768, height: 192 };
 const DEFAULT_AVATAR_PANEL_SIZE = { width: 1.7, height: 0.34 };
 const DEFAULT_AVATAR_PLAYER_POSITION = { x: 0.12, y: 0.11, z: -5.48 };
 const DEFAULT_AVATAR_OPPONENT_POSITION = { x: 0.88, y: 0.11, z: -5.48 };
+const DEFAULT_AVATAR_PANEL_OPACITY_PERCENT = 66;
 const MAX_AVATAR_NAME_LENGTH = 16;
 
 function getFrustumHalfExtents(fovDegrees, aspect, depth) {
@@ -84,6 +85,8 @@ export class PhaseManagerClient {
     this.backgroundAssetCache = new Map();
     this.availableBackgroundAssets = [];
     this.avatarDisplay = null;
+    this.avatarPanelY = DEFAULT_AVATAR_PLAYER_POSITION.y;
+    this.avatarPanelOpacityPercent = DEFAULT_AVATAR_PANEL_OPACITY_PERCENT;
     this.playerProfile = { username: 'You', avatarImagePath: null };
     this.opponentProfile = { username: 'Opponent', avatarImagePath: null };
     this.avatarImageCache = new Map();
@@ -111,6 +114,8 @@ export class PhaseManagerClient {
     this.handleBuffBadgeLayoutInput = this.handleBuffBadgeLayoutInput.bind(this);
     this.handleWindowResize = this.handleWindowResize.bind(this);
     this.handleCanvasPointerUp = this.handleCanvasPointerUp.bind(this);
+    this.handleAvatarPanelLayoutInput = this.handleAvatarPanelLayoutInput.bind(this);
+    this.handleAvatarPanelStyleInput = this.handleAvatarPanelStyleInput.bind(this);
   }
 
   setPlayerProfile(profile = {}) {
@@ -147,11 +152,13 @@ export class PhaseManagerClient {
     this.positionAvatarDisplay();
     this.syncUpkeepPositionInputs();
     this.syncBuffBadgeLayoutInputs();
+    this.syncAvatarPanelInputs();
     window.requestAnimationFrame(() => {
       this.positionUpkeepDisplay();
       this.positionReadyButtonDisplay();
       this.positionAvatarDisplay();
       this.syncUpkeepPositionInputs();
+      this.syncAvatarPanelInputs();
     });
   }
 
@@ -225,6 +232,11 @@ export class PhaseManagerClient {
     if (rangeInput) rangeInput.value = valueText;
     if (numberInput) numberInput.value = valueText;
     if (valueEl) valueEl.textContent = suffix ? `${valueText} (${suffix})` : valueText;
+  }
+
+  syncAvatarPanelInputs() {
+    this.syncControlPair('avatarPanelY', this.avatarPanelY, 3);
+    this.syncControlPair('avatarPanelOpacity', this.avatarPanelOpacityPercent, 0, '%');
   }
 
   getControlValue(prefix, fallback) {
@@ -359,6 +371,18 @@ export class PhaseManagerClient {
     this.drawUpkeepDisplay(this.upkeepDisplay?.value ?? 1, this.match?.upkeepTotal ?? 10);
   }
 
+  handleAvatarPanelLayoutInput() {
+    this.avatarPanelY = THREE.MathUtils.clamp(this.getControlValue('avatarPanelY', this.avatarPanelY), 0, 1);
+    this.syncAvatarPanelInputs();
+    this.positionAvatarDisplay();
+  }
+
+  handleAvatarPanelStyleInput() {
+    this.avatarPanelOpacityPercent = THREE.MathUtils.clamp(this.getControlValue('avatarPanelOpacity', this.avatarPanelOpacityPercent), 0, 100);
+    this.syncAvatarPanelInputs();
+    this.syncAvatarDisplay();
+  }
+
   async fetchUpkeepAssets() {
     try {
       const payload = await this.getJson('/api/assets');
@@ -425,8 +449,9 @@ export class PhaseManagerClient {
         textPosition: this.upkeepCounterTextPosition,
         textScale: this.upkeepCounterTextScale,
       },
-      creatureCardLayout: {
-        badgeSlots: this.buffBadgeSlotsLayout,
+      avatarPanels: {
+        y: this.avatarPanelY,
+        panelOpacityPercent: this.avatarPanelOpacityPercent,
       },
     }, null, 2);
     if (layoutExportOutputEl) layoutExportOutputEl.textContent = serialized;
@@ -477,6 +502,9 @@ export class PhaseManagerClient {
     this.bindMirroredInputs(this.elements.upkeepTextYInput, this.elements.upkeepTextYNumberInput, this.handleUpkeepPanelStyleInput);
     this.bindMirroredInputs(this.elements.upkeepTextSizeInput, this.elements.upkeepTextSizeNumberInput, this.handleUpkeepPanelStyleInput);
 
+    this.bindMirroredInputs(this.elements.avatarPanelYInput, this.elements.avatarPanelYNumberInput, this.handleAvatarPanelLayoutInput);
+    this.bindMirroredInputs(this.elements.avatarPanelOpacityInput, this.elements.avatarPanelOpacityNumberInput, this.handleAvatarPanelStyleInput);
+
     this.bindMirroredInputs(this.elements.badgeSlotsCountInput, this.elements.badgeSlotsCountNumberInput, this.handleBuffBadgeLayoutInput);
     this.bindMirroredInputs(this.elements.badgeSlotsXInput, this.elements.badgeSlotsXNumberInput, this.handleBuffBadgeLayoutInput);
     this.bindMirroredInputs(this.elements.badgeSlotsYInput, this.elements.badgeSlotsYNumberInput, this.handleBuffBadgeLayoutInput);
@@ -496,6 +524,7 @@ export class PhaseManagerClient {
     window.addEventListener('resize', this.handleWindowResize);
     this.syncUpkeepPositionInputs();
     this.syncBuffBadgeLayoutInputs();
+    this.syncAvatarPanelInputs();
     this.syncUpkeepBackgroundOptions();
     this.loadBackgroundAsset(DEFAULT_UPKEEP_BACKGROUND_ASSET_PATH).then((img) => { this.upkeepCounterBackgroundImage = img; }).catch(() => {});
     this.loadBackgroundAsset(DEFAULT_READY_BUTTON_BACKGROUND_ASSET_PATH).then((img) => { this.readyButtonBackgroundImage = img; }).catch(() => {});
@@ -798,8 +827,8 @@ export class PhaseManagerClient {
       display.mesh.rotation.set(0, 0, 0);
     };
 
-    positionAvatar(this.avatarDisplay.player, DEFAULT_AVATAR_PLAYER_POSITION);
-    positionAvatar(this.avatarDisplay.opponent, DEFAULT_AVATAR_OPPONENT_POSITION);
+    positionAvatar(this.avatarDisplay.player, { ...DEFAULT_AVATAR_PLAYER_POSITION, y: this.avatarPanelY });
+    positionAvatar(this.avatarDisplay.opponent, { ...DEFAULT_AVATAR_OPPONENT_POSITION, y: this.avatarPanelY });
   }
 
   async getAvatarImage(path) {
@@ -835,9 +864,10 @@ export class PhaseManagerClient {
       const nameX = align === 'left'
         ? avatarCenterX + avatarRadius + namePadding
         : avatarCenterX - avatarRadius - namePadding;
+      const panelOpacity = THREE.MathUtils.clamp(this.avatarPanelOpacityPercent / 100, 0, 1);
 
-      ctx.fillStyle = 'rgba(8, 11, 18, 0.66)';
-      ctx.strokeStyle = 'rgba(245, 248, 255, 0.86)';
+      ctx.fillStyle = `rgba(8, 11, 18, ${0.66 * panelOpacity})`;
+      ctx.strokeStyle = `rgba(245, 248, 255, ${0.86 * panelOpacity})`;
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.roundRect(2, 8, panelWidth - 4, panelHeight - 16, 28);
