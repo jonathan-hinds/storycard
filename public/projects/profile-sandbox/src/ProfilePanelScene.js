@@ -62,6 +62,15 @@ function drawImageCover(ctx, image, x, y, width, height) {
   ctx.drawImage(image, dx, dy, dw, dh);
 }
 
+function drawImageCoverClipped(ctx, image, x, y, width, height) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, width, height);
+  ctx.clip();
+  drawImageCover(ctx, image, x, y, width, height);
+  ctx.restore();
+}
+
 function drawAvatarCircle(ctx, profile, avatarImage) {
   ctx.save();
   ctx.beginPath();
@@ -166,7 +175,7 @@ function drawPanelTexture(canvas, state) {
       ctx.fillRect(x, y, tileSize, tileSize);
       const image = loadedImages.get(asset.path);
       if (image) {
-        drawImageCover(ctx, image, x, y, tileSize, tileSize);
+        drawImageCoverClipped(ctx, image, x, y, tileSize, tileSize);
       }
       ctx.strokeStyle = selectedAssetPath === asset.path ? '#ffffff' : '#666666';
       ctx.lineWidth = selectedAssetPath === asset.path ? 4 : 2;
@@ -380,6 +389,9 @@ export class ProfilePanelScene {
     const col = Math.floor(localX / (tileSize + TILE_GAP));
     const row = Math.floor(localY / (tileSize + TILE_GAP));
     if (col < 0 || col >= cols || row < 0) return;
+    const withinTileX = localX - (col * (tileSize + TILE_GAP));
+    const withinTileY = localY - (row * (tileSize + TILE_GAP));
+    if (withinTileX < 0 || withinTileX > tileSize || withinTileY < 0 || withinTileY > tileSize) return;
     const index = row * cols + col;
     const asset = this.assets[index];
     if (!asset?.path) return;
