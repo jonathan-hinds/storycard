@@ -2,6 +2,7 @@ const assert = require('assert');
 const {
   normalizeDeckFromDocument,
   normalizeCardId,
+  normalizeAvatarImagePath,
 } = require('../shared/user/mongoStore');
 
 function run() {
@@ -42,6 +43,10 @@ function run() {
     creatureCount: 0,
     updatedAt: null,
   });
+
+  assert.strictEqual(normalizeAvatarImagePath('/public/assets/mossling.png'), '/public/assets/mossling.png');
+  assert.strictEqual(normalizeAvatarImagePath('   '), null);
+  assert.throws(() => normalizeAvatarImagePath('/public/other/mossling.png'), /avatarImagePath must reference/);
 
   console.log('user mongoStore normalization checks passed');
 }

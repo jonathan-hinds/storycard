@@ -194,7 +194,21 @@ function toPublicUser(document) {
     updatedAt: document.updatedAt ?? null,
     deck,
     metrics,
+    avatarImagePath: normalizeAvatarImagePath(document.avatarImagePath),
   };
+}
+
+function normalizeAvatarImagePath(avatarImagePath) {
+  if (avatarImagePath == null) return null;
+  if (typeof avatarImagePath !== 'string') {
+    throw new Error('avatarImagePath must be a string');
+  }
+  const normalized = avatarImagePath.trim();
+  if (!normalized) return null;
+  if (!/^\/public\/assets\/[A-Za-z0-9_.-]+\.(png|jpg|jpeg|webp|gif)$/i.test(normalized)) {
+    throw new Error('avatarImagePath must reference an image in /public/assets');
+  }
+  return normalized;
 }
 
 async function createUser(input = {}) {
@@ -218,6 +232,7 @@ async function createUser(input = {}) {
         ...createDefaultPlayerMetrics(),
         updatedAt: now,
       },
+      avatarImagePath: null,
       createdAt: now,
       updatedAt: now,
     });
@@ -325,6 +340,33 @@ async function getUserById(userId) {
   return toPublicUser(user);
 }
 
+async function updateUserAvatar(userId, avatarImagePath = null) {
+  const { ObjectId } = getMongoClientConstructor();
+  if (typeof userId !== 'string' || !ObjectId.isValid(userId)) {
+    throw new Error('invalid user id');
+  }
+  const normalizedAvatarImagePath = normalizeAvatarImagePath(avatarImagePath);
+  const collection = await getCollection();
+  const updatedAt = new Date().toISOString();
+  const result = await collection.findOneAndUpdate(
+    { _id: new ObjectId(userId) },
+    {
+      $set: {
+        avatarImagePath: normalizedAvatarImagePath,
+        updatedAt,
+      },
+    },
+    { returnDocument: 'after' },
+  );
+  const updatedUser = result && typeof result === 'object' && 'value' in result
+    ? result.value
+    : result;
+  if (!updatedUser) {
+    throw new Error('user not found');
+  }
+  return toPublicUser(updatedUser);
+}
+
 function normalizeBattleMetricsInput(metrics = {}) {
   const coerce = (value) => {
     const parsed = Number(value);
@@ -428,8 +470,10 @@ module.exports = {
   normalizeDeckFromDocument,
   normalizeCardId,
   normalizePlayerMetricsFromDocument,
+  normalizeAvatarImagePath,
   recordBattleMetrics,
   updateUserDeck,
+  updateUserAvatar,
   normalizeUsername,
   normalizePassword,
 };
