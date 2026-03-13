@@ -3,6 +3,7 @@ import { DeckBuilderScene } from '/public/projects/card-library/DeckBuilderScene
 import { PhaseManagerClient } from '/public/phase-manager/index.js';
 import { createPhaseManagerElements } from '/public/projects/user/canvasShared.js';
 import { ProfilePanelScene } from '/public/projects/profile-sandbox/src/ProfilePanelScene.js';
+import { toProfilePanelMetrics } from '/public/projects/user/profileMetrics.js';
 
 const USER_SESSION_KEY = 'storycard-user-session';
 const POLL_INTERVAL_MS = 1500;
@@ -442,24 +443,6 @@ function teardownAll() {
   canvas.hidden = false;
 }
 
-function normalizeMetrics(user) {
-  const metrics = user?.metrics || {};
-  const totalGamesPlayed = Number.isFinite(Number(metrics.totalGamesPlayed)) ? Number(metrics.totalGamesPlayed) : 0;
-  const totalWins = Number.isFinite(Number(metrics.totalWins)) ? Number(metrics.totalWins) : 0;
-  const totalLosses = Number.isFinite(Number(metrics.totalLosses)) ? Number(metrics.totalLosses) : 0;
-  const totalCreaturesKilled = Number.isFinite(Number(metrics.totalCreaturesKilled)) ? Number(metrics.totalCreaturesKilled) : 0;
-  const totalCreaturesLost = Number.isFinite(Number(metrics.totalCreaturesLost)) ? Number(metrics.totalCreaturesLost) : 0;
-  const totalSpellsPlayed = Number.isFinite(Number(metrics.totalSpellsPlayed)) ? Number(metrics.totalSpellsPlayed) : 0;
-  return [
-    { name: 'Total Games Played', value: totalGamesPlayed },
-    { name: 'Total Games Won', value: totalWins },
-    { name: 'Total Games Lost', value: totalLosses },
-    { name: 'Creatures Killed', value: totalCreaturesKilled },
-    { name: 'Creatures Lost', value: totalCreaturesLost },
-    { name: 'Spells Played', value: totalSpellsPlayed },
-  ];
-}
-
 function showHome() {
   teardownAll();
   overlayEl.hidden = true;
@@ -492,7 +475,7 @@ async function showProfile() {
     initialProfile: {
       username: session.user.username,
       avatarImagePath: session.user.avatarImagePath || null,
-      metrics: normalizeMetrics(session.user),
+      metrics: toProfilePanelMetrics(session.user?.metrics),
     },
     onAvatarSave: async (avatarImagePath) => {
       const response = await fetch(`/api/users/${encodeURIComponent(session.user.id)}/avatar`, {
@@ -508,7 +491,7 @@ async function showProfile() {
         profileScene.setProfile({
           username: session.user.username,
           avatarImagePath: session.user.avatarImagePath || null,
-          metrics: normalizeMetrics(session.user),
+          metrics: toProfilePanelMetrics(session.user?.metrics),
         });
       }
     },
