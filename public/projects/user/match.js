@@ -142,7 +142,16 @@ if (!session) {
   const playerName = String(session.user.username || 'You').trim() || 'You';
   let loadedAvatarAssetPaths = null;
 
-  const updateOpponentProfile = async ({ opponentId = null } = {}) => {
+  const updateOpponentProfile = async ({ opponentId = null, opponentProfile = null } = {}) => {
+    if (opponentProfile && typeof opponentProfile === 'object') {
+      phaseManager.setOpponentProfile({
+        username: opponentProfile.username || 'Opponent',
+        avatarImagePath: opponentProfile.avatarImagePath || null,
+        metrics: normalizeMetrics(opponentProfile.metrics),
+      });
+      return;
+    }
+
     const normalizedOpponentId = typeof opponentId === 'string' ? opponentId.trim() : '';
     if (!normalizedOpponentId) {
       phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null, metrics: normalizeMetrics() });
@@ -189,10 +198,17 @@ if (!session) {
       },
       onMatchmakingStatus: ({ status } = {}) => {
         if (status?.status === 'matched') {
-          updateOpponentProfile({ opponentId: status.opponentId });
+          if (status.playerProfile && typeof status.playerProfile === 'object') {
+            phaseManager.setPlayerProfile({
+              username: status.playerProfile.username || playerName,
+              avatarImagePath: status.playerProfile.avatarImagePath || session.user.avatarImagePath || null,
+              metrics: normalizeMetrics(status.playerProfile.metrics),
+            });
+          }
+          updateOpponentProfile({ opponentId: status.opponentId, opponentProfile: status.opponentProfile || null });
           return;
         }
-        updateOpponentProfile({ opponentId: null });
+        updateOpponentProfile({ opponentId: null, opponentProfile: null });
       },
       onMatchComplete: ({ outcome } = {}) => {
         requestMatchExit(playerId);

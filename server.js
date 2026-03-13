@@ -83,6 +83,14 @@ function normalizeMetricsPlayerId(playerId) {
 const phaseManagerServer = new PhaseManagerServer({
   catalogProvider: async () => listCatalogCards(),
   npcDeckProvider: async () => listNpcDecks(),
+  playerProfileProvider: async (playerId) => {
+    const user = await getUserById(playerId);
+    return {
+      username: user?.username || 'Player',
+      avatarImagePath: user?.avatarImagePath || null,
+      metrics: user?.metrics || null,
+    };
+  },
   onBattleMetricIncrement: async ({ playerId, metricKey, increment } = {}) => {
     const normalizedPlayerId = normalizeMetricsPlayerId(playerId);
     if (!normalizedPlayerId || normalizedPlayerId.startsWith('npc-')) return;
