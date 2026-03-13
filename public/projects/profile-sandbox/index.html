@@ -55,8 +55,10 @@
 
         <div class="card profile-sandbox-auth-card">
           <h2>Test User Sign In</h2>
-          <label for="profile-sandbox-user-select">User</label>
-          <select id="profile-sandbox-user-select" aria-label="Select sandbox user"></select>
+          <label for="profile-sandbox-username">Username</label>
+          <input id="profile-sandbox-username" name="username" type="text" autocomplete="username" />
+          <label for="profile-sandbox-password">Password</label>
+          <input id="profile-sandbox-password" name="password" type="password" autocomplete="current-password" />
           <button id="profile-sandbox-sign-in" type="button">Sign In</button>
           <button id="profile-sandbox-sign-out" type="button" class="secondary-action">Sign Out</button>
           <p id="profile-sandbox-auth-status" class="debug-pill">No user signed in.</p>
