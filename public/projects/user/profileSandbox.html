@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Profile Sandbox</title>
+    <link rel="stylesheet" href="/public/styles.css" />
+  </head>
+  <body data-page="user-profile-sandbox">
+    <main class="user-module-canvas-layout user-profile-sandbox-layout">
+      <section id="user-profile-stage" class="single-card-stage-wrap user-module-stage-wrap user-profile-stage-wrap">
+        <canvas id="user-profile-canvas" class="single-card-canvas user-module-canvas user-profile-canvas" aria-label="User profile canvas preview"></canvas>
+      </section>
+
+      <form id="user-profile-login-form" class="card user-profile-login-card" novalidate>
+        <h1>User Profile Sandbox</h1>
+        <p>Sign in to preview the in-canvas profile panel with real user metrics.</p>
+
+        <label for="user-profile-username">Username</label>
+        <input id="user-profile-username" name="username" type="text" minlength="3" maxlength="24" autocomplete="username" required />
+
+        <label for="user-profile-password">Password</label>
+        <input id="user-profile-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="current-password" required />
+
+        <div class="user-profile-login-actions">
+          <button id="user-profile-login-button" type="submit">Sign In</button>
+          <button id="user-profile-session-button" type="button" class="secondary-action">Use Current Session</button>
+        </div>
+
+        <p id="user-profile-login-status" class="cards-status" aria-live="polite"></p>
+      </form>
+    </main>
+
+    <script type="module" src="/public/projects/user/profileSandbox.js"></script>
+  </body>
+</html>
