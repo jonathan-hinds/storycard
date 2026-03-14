@@ -1203,6 +1203,8 @@ export class PhaseManagerClient {
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
+        bleedTurnsRemaining: Number.isInteger(card.bleedTurnsRemaining) ? card.bleedTurnsRemaining : 0,
+        bleedStacks: Number.isInteger(card.bleedStacks) ? card.bleedStacks : 0,
         focalMarkTurnsRemaining: Number.isInteger(card.focalMarkTurnsRemaining) ? card.focalMarkTurnsRemaining : 0,
         disruptionDebuffTurnsRemaining: Number.isInteger(card.disruptionDebuffTurnsRemaining)
           ? card.disruptionDebuffTurnsRemaining
@@ -1246,6 +1248,8 @@ export class PhaseManagerClient {
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
+        bleedTurnsRemaining: Number.isInteger(card.bleedTurnsRemaining) ? card.bleedTurnsRemaining : 0,
+        bleedStacks: Number.isInteger(card.bleedStacks) ? card.bleedStacks : 0,
         focalMarkTurnsRemaining: Number.isInteger(card.focalMarkTurnsRemaining) ? card.focalMarkTurnsRemaining : 0,
         disruptionDebuffTurnsRemaining: Number.isInteger(card.disruptionDebuffTurnsRemaining)
           ? card.disruptionDebuffTurnsRemaining
