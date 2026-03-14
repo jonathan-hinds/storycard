@@ -43,6 +43,38 @@ function makeFriendlyHealSpell(id) {
   };
 }
 
+function makeFriendlyTauntSpell(id) {
+  return {
+    id,
+    cardKind: 'Spell',
+    health: 0,
+    ability1: {
+      target: 'friendly',
+      effectId: 'none',
+      buffId: 'taunt',
+      durationTurns: 2,
+      valueSourceType: 'fixed',
+      valueSourceFixed: 0,
+    },
+  };
+}
+
+function makeEnemySilenceSpell(id) {
+  return {
+    id,
+    cardKind: 'Spell',
+    health: 0,
+    ability1: {
+      target: 'enemy',
+      effectId: 'none',
+      buffId: 'silence',
+      durationTurns: 2,
+      valueSourceType: 'fixed',
+      valueSourceFixed: 0,
+    },
+  };
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -223,6 +255,128 @@ async function main() {
   assert.equal(quickReadyResult.statusCode, 200, 'quick human ready should still succeed');
   const followupNpcAttacks = followupMatch.pendingCommitAttacksByPlayer.get(followupNpcId) || [];
   assert.ok(followupNpcAttacks.length >= 1, 'NPC should still commit attacks when human readies before NPC delay elapses');
+
+  const strategyServer = new PhaseManagerServer({
+    boardSlotsPerSide: 3,
+    deckSizePerPlayer: 6,
+    startingHandSize: 3,
+    npcStartDelayMs: 0,
+    npcActionDelayMs: 0,
+    catalogProvider: async () => [
+      makeCreature('strat-creature-1'),
+      makeCreature('strat-creature-2'),
+      makeCreature('strat-creature-3'),
+      makeFriendlyHealSpell('strat-heal'),
+      makeFriendlyTauntSpell('strat-taunt'),
+      makeEnemySilenceSpell('strat-silence'),
+    ],
+  });
+  strategyServer.shuffleCards = (cards) => [...cards];
+  const strategyMatchStatus = await strategyServer.findMatch('human-strategy', {
+    opponentType: 'npc',
+    deckCardIds: ['strat-creature-1', 'strat-creature-2', 'strat-creature-3', 'strat-heal', 'strat-taunt', 'strat-silence'],
+  });
+  const strategyMatch = strategyServer.phaseMatches.get(strategyMatchStatus.matchId);
+  const strategyNpcId = strategyMatch.players.find((id) => id.startsWith('npc-'));
+  const strategyHumanId = strategyMatch.players.find((id) => !id.startsWith('npc-'));
+  const strategyNpcState = strategyMatch.cardsByPlayer.get(strategyNpcId);
+  const strategyHumanState = strategyMatch.cardsByPlayer.get(strategyHumanId);
+
+  strategyMatch.turnNumber = 3;
+  strategyMatch.phase = 1;
+  strategyMatch.readyPlayers = new Set();
+  strategyMatch.activeSpellResolution = null;
+  strategyMatch.npcAutomationByPlayer = new Map([[strategyNpcId, { nextActionAt: Date.now() }]]);
+
+  const npcBoardCard = {
+    id: 'npc-board-1',
+    cardId: 'strat-creature-1',
+    slotIndex: 0,
+    summonedTurn: 1,
+    attackCommitted: false,
+    targetSlotIndex: null,
+    targetSide: null,
+    selectedAbilityIndex: 0,
+    tauntTurnsRemaining: 0,
+    silenceTurnsRemaining: 0,
+    catalogCard: {
+      ...makeCreature('strat-creature-1'),
+      ability1: {
+        ...makeCreature('strat-creature-1').ability1,
+        cost: '2',
+      },
+    },
+  };
+  const humanBoardCard = {
+    id: 'human-board-1',
+    cardId: 'strat-creature-2',
+    slotIndex: 0,
+    summonedTurn: 1,
+    attackCommitted: false,
+    targetSlotIndex: null,
+    targetSide: null,
+    selectedAbilityIndex: 0,
+    tauntTurnsRemaining: 0,
+    silenceTurnsRemaining: 0,
+    catalogCard: {
+      ...makeCreature('strat-creature-2'),
+      health: 5,
+    },
+  };
+
+  const healSpell = {
+    id: 'npc-spell-heal',
+    cardId: 'strat-heal',
+    catalogCard: {
+      ...makeFriendlyHealSpell('strat-heal'),
+      ability1: {
+        ...makeFriendlyHealSpell('strat-heal').ability1,
+        cost: '1',
+      },
+    },
+  };
+  const tauntSpell = {
+    id: 'npc-spell-taunt',
+    cardId: 'strat-taunt',
+    catalogCard: {
+      ...makeFriendlyTauntSpell('strat-taunt'),
+      ability1: {
+        ...makeFriendlyTauntSpell('strat-taunt').ability1,
+        cost: '1',
+      },
+    },
+  };
+  const silenceSpell = {
+    id: 'npc-spell-silence',
+    cardId: 'strat-silence',
+    catalogCard: {
+      ...makeEnemySilenceSpell('strat-silence'),
+      ability1: {
+        ...makeEnemySilenceSpell('strat-silence').ability1,
+        cost: '1',
+      },
+    },
+  };
+
+  strategyNpcState.board = [npcBoardCard];
+  strategyNpcState.hand = [healSpell, tauntSpell, silenceSpell];
+  strategyNpcState.discard = [];
+  strategyNpcState.upkeepTotal = 2;
+  strategyNpcState.upkeep = 2;
+
+  strategyHumanState.board = [humanBoardCard];
+
+  const reservedSpellAction = strategyServer.chooseNpcSpellAction(strategyMatch, strategyNpcId);
+  assert.equal(reservedSpellAction, null, 'NPC should reserve upkeep for attacks rather than spend it on low-impact spells');
+
+  humanBoardCard.silenceTurnsRemaining = 2;
+  const redundantSilenceAction = strategyServer.chooseNpcSpellAction(strategyMatch, strategyNpcId);
+  assert.equal(redundantSilenceAction, null, 'NPC should avoid casting silence on already silenced targets');
+
+  humanBoardCard.silenceTurnsRemaining = 0;
+  humanBoardCard.summonedTurn = strategyMatch.turnNumber;
+  const noThreatTauntAction = strategyServer.chooseNpcSpellAction(strategyMatch, strategyNpcId);
+  assert.equal(noThreatTauntAction, null, 'NPC should avoid taunt when enemy has no active attackers');
 
   console.log('phase manager npc autoplay checks passed');
 }

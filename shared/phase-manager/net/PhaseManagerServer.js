@@ -445,6 +445,13 @@ class PhaseManagerServer {
     return Number.isInteger(firstEnemy?.slotIndex) ? firstEnemy.slotIndex : null;
   }
 
+  canCardAttackThisTurn(match, card) {
+    if (!match || !card) return false;
+    const isSilenced = Number.isInteger(card.silenceTurnsRemaining) && card.silenceTurnsRemaining > 0;
+    const isSummoningSick = !Number.isInteger(card.summonedTurn) || card.summonedTurn >= match.turnNumber;
+    return !isSilenced && !isSummoningSick;
+  }
+
   getNpcCreatureCandidateTargets(match, npcId, ability) {
     if (!match || !npcId || !ability) return [];
     const { valid, targetRule } = this.resolveAbilityTargetRule(ability);
@@ -496,6 +503,7 @@ class PhaseManagerServer {
       return sum + (Number.isFinite(health) ? Math.max(0, health) : 0);
     }, 0);
     const needsDefense = enemyBoardPressure > friendlyBoardPressure;
+    const enemyHasActiveAttackers = (enemyState?.board || []).some((card) => this.canCardAttackThisTurn(match, card));
 
     const resolveTargetCard = () => {
       if (!Number.isInteger(candidate.targetSlotIndex)) return null;
@@ -534,6 +542,7 @@ class PhaseManagerServer {
     } else if (effectId === 'heal_target') {
       if (!hasFriendlyTarget) return Number.NEGATIVE_INFINITY;
       const missingHealth = Number.isFinite(targetHealth) ? Math.max(0, 10 - targetHealth) : 0;
+      if (missingHealth < 1) return Number.NEGATIVE_INFINITY;
       score += 10 + Math.min(20, missingHealth * 2);
       if (needsDefense) score += 8;
     } else if (effectId === 'none') {
@@ -544,14 +553,29 @@ class PhaseManagerServer {
       score += 8;
       if (buffId === 'taunt' && hasFriendlyTarget) {
         const tauntTurns = Number(targetCard?.tauntTurnsRemaining);
+        if (!enemyHasActiveAttackers && !needsDefense) {
+          return Number.NEGATIVE_INFINITY;
+        }
         score += Number.isFinite(tauntTurns) && tauntTurns > 0 ? 2 : 12;
         if (needsDefense) score += 10;
       }
       if (buffId === 'silence' && hasEnemyTarget) {
         const alreadySilenced = Number(targetCard?.silenceTurnsRemaining);
-        score += Number.isFinite(alreadySilenced) && alreadySilenced > 0 ? 1 : 14;
+        if (Number.isFinite(alreadySilenced) && alreadySilenced > 0) {
+          return Number.NEGATIVE_INFINITY;
+        }
+        score += 14;
       }
       if ((buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' || buffId === 'focal_mark') && hasEnemyTarget) {
+        if (buffId === 'poison' && Number.isInteger(targetCard?.poisonTurnsRemaining) && targetCard.poisonTurnsRemaining > 1) {
+          score -= 8;
+        }
+        if (buffId === 'fire' && Number.isInteger(targetCard?.fireTurnsRemaining) && targetCard.fireTurnsRemaining > 1) {
+          score -= 8;
+        }
+        if (buffId === 'frostbite' && Number.isInteger(targetCard?.frostbiteTurnsRemaining) && targetCard.frostbiteTurnsRemaining > 1) {
+          score -= 8;
+        }
         score += 9;
       }
     }
@@ -666,35 +690,83 @@ class PhaseManagerServer {
     if (!npcState) return null;
     if (match?.activeSpellResolution && match.activeSpellResolution.completedAt == null) return null;
 
+    const upkeepAvailable = this.getPlayerUpkeepValue(npcState);
+    const reservedUpkeepForAttacks = this.estimateNpcReservedAttackUpkeep(match, npcId, upkeepAvailable);
+    let bestSpellPlan = null;
+
     for (const handCard of npcState.hand) {
       if (handCard?.catalogCard?.cardKind !== 'Spell') continue;
       const spellAbility = this.getAttackAbilityForCard(handCard, 0);
       const upkeepCost = this.getAbilityUpkeepCost(spellAbility);
-      if (upkeepCost > this.getPlayerUpkeepValue(npcState)) continue;
+      if (upkeepCost > upkeepAvailable) continue;
       if (match.npcSpellCardsCastThisTurn instanceof Set && match.npcSpellCardsCastThisTurn.has(handCard.id)) continue;
       const candidateTargets = this.getNpcSpellCandidateTargets(match, npcId, handCard);
       for (const candidate of candidateTargets) {
-        const previewResult = this.startSpellResolution({
-          playerId: npcId,
+        const score = this.scoreNpcTargetCandidate({
+          match,
+          npcId,
+          ability: spellAbility,
+          candidate,
+        });
+        if (!Number.isFinite(score)) continue;
+        const canSpendWithoutSacrificingAttacks = upkeepCost <= Math.max(0, upkeepAvailable - reservedUpkeepForAttacks);
+        const isHighImpactSpell = score >= 55;
+        if (!canSpendWithoutSacrificingAttacks && !isHighImpactSpell) continue;
+
+        const plan = {
           cardId: handCard.id,
-          selectedAbilityIndex: 0,
           targetSide: candidate.targetSide,
           targetSlotIndex: candidate.targetSlotIndex,
-          rollType: 'damage',
-          dieSides: 6,
-        });
-        if (previewResult?.error) continue;
-        npcState.upkeep = Math.max(0, this.getPlayerUpkeepValue(npcState) - upkeepCost);
-        npcState.spentUpkeepOnSpellsThisTurn = this.getPlayerSpellUpkeepSpentValue(npcState) + upkeepCost;
-        return {
-          type: 'spell',
-          cardId: handCard.id,
-          spellId: match.activeSpellResolution?.id,
+          upkeepCost,
+          score,
         };
+        if (!bestSpellPlan || plan.score > bestSpellPlan.score) {
+          bestSpellPlan = plan;
+        }
       }
     }
 
-    return null;
+    if (!bestSpellPlan) return null;
+
+    const castResult = this.startSpellResolution({
+      playerId: npcId,
+      cardId: bestSpellPlan.cardId,
+      selectedAbilityIndex: 0,
+      targetSide: bestSpellPlan.targetSide,
+      targetSlotIndex: bestSpellPlan.targetSlotIndex,
+      rollType: 'damage',
+      dieSides: 6,
+    });
+    if (castResult?.error) return null;
+
+    npcState.upkeep = Math.max(0, this.getPlayerUpkeepValue(npcState) - bestSpellPlan.upkeepCost);
+    npcState.spentUpkeepOnSpellsThisTurn = this.getPlayerSpellUpkeepSpentValue(npcState) + bestSpellPlan.upkeepCost;
+
+    return {
+      type: 'spell',
+      cardId: bestSpellPlan.cardId,
+      spellId: match.activeSpellResolution?.id,
+      score: bestSpellPlan.score,
+    };
+  }
+
+  estimateNpcReservedAttackUpkeep(match, npcId, upkeepBudget) {
+    if (!match || !npcId) return 0;
+    const npcState = match.cardsByPlayer.get(npcId);
+    if (!npcState) return 0;
+    let remainingUpkeep = Number.isFinite(upkeepBudget) ? Math.max(0, Math.floor(upkeepBudget)) : 0;
+    let reserved = 0;
+    for (const card of npcState.board || []) {
+      if (!this.canCardAttackThisTurn(match, card)) continue;
+      const plan = this.chooseNpcCreatureAttackPlan(match, npcId, card, remainingUpkeep);
+      if (!plan) continue;
+      const upkeepCost = Number.isFinite(plan.upkeepCost)
+        ? Math.max(0, Math.floor(plan.upkeepCost))
+        : this.getAbilityUpkeepCost(this.getAttackAbilityForCard(card, plan.selectedAbilityIndex));
+      remainingUpkeep = Math.max(0, remainingUpkeep - upkeepCost);
+      reserved += upkeepCost;
+    }
+    return reserved;
   }
 
   validateSpellTargetSelection({ match, casterId, ability, targetSide, targetSlotIndex }) {
