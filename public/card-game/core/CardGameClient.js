@@ -2126,6 +2126,12 @@ export class CardGameClient {
       card.userData.bleedTurnsRemaining = Number.isInteger(cfg.bleedTurnsRemaining) ? cfg.bleedTurnsRemaining : 0;
       card.userData.bleedStacks = Number.isInteger(cfg.bleedStacks) ? cfg.bleedStacks : 0;
       card.userData.focalMarkTurnsRemaining = Number.isInteger(cfg.focalMarkTurnsRemaining) ? cfg.focalMarkTurnsRemaining : 0;
+      card.userData.regenerationTurnsRemaining = Number.isInteger(cfg.regenerationTurnsRemaining)
+        ? cfg.regenerationTurnsRemaining
+        : 0;
+      card.userData.regenerationHealingPerTurn = Number.isFinite(Number(cfg.regenerationHealingPerTurn))
+        ? Math.max(0, Math.floor(Number(cfg.regenerationHealingPerTurn)))
+        : 0;
       card.userData.focalMarkBonusDamage = Number.isFinite(Number(cfg.focalMarkBonusDamage))
         ? Math.max(0, Math.floor(Number(cfg.focalMarkBonusDamage)))
         : 0;
@@ -2722,7 +2728,8 @@ export class CardGameClient {
               || animation.buffId === BUFF_FIRE
               || animation.buffId === BUFF_FROSTBITE
               || animation.buffId === BUFF_BLEED
-              || animation.buffId === BUFF_FOCAL_MARK);
+              || animation.buffId === BUFF_FOCAL_MARK
+              || animation.buffId === BUFF_REGENERATION);
           if (shouldApplyBuff) {
             const buffRecipient = animation.buffTarget === 'self'
               ? card
@@ -2756,6 +2763,13 @@ export class CardGameClient {
               }
               if (animation.buffId === BUFF_FOCAL_MARK) {
                 buffRecipient.userData.focalMarkTurnsRemaining = buffDuration;
+              }
+              if (animation.buffId === BUFF_REGENERATION) {
+                buffRecipient.userData.regenerationTurnsRemaining = buffDuration;
+                const healingPerTurn = Number.isFinite(Number(animation.buffResolvedValue))
+                  ? Math.max(0, Math.floor(Number(animation.buffResolvedValue)))
+                  : 0;
+                buffRecipient.userData.regenerationHealingPerTurn = healingPerTurn;
               }
               this.updateCardBuffBadges(buffRecipient);
             }
