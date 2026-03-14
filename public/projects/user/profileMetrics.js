@@ -1,4 +1,4 @@
-const PROFILE_METRIC_FIELDS = [
+export const PROFILE_METRIC_FIELDS = [
   { key: 'totalGamesPlayed', label: 'Total Games Played' },
   { key: 'totalWins', label: 'Total Games Won' },
   { key: 'totalLosses', label: 'Total Games Lost' },
@@ -20,6 +20,15 @@ export function toProfilePanelMetrics(metricsInput = null) {
   const normalized = normalizeBattleMetrics(metricsInput);
   return PROFILE_METRIC_FIELDS.map((metric) => ({
     name: metric.label,
+    value: normalized[metric.key],
+  }));
+}
+
+export function toProfileTooltipMetrics(metricsInput = null) {
+  const normalized = normalizeBattleMetrics(metricsInput);
+  return PROFILE_METRIC_FIELDS.map((metric) => ({
+    key: metric.key,
+    label: metric.label,
     value: normalized[metric.key],
   }));
 }

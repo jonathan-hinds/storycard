@@ -1,4 +1,5 @@
 import { CardGameClient, CARD_ZONE_TYPES, DEFAULT_ZONE_FRAMEWORK, createDeckToHandDealHook, loadPreviewTuning } from '/public/card-game/index.js';
+import { toProfileTooltipMetrics } from '/public/projects/user/profileMetrics.js';
 import { CARD_KINDS, getDefaultCardLabelLayout, resolveCardKind } from '/public/card-game/render/cardStyleConfig.js';
 import { normalizeBadgeSlotsLayout } from '/public/card-game/render/badgeSlotsLayout.js';
 import { CardRollerOverlay } from './CardRollerOverlay.js';
@@ -28,14 +29,6 @@ const DEFAULT_AVATAR_PLAYER_POSITION = { x: 0.12, y: DEFAULT_AVATAR_PANEL_Y, z: 
 const DEFAULT_AVATAR_OPPONENT_POSITION = { x: 0.88, y: DEFAULT_AVATAR_PANEL_Y, z: -5.48 };
 const DEFAULT_AVATAR_PANEL_OPACITY_PERCENT = 0;
 const MAX_AVATAR_NAME_LENGTH = 16;
-const PROFILE_METRIC_KEYS = [
-  { key: 'totalGamesPlayed', label: 'Total Games Played' },
-  { key: 'totalWins', label: 'Total Games Won' },
-  { key: 'totalLosses', label: 'Total Games Lost' },
-  { key: 'totalCreaturesKilled', label: 'Creatures Killed' },
-  { key: 'totalCreaturesLost', label: 'Creatures Lost' },
-  { key: 'totalSpellsPlayed', label: 'Spells Played' },
-];
 
 function getFrustumHalfExtents(fovDegrees, aspect, depth) {
   const safeDepth = Math.max(Math.abs(depth), 0.001);
@@ -150,12 +143,7 @@ export class PhaseManagerClient {
   }
 
   normalizeProfileMetrics(metricsInput = null) {
-    const metrics = metricsInput && typeof metricsInput === 'object' ? metricsInput : {};
-    return PROFILE_METRIC_KEYS.map(({ key, label }) => {
-      const rawValue = metrics?.[key];
-      const value = Number.isFinite(Number(rawValue)) ? Math.max(0, Math.floor(Number(rawValue))) : 0;
-      return { key, label, value };
-    });
+    return toProfileTooltipMetrics(metricsInput);
   }
 
   normalizeAvatarName(name, fallback = 'Player') {
