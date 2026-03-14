@@ -165,6 +165,38 @@ function createDefaultPlayerMetrics() {
   };
 }
 
+function hasPersistedMetricsObject(userDocument = {}) {
+  return Boolean(
+    userDocument.metrics
+      && typeof userDocument.metrics === 'object'
+      && !Array.isArray(userDocument.metrics),
+  );
+}
+
+async function ensureUserHasMetricsObject(collection, userDocument) {
+  if (!userDocument?._id || hasPersistedMetricsObject(userDocument)) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  await collection.updateOne(
+    { _id: userDocument._id },
+    {
+      $set: {
+        metrics: {
+          ...createDefaultPlayerMetrics(),
+          updatedAt: now,
+        },
+      },
+    },
+  );
+
+  userDocument.metrics = {
+    ...createDefaultPlayerMetrics(),
+    updatedAt: now,
+  };
+}
+
 function normalizePlayerMetricsFromDocument(document = {}) {
   const source = document?.metrics && typeof document.metrics === 'object'
     ? document.metrics
@@ -261,6 +293,8 @@ async function loginUser(input = {}) {
   if (!isValidPassword) {
     throw new Error('invalid username or password');
   }
+
+  await ensureUserHasMetricsObject(collection, user);
 
   return toPublicUser(user);
 }
@@ -389,7 +423,6 @@ async function recordBattleMetrics(userId, metrics = {}) {
   }
 
   const collection = await getCollection();
-  const now = new Date().toISOString();
   const normalizedUserId = userId.trim();
   if (!normalizedUserId) {
     throw new Error('invalid user id');
@@ -408,22 +441,10 @@ async function recordBattleMetrics(userId, metrics = {}) {
   }
   const objectId = existingUser._id;
 
-  const hasMetricsObject = existingUser.metrics && typeof existingUser.metrics === 'object' && !Array.isArray(existingUser.metrics);
-  if (!hasMetricsObject) {
-    await collection.updateOne(
-      { _id: objectId },
-      {
-        $set: {
-          metrics: {
-            ...createDefaultPlayerMetrics(),
-            updatedAt: now,
-          },
-        },
-      },
-    );
-  }
+  await ensureUserHasMetricsObject(collection, existingUser);
 
   const increments = normalizeBattleMetricsInput(metrics);
+  const now = new Date().toISOString();
   let result;
   try {
     result = await collection.findOneAndUpdate(
@@ -476,4 +497,9 @@ module.exports = {
   updateUserAvatar,
   normalizeUsername,
   normalizePassword,
+  __testables: {
+    hasPersistedMetricsObject,
+    ensureUserHasMetricsObject,
+    createDefaultPlayerMetrics,
+  },
 };
