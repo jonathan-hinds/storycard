@@ -77,6 +77,7 @@ const BUFF_FIRE = 'fire';
 const BUFF_FROSTBITE = 'frostbite';
 const BUFF_BLEED = 'bleed';
 const BUFF_FOCAL_MARK = 'focal_mark';
+const BUFF_REGENERATION = 'regeneration';
 const BUFF_DISRUPTION = 'disruption';
 
 export class CardGameClient {
@@ -259,6 +260,9 @@ export class CardGameClient {
     }
     if (Number.isInteger(card?.userData?.focalMarkTurnsRemaining) && card.userData.focalMarkTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FOCAL_MARK)) {
       activeBuffs.push(BUFF_FOCAL_MARK);
+    }
+    if (Number.isInteger(card?.userData?.regenerationTurnsRemaining) && card.userData.regenerationTurnsRemaining > 0 && !activeBuffs.includes(BUFF_REGENERATION)) {
+      activeBuffs.push(BUFF_REGENERATION);
     }
     if (Number.isInteger(card?.userData?.disruptionDebuffTurnsRemaining) && card.userData.disruptionDebuffTurnsRemaining > 0 && !activeBuffs.includes(BUFF_DISRUPTION)) {
       activeBuffs.push(BUFF_DISRUPTION);

@@ -1206,6 +1206,8 @@ export class PhaseManagerClient {
         bleedTurnsRemaining: Number.isInteger(card.bleedTurnsRemaining) ? card.bleedTurnsRemaining : 0,
         bleedStacks: Number.isInteger(card.bleedStacks) ? card.bleedStacks : 0,
         focalMarkTurnsRemaining: Number.isInteger(card.focalMarkTurnsRemaining) ? card.focalMarkTurnsRemaining : 0,
+        regenerationTurnsRemaining: Number.isInteger(card.regenerationTurnsRemaining) ? card.regenerationTurnsRemaining : 0,
+        regenerationHealingPerTurn: Number.isFinite(Number(card.regenerationHealingPerTurn)) ? Math.max(0, Math.floor(Number(card.regenerationHealingPerTurn))) : 0,
         disruptionDebuffTurnsRemaining: Number.isInteger(card.disruptionDebuffTurnsRemaining)
           ? card.disruptionDebuffTurnsRemaining
           : 0,
@@ -1251,6 +1253,8 @@ export class PhaseManagerClient {
         bleedTurnsRemaining: Number.isInteger(card.bleedTurnsRemaining) ? card.bleedTurnsRemaining : 0,
         bleedStacks: Number.isInteger(card.bleedStacks) ? card.bleedStacks : 0,
         focalMarkTurnsRemaining: Number.isInteger(card.focalMarkTurnsRemaining) ? card.focalMarkTurnsRemaining : 0,
+        regenerationTurnsRemaining: Number.isInteger(card.regenerationTurnsRemaining) ? card.regenerationTurnsRemaining : 0,
+        regenerationHealingPerTurn: Number.isFinite(Number(card.regenerationHealingPerTurn)) ? Math.max(0, Math.floor(Number(card.regenerationHealingPerTurn))) : 0,
         disruptionDebuffTurnsRemaining: Number.isInteger(card.disruptionDebuffTurnsRemaining)
           ? card.disruptionDebuffTurnsRemaining
           : 0,
@@ -1375,6 +1379,8 @@ export class PhaseManagerClient {
           frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
           frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
           focalMarkTurnsRemaining: Number.isInteger(card.focalMarkTurnsRemaining) ? card.focalMarkTurnsRemaining : 0,
+          regenerationTurnsRemaining: Number.isInteger(card.regenerationTurnsRemaining) ? card.regenerationTurnsRemaining : 0,
+          regenerationHealingPerTurn: Number.isFinite(Number(card.regenerationHealingPerTurn)) ? Math.max(0, Math.floor(Number(card.regenerationHealingPerTurn))) : 0,
           disruptionDebuffTurnsRemaining: Number.isInteger(card.disruptionDebuffTurnsRemaining)
             ? card.disruptionDebuffTurnsRemaining
             : 0,
@@ -1401,6 +1407,8 @@ export class PhaseManagerClient {
       sceneCard.userData.frostbiteTurnsRemaining = state?.frostbiteTurnsRemaining ?? 0;
       sceneCard.userData.frostbiteStacks = state?.frostbiteStacks ?? 0;
       sceneCard.userData.focalMarkTurnsRemaining = state?.focalMarkTurnsRemaining ?? 0;
+      sceneCard.userData.regenerationTurnsRemaining = state?.regenerationTurnsRemaining ?? 0;
+      sceneCard.userData.regenerationHealingPerTurn = state?.regenerationHealingPerTurn ?? 0;
       sceneCard.userData.disruptionDebuffTurnsRemaining = state?.disruptionDebuffTurnsRemaining ?? 0;
       sceneCard.userData.disruptionDebuffs = state?.disruptionDebuffs ?? { damage: 0, speed: 0, defense: 0 };
       sceneCard.userData.activeBuffIds = [];
