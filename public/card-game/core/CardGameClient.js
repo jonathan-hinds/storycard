@@ -426,6 +426,9 @@ export class CardGameClient {
     if (buffId === BUFF_FOCAL_MARK) {
       return Number.isInteger(card.userData.focalMarkTurnsRemaining) ? Math.max(0, card.userData.focalMarkTurnsRemaining) : 0;
     }
+    if (buffId === BUFF_REGENERATION) {
+      return Number.isInteger(card.userData.regenerationTurnsRemaining) ? Math.max(0, card.userData.regenerationTurnsRemaining) : 0;
+    }
     if (buffId === BUFF_DISRUPTION) {
       return Number.isInteger(card.userData.disruptionDebuffTurnsRemaining) ? Math.max(0, card.userData.disruptionDebuffTurnsRemaining) : 0;
     }

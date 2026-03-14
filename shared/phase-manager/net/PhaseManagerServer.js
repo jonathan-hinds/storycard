@@ -1443,6 +1443,14 @@ class PhaseManagerServer {
           const currentHealth = Number(card?.catalogCard?.health);
           if (healingPerTurn > 0 && Number.isFinite(currentHealth) && card?.catalogCard) {
             card.catalogCard.health = currentHealth + healingPerTurn;
+            events.push({
+              playerId,
+              cardId: card.id,
+              slotIndex: Number.isInteger(card.slotIndex) ? card.slotIndex : null,
+              healing: healingPerTurn,
+              appliedDebuffs: ['regeneration'],
+              resultingHealth: card.catalogCard.health,
+            });
           }
         }
       });

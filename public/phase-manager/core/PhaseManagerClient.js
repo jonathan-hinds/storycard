@@ -1317,7 +1317,7 @@ export class PhaseManagerClient {
     if (!this.client || !Array.isArray(dotDamageEvents)) return;
 
     const dotKey = `${this.match?.id || 'none'}:${this.match?.turnNumber || 0}:${this.match?.phase || 0}:${dotDamageEvents
-      .map((event) => `${event?.cardId || 'unknown'}:${event?.damage || 0}:${Array.isArray(event?.appliedDebuffs) ? event.appliedDebuffs.join('+') : ''}`)
+      .map((event) => `${event?.cardId || 'unknown'}:${event?.damage || 0}:${event?.healing || 0}:${Array.isArray(event?.appliedDebuffs) ? event.appliedDebuffs.join('+') : ''}`)
       .join('|')}`;
     if (dotKey === this.lastPlayedDotEventKey) return;
     this.lastPlayedDotEventKey = dotKey;
@@ -1326,32 +1326,46 @@ export class PhaseManagerClient {
     const now = performance.now();
 
     dotDamageEvents.forEach((event) => {
-      if (!event || !Number.isFinite(event.damage) || event.damage <= 0) return;
+      if (!event) return;
+      const damageAmount = Number.isFinite(event.damage) ? event.damage : 0;
+      const healingAmount = Number.isFinite(event.healing) ? event.healing : 0;
+      if (damageAmount <= 0 && healingAmount <= 0) return;
       const side = event.side === 'player' ? PLAYER_SIDE : OPPONENT_SIDE;
       const sceneCard = this.client.cards.find((card) => card?.userData?.cardId === event.cardId && card.userData.owner === side);
       if (!sceneCard) return;
 
       const lanePopupPoint = this.client.getCardLanePopupPoint(sceneCard);
       if (lanePopupPoint) {
-        this.client.spawnDamagePopup({
-          amount: event.damage,
-          worldPoint: lanePopupPoint,
-          driftTowardWorldPoint: this.client.getCardSlotAnchorPoint(sceneCard),
-          time: now,
-        });
+        if (damageAmount > 0) {
+          this.client.spawnDamagePopup({
+            amount: damageAmount,
+            worldPoint: lanePopupPoint,
+            driftTowardWorldPoint: this.client.getCardSlotAnchorPoint(sceneCard),
+            time: now,
+          });
+        }
+        if (healingAmount > 0) {
+          this.client.spawnBeneficialPopup({
+            amount: healingAmount,
+            worldPoint: lanePopupPoint,
+            time: now,
+          });
+        }
       }
 
-      this.client.combatShakeEffects.push({
-        card: sceneCard,
-        startAtMs: now,
-        durationMs: 220,
-        basePosition: sceneCard.position.clone(),
-        baseRotationZ: sceneCard.rotation.z,
-        axis: new THREE.Vector3(0, 0, side === PLAYER_SIDE ? -1 : 1),
-        amplitude: 0.12,
-        swayAmplitude: 0.045,
-        rollAmplitude: 0.07,
-      });
+      if (damageAmount > 0) {
+        this.client.combatShakeEffects.push({
+          card: sceneCard,
+          startAtMs: now,
+          durationMs: 220,
+          basePosition: sceneCard.position.clone(),
+          baseRotationZ: sceneCard.rotation.z,
+          axis: new THREE.Vector3(0, 0, side === PLAYER_SIDE ? -1 : 1),
+          amplitude: 0.12,
+          swayAmplitude: 0.045,
+          rollAmplitude: 0.07,
+        });
+      }
     });
   }
 
