@@ -4,9 +4,9 @@ const COLLECTION_NAME = process.env.ABILITIES_COLLECTION_NAME || 'abilities';
 const ABILITY_KINDS = ['Creature', 'Spell'];
 const ABILITY_TARGETS = ['self', 'enemy', 'friendly', 'none'];
 const ABILITY_EFFECTS = ['none', 'damage_enemy', 'heal_target', 'retaliation_bonus', 'life_steal', 'disruption'];
-const ABILITY_BUFFS = ['none', 'taunt', 'silence', 'poison', 'fire', 'frostbite', 'bleed', 'focal_mark'];
+const ABILITY_BUFFS = ['none', 'taunt', 'silence', 'poison', 'fire', 'frostbite', 'bleed', 'focal_mark', 'regeneration'];
 const ENEMY_DEBUFF_BUFFS = new Set(['silence', 'poison', 'fire', 'frostbite', 'bleed', 'focal_mark']);
-const DURATION_BASED_BUFFS = new Set(['taunt', 'silence', 'poison', 'fire', 'frostbite', 'bleed', 'focal_mark']);
+const DURATION_BASED_BUFFS = new Set(['taunt', 'silence', 'poison', 'fire', 'frostbite', 'bleed', 'focal_mark', 'regeneration']);
 const ABILITY_BUFF_TARGETS = ['none', 'self', 'friendly', 'enemy'];
 const ABILITY_VALUE_SOURCE_TYPES = ['none', 'roll', 'fixed'];
 const ABILITY_ROLL_STATS = ['damage', 'speed', 'defense', 'efct'];
@@ -311,13 +311,28 @@ function normalizeAbilityInput(input = {}) {
     }
   }
 
+  if (buffId === 'regeneration') {
+    if (!Number.isInteger(durationTurns)) {
+      throw new Error('durationTurns must be a whole number when buffId is regeneration');
+    }
+    if (durationTurns < 1) {
+      throw new Error('durationTurns must be at least 1 when buffId is regeneration');
+    }
+    if (buffTarget !== 'self' && buffTarget !== 'friendly') {
+      throw new Error('buffTarget must be self or friendly when buffId is regeneration');
+    }
+    if (valueSourceType !== 'fixed' && valueSourceType !== 'roll') {
+      throw new Error('valueSourceType must be fixed or roll when buffId is regeneration');
+    }
+  }
+
   if (buffId !== 'none') {
     if (target === 'enemy') {
       if (!ENEMY_DEBUFF_BUFFS.has(buffId) || buffTarget !== 'enemy') {
         throw new Error('enemy-targeting abilities may only use enemy-targeting debuffs');
       }
     } else if (target === 'self' || target === 'friendly') {
-      if (buffId !== 'taunt' || (buffTarget !== 'self' && buffTarget !== 'friendly')) {
+      if ((buffId !== 'taunt' && buffId !== 'regeneration') || (buffTarget !== 'self' && buffTarget !== 'friendly')) {
         throw new Error('self/friendly-targeting abilities may only use self/friendly buffs');
       }
     }

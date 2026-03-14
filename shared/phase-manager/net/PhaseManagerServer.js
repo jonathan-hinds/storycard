@@ -108,6 +108,7 @@ const DOT_HANDLERS = {
   }),
 };
 
+
 const DISRUPTION_ROLL_STATS = Object.freeze(['damage', 'speed', 'defense']);
 
 function normalizeDisruptionTargetStat(stat) {
@@ -1086,6 +1087,8 @@ class PhaseManagerServer {
         frostbiteStacks: 0,
         bleedTurnsRemaining: 0,
         bleedStacks: 0,
+        regenerationTurnsRemaining: 0,
+        regenerationHealingPerTurn: 0,
         focalMarkTurnsRemaining: 0,
         focalMarkBonusDamage: 0,
         disruptionDebuffTurnsRemaining: 0,
@@ -1153,6 +1156,8 @@ class PhaseManagerServer {
         frostbiteStacks: 0,
         bleedTurnsRemaining: 0,
         bleedStacks: 0,
+        regenerationTurnsRemaining: 0,
+        regenerationHealingPerTurn: 0,
         focalMarkTurnsRemaining: 0,
         focalMarkBonusDamage: 0,
         disruptionDebuffTurnsRemaining: 0,
@@ -1429,6 +1434,17 @@ class PhaseManagerServer {
             });
           });
         });
+
+        const regenerationTurns = Number.isInteger(card.regenerationTurnsRemaining) ? card.regenerationTurnsRemaining : 0;
+        if (regenerationTurns > 0) {
+          const healingPerTurn = Number.isFinite(Number(card.regenerationHealingPerTurn))
+            ? Math.max(0, Math.floor(Number(card.regenerationHealingPerTurn)))
+            : 0;
+          const currentHealth = Number(card?.catalogCard?.health);
+          if (healingPerTurn > 0 && Number.isFinite(currentHealth) && card?.catalogCard) {
+            card.catalogCard.health = currentHealth + healingPerTurn;
+          }
+        }
       });
     });
 
@@ -1488,6 +1504,8 @@ class PhaseManagerServer {
         frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
         bleedTurnsRemaining: Number.isInteger(card.bleedTurnsRemaining) ? card.bleedTurnsRemaining : 0,
         bleedStacks: Number.isInteger(card.bleedStacks) ? card.bleedStacks : 0,
+        regenerationTurnsRemaining: Math.max(0, (Number.isInteger(card.regenerationTurnsRemaining) ? card.regenerationTurnsRemaining : 0) - 1),
+        regenerationHealingPerTurn: Number.isFinite(Number(card.regenerationHealingPerTurn)) ? Math.max(0, Math.floor(Number(card.regenerationHealingPerTurn))) : 0,
         focalMarkTurnsRemaining: nextFocalMarkTurnsRemaining,
         focalMarkBonusDamage: nextFocalMarkTurnsRemaining > 0 ? currentFocalMarkBonusDamage : 0,
         disruptionDebuffTurnsRemaining: Math.max(0, (Number.isInteger(card.disruptionDebuffTurnsRemaining) ? card.disruptionDebuffTurnsRemaining : 0) - 1),
@@ -1826,7 +1844,7 @@ class PhaseManagerServer {
 
   applyResolvedAbilityBuff({ match, casterId, attack, buffId, buffTarget, durationTurns }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire' && buffId !== 'frostbite' && buffId !== 'bleed' && buffId !== 'focal_mark') {
+    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire' && buffId !== 'frostbite' && buffId !== 'bleed' && buffId !== 'focal_mark' && buffId !== 'regeneration') {
       return { executed: true, reason: 'no_buff' };
     }
     const normalizedDuration = Number.isInteger(durationTurns) ? Math.max(0, durationTurns) : 0;
@@ -1859,6 +1877,18 @@ class PhaseManagerServer {
       const dotHandler = DOT_HANDLERS[buffId];
       dotHandler?.apply(targetCard, normalizedDuration);
       return { executed: true, reason: `${buffId}_applied` };
+    }
+
+    if (buffId === 'regeneration') {
+      const healingPerTurn = Number.isFinite(attack?.resolvedValue)
+        ? Math.max(0, Math.floor(attack.resolvedValue))
+        : 0;
+      if (healingPerTurn < 1) {
+        return { executed: false, reason: 'invalid_healing_value' };
+      }
+      targetCard.regenerationTurnsRemaining = normalizedDuration;
+      targetCard.regenerationHealingPerTurn = healingPerTurn;
+      return { executed: true, reason: 'regeneration_applied' };
     }
 
     if (buffId === 'focal_mark') {
@@ -2708,6 +2738,8 @@ class PhaseManagerServer {
         frostbiteStacks: Number.isInteger(knownCard?.frostbiteStacks) ? knownCard.frostbiteStacks : 0,
         bleedTurnsRemaining: Number.isInteger(knownCard?.bleedTurnsRemaining) ? knownCard.bleedTurnsRemaining : 0,
         bleedStacks: Number.isInteger(knownCard?.bleedStacks) ? knownCard.bleedStacks : 0,
+        regenerationTurnsRemaining: Number.isInteger(knownCard?.regenerationTurnsRemaining) ? knownCard.regenerationTurnsRemaining : 0,
+        regenerationHealingPerTurn: Number.isFinite(Number(knownCard?.regenerationHealingPerTurn)) ? Math.max(0, Math.floor(Number(knownCard.regenerationHealingPerTurn))) : 0,
         focalMarkTurnsRemaining: Number.isInteger(knownCard?.focalMarkTurnsRemaining) ? knownCard.focalMarkTurnsRemaining : 0,
         focalMarkBonusDamage: Number.isFinite(knownCard?.focalMarkBonusDamage) ? Math.max(0, Math.floor(knownCard.focalMarkBonusDamage)) : 0,
         disruptionDebuffTurnsRemaining: Number.isInteger(knownCard?.disruptionDebuffTurnsRemaining) ? knownCard.disruptionDebuffTurnsRemaining : 0,

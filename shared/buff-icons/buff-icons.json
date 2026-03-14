@@ -4,5 +4,6 @@
   "poison": null,
   "fire": null,
   "frostbite": null,
-  "bleed": null
+  "bleed": null,
+  "regeneration": null
 }

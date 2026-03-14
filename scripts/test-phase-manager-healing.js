@@ -150,6 +150,52 @@ const server = new PhaseManagerServer();
 }
 
 
+
+{
+  const regenerationAbility = {
+    effectId: 'none',
+    buffId: 'regeneration',
+    buffTarget: 'self',
+    durationTurns: 2,
+    valueSourceType: 'fixed',
+    valueSourceFixed: 3,
+  };
+  const { match, attackerId } = createMatchWithAttackerAbility(regenerationAbility, 0);
+  const attackerState = match.cardsByPlayer.get(attackerId);
+  const opponentId = match.players.find((id) => id !== attackerId);
+  const opponentState = match.cardsByPlayer.get(opponentId);
+  attackerState.hand = [];
+  attackerState.deck = [];
+  attackerState.discard = [];
+  opponentState.hand = [];
+  opponentState.deck = [];
+  opponentState.discard = [];
+
+  const attackerCard = attackerState.board[0];
+  attackerCard.catalogCard.health = 4;
+
+  server.applyCommitEffects(match);
+
+  assert.equal(attackerCard.regenerationTurnsRemaining, 2, 'regeneration buff should set duration on target');
+  assert.equal(attackerCard.regenerationHealingPerTurn, 3, 'regeneration buff should store healing per turn from resolved value');
+
+  match.turnNumber = 1;
+  match.phase = 2;
+  match.phaseStartedAt = Date.now();
+  match.phaseEndsAt = null;
+  match.readyPlayers = new Set();
+  match.lastDrawnCardsByPlayer = new Map();
+  match.npcSpellCardsCastThisTurn = new Set();
+  match.commitAnimationCompletedPlayers = new Set();
+  match.executedCommitAttackIds = [];
+
+  server.advanceMatchToDecisionPhase(match);
+
+  const refreshedAttackerCard = match.cardsByPlayer.get(attackerId).board.find((card) => card.id === attackerCard.id);
+  assert.equal(refreshedAttackerCard.catalogCard.health, 7, 'regeneration should heal at the start of the next turn');
+  assert.equal(refreshedAttackerCard.regenerationTurnsRemaining, 1, 'regeneration duration should decrement each turn');
+}
+
 {
   const healAbility = {
     effectId: 'heal_target',
