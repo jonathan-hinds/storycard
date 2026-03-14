@@ -3,7 +3,7 @@ import { DeckBuilderScene } from '/public/projects/card-library/DeckBuilderScene
 import { PhaseManagerClient } from '/public/phase-manager/index.js';
 import { createPhaseManagerElements } from '/public/projects/user/canvasShared.js';
 import { ProfilePanelScene } from '/public/projects/profile-sandbox/src/ProfilePanelScene.js';
-import { toProfilePanelMetrics } from '/public/projects/user/profileMetrics.js';
+import { normalizeBattleMetrics, toProfilePanelMetrics } from '/public/projects/user/profileMetrics.js';
 
 const USER_SESSION_KEY = 'storycard-user-session';
 const POLL_INTERVAL_MS = 1500;
@@ -264,7 +264,11 @@ async function updateOpponentProfile(opponentId = null) {
   if (!phaseManager) return;
   const normalizedOpponentId = typeof opponentId === 'string' ? opponentId.trim() : '';
   if (!normalizedOpponentId) {
-    phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
+    phaseManager.setOpponentProfile({
+      username: 'Opponent',
+      avatarImagePath: null,
+      metrics: normalizeBattleMetrics(),
+    });
     return;
   }
 
@@ -275,6 +279,7 @@ async function updateOpponentProfile(opponentId = null) {
     phaseManager.setOpponentProfile({
       avatarImagePath: pickNpcAvatarPath(loadedAvatarAssetPaths, normalizedOpponentId),
       username: 'NPC Opponent',
+      metrics: normalizeBattleMetrics(),
     });
     return;
   }
@@ -287,9 +292,14 @@ async function updateOpponentProfile(opponentId = null) {
     phaseManager.setOpponentProfile({
       avatarImagePath: user.avatarImagePath || null,
       username: String(user.username || 'Opponent').trim() || 'Opponent',
+      metrics: normalizeBattleMetrics(user.metrics),
     });
   } catch (error) {
-    phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
+    phaseManager.setOpponentProfile({
+      username: 'Opponent',
+      avatarImagePath: null,
+      metrics: normalizeBattleMetrics(),
+    });
   }
 }
 
@@ -582,8 +592,13 @@ function showMatch() {
   phaseManager.setPlayerProfile({
     username: String(session.user.username || 'You').trim() || 'You',
     avatarImagePath: session.user.avatarImagePath || null,
+    metrics: normalizeBattleMetrics(session.user.metrics),
   });
-  phaseManager.setOpponentProfile({ username: 'Opponent', avatarImagePath: null });
+  phaseManager.setOpponentProfile({
+    username: 'Opponent',
+    avatarImagePath: null,
+    metrics: normalizeBattleMetrics(),
+  });
   phaseManager.start();
 }
 
