@@ -30,96 +30,82 @@ const TYPE_ADVANTAGE_BY_ATTACKER = {
   Water: 'Fire',
 };
 
+function createDotHandler({
+  turnsKey,
+  stacksKey,
+  refreshTurns = 'reset',
+  getTickDamage = (stacks) => stacks,
+  getExpireDamage = () => 0,
+}) {
+  return {
+    apply(card, durationTurns) {
+      const currentTurns = Number.isInteger(card[turnsKey]) ? card[turnsKey] : 0;
+      const currentStacks = Number.isInteger(card[stacksKey]) ? card[stacksKey] : 0;
+      if (currentTurns > 0) {
+        if (refreshTurns === 'extend') {
+          card[turnsKey] = currentTurns + 1;
+        }
+        card[stacksKey] = Math.max(1, currentStacks + 1);
+        return;
+      }
+      card[turnsKey] = durationTurns;
+      card[stacksKey] = 1;
+    },
+    tick(card) {
+      const turnsRemaining = Number.isInteger(card[turnsKey]) ? card[turnsKey] : 0;
+      if (turnsRemaining < 1) {
+        card[turnsKey] = 0;
+        card[stacksKey] = 0;
+        return { tickDamage: 0, expireDamage: 0 };
+      }
+
+      const stacks = Number.isInteger(card[stacksKey]) ? Math.max(1, card[stacksKey]) : 1;
+      const rawTickDamage = getTickDamage(stacks);
+      const tickDamage = Number.isFinite(rawTickDamage) ? Math.max(0, Math.floor(rawTickDamage)) : 0;
+      card[turnsKey] = Math.max(0, turnsRemaining - 1);
+      if (card[turnsKey] < 1) {
+        card[stacksKey] = 0;
+        const rawExpireDamage = getExpireDamage(stacks, card);
+        const expireDamage = Number.isFinite(rawExpireDamage) ? Math.max(0, Math.floor(rawExpireDamage)) : 0;
+        return { tickDamage, expireDamage };
+      }
+
+      card[stacksKey] = stacks;
+      return { tickDamage, expireDamage: 0 };
+    },
+  };
+}
+
 const DOT_HANDLERS = {
-  poison: {
-    apply(card, durationTurns) {
-      const currentTurns = Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0;
-      const currentStacks = Number.isInteger(card.poisonStacks) ? card.poisonStacks : 0;
-      if (currentTurns > 0) {
-        card.poisonTurnsRemaining = currentTurns + 1;
-        card.poisonStacks = Math.max(1, currentStacks + 1);
-        return;
-      }
-      card.poisonTurnsRemaining = durationTurns;
-      card.poisonStacks = 1;
+  poison: createDotHandler({
+    turnsKey: 'poisonTurnsRemaining',
+    stacksKey: 'poisonStacks',
+    refreshTurns: 'extend',
+    getTickDamage: () => 1,
+  }),
+  fire: createDotHandler({
+    turnsKey: 'fireTurnsRemaining',
+    stacksKey: 'fireStacks',
+    refreshTurns: 'keep',
+    getTickDamage: (stacks) => stacks,
+  }),
+  frostbite: createDotHandler({
+    turnsKey: 'frostbiteTurnsRemaining',
+    stacksKey: 'frostbiteStacks',
+    refreshTurns: 'keep',
+    getTickDamage: () => 0,
+  }),
+  bleed: createDotHandler({
+    turnsKey: 'bleedTurnsRemaining',
+    stacksKey: 'bleedStacks',
+    refreshTurns: 'keep',
+    getTickDamage: () => 1,
+    getExpireDamage: (stacks, card) => {
+      const currentHealth = Number(card?.catalogCard?.health);
+      if (!Number.isFinite(currentHealth) || currentHealth <= 0) return 0;
+      return Math.floor(currentHealth * 0.1 * stacks);
     },
-    tick(card) {
-      const turnsRemaining = Number.isInteger(card.poisonTurnsRemaining) ? card.poisonTurnsRemaining : 0;
-      if (turnsRemaining < 1) {
-        card.poisonTurnsRemaining = 0;
-        card.poisonStacks = 0;
-        return 0;
-      }
-
-      card.poisonTurnsRemaining = Math.max(0, turnsRemaining - 1);
-      if (card.poisonTurnsRemaining < 1) {
-        card.poisonStacks = 0;
-      } else {
-        card.poisonStacks = Number.isInteger(card.poisonStacks) ? Math.max(1, card.poisonStacks) : 1;
-      }
-      return 1;
-    },
-  },
-  fire: {
-    apply(card, durationTurns) {
-      const currentTurns = Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0;
-      const currentStacks = Number.isInteger(card.fireStacks) ? card.fireStacks : 0;
-      if (currentTurns > 0) {
-        card.fireStacks = Math.max(1, currentStacks + 1);
-        return;
-      }
-
-      card.fireTurnsRemaining = durationTurns;
-      card.fireStacks = 1;
-    },
-    tick(card) {
-      const turnsRemaining = Number.isInteger(card.fireTurnsRemaining) ? card.fireTurnsRemaining : 0;
-      if (turnsRemaining < 1) {
-        card.fireTurnsRemaining = 0;
-        card.fireStacks = 0;
-        return 0;
-      }
-
-      const fireStacks = Number.isInteger(card.fireStacks) ? Math.max(1, card.fireStacks) : 1;
-      card.fireTurnsRemaining = Math.max(0, turnsRemaining - 1);
-      if (card.fireTurnsRemaining < 1) {
-        card.fireStacks = 0;
-      } else {
-        card.fireStacks = fireStacks;
-      }
-      return fireStacks;
-    },
-  },
-  frostbite: {
-    apply(card, durationTurns) {
-      const currentTurns = Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0;
-      const currentStacks = Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0;
-      if (currentTurns > 0) {
-        card.frostbiteStacks = Math.max(1, currentStacks + 1);
-        return;
-      }
-
-      card.frostbiteTurnsRemaining = durationTurns;
-      card.frostbiteStacks = 1;
-    },
-    tick(card) {
-      const turnsRemaining = Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0;
-      if (turnsRemaining < 1) {
-        card.frostbiteTurnsRemaining = 0;
-        card.frostbiteStacks = 0;
-        return 0;
-      }
-
-      const frostbiteStacks = Number.isInteger(card.frostbiteStacks) ? Math.max(1, card.frostbiteStacks) : 1;
-      card.frostbiteTurnsRemaining = Math.max(0, turnsRemaining - 1);
-      if (card.frostbiteTurnsRemaining < 1) {
-        card.frostbiteStacks = 0;
-      } else {
-        card.frostbiteStacks = frostbiteStacks;
-      }
-      return 0;
-    },
-  },
+  }),
 };
 
 const DISRUPTION_ROLL_STATS = Object.freeze(['damage', 'speed', 'defense']);
@@ -566,7 +552,7 @@ class PhaseManagerServer {
         }
         score += 14;
       }
-      if ((buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' || buffId === 'focal_mark') && hasEnemyTarget) {
+      if ((buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' || buffId === 'bleed' || buffId === 'focal_mark') && hasEnemyTarget) {
         if (buffId === 'poison' && Number.isInteger(targetCard?.poisonTurnsRemaining) && targetCard.poisonTurnsRemaining > 1) {
           score -= 8;
         }
@@ -1098,6 +1084,8 @@ class PhaseManagerServer {
         fireStacks: 0,
         frostbiteTurnsRemaining: 0,
         frostbiteStacks: 0,
+        bleedTurnsRemaining: 0,
+        bleedStacks: 0,
         focalMarkTurnsRemaining: 0,
         focalMarkBonusDamage: 0,
         disruptionDebuffTurnsRemaining: 0,
@@ -1163,6 +1151,8 @@ class PhaseManagerServer {
         fireStacks: 0,
         frostbiteTurnsRemaining: 0,
         frostbiteStacks: 0,
+        bleedTurnsRemaining: 0,
+        bleedStacks: 0,
         focalMarkTurnsRemaining: 0,
         focalMarkBonusDamage: 0,
         disruptionDebuffTurnsRemaining: 0,
@@ -1411,26 +1401,32 @@ class PhaseManagerServer {
 
       playerState.board.forEach((card) => {
         Object.entries(DOT_HANDLERS).forEach(([dotId, dotHandler]) => {
-          const dotDamage = dotHandler.tick(card);
-          if (dotDamage < 1) return;
-          const damageResult = this.applyDamageToCard({
-            match,
-            targetPlayerId: playerId,
-            targetSlotIndex: card.slotIndex,
-            damage: dotDamage,
-            sourcePlayerId: getOpponentId(playerId),
-            applyFocalMarkBonus: true,
-          });
-          if (damageResult.executed === false) return;
-          events.push({
-            playerId,
-            cardId: card.id,
-            slotIndex: Number.isInteger(card.slotIndex) ? card.slotIndex : null,
-            damage: Number.isFinite(damageResult.totalDamageApplied) ? damageResult.totalDamageApplied : dotDamage,
-            baseDamage: dotDamage,
-            focalMarkBonusDamage: Number.isFinite(damageResult.focalMarkBonusDamage) ? damageResult.focalMarkBonusDamage : 0,
-            appliedDebuffs: [dotId],
-            resultingHealth: damageResult.resultingHealth,
+          const { tickDamage, expireDamage } = dotHandler.tick(card);
+          const damageByType = [
+            { kind: 'tick', amount: tickDamage },
+            { kind: 'expire', amount: expireDamage },
+          ];
+          damageByType.forEach(({ kind, amount }) => {
+            if (amount < 1) return;
+            const damageResult = this.applyDamageToCard({
+              match,
+              targetPlayerId: playerId,
+              targetSlotIndex: card.slotIndex,
+              damage: amount,
+              sourcePlayerId: getOpponentId(playerId),
+              applyFocalMarkBonus: true,
+            });
+            if (damageResult.executed === false) return;
+            events.push({
+              playerId,
+              cardId: card.id,
+              slotIndex: Number.isInteger(card.slotIndex) ? card.slotIndex : null,
+              damage: Number.isFinite(damageResult.totalDamageApplied) ? damageResult.totalDamageApplied : amount,
+              baseDamage: amount,
+              focalMarkBonusDamage: Number.isFinite(damageResult.focalMarkBonusDamage) ? damageResult.focalMarkBonusDamage : 0,
+              appliedDebuffs: kind === 'expire' ? [dotId, 'expiry'] : [dotId],
+              resultingHealth: damageResult.resultingHealth,
+            });
           });
         });
       });
@@ -1490,6 +1486,8 @@ class PhaseManagerServer {
         fireStacks: Number.isInteger(card.fireStacks) ? card.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(card.frostbiteTurnsRemaining) ? card.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(card.frostbiteStacks) ? card.frostbiteStacks : 0,
+        bleedTurnsRemaining: Number.isInteger(card.bleedTurnsRemaining) ? card.bleedTurnsRemaining : 0,
+        bleedStacks: Number.isInteger(card.bleedStacks) ? card.bleedStacks : 0,
         focalMarkTurnsRemaining: nextFocalMarkTurnsRemaining,
         focalMarkBonusDamage: nextFocalMarkTurnsRemaining > 0 ? currentFocalMarkBonusDamage : 0,
         disruptionDebuffTurnsRemaining: Math.max(0, (Number.isInteger(card.disruptionDebuffTurnsRemaining) ? card.disruptionDebuffTurnsRemaining : 0) - 1),
@@ -1828,7 +1826,7 @@ class PhaseManagerServer {
 
   applyResolvedAbilityBuff({ match, casterId, attack, buffId, buffTarget, durationTurns }) {
     if (!match || !casterId) return { executed: false, reason: 'caster_missing' };
-    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire' && buffId !== 'frostbite' && buffId !== 'focal_mark') {
+    if (buffId !== 'taunt' && buffId !== 'silence' && buffId !== 'poison' && buffId !== 'fire' && buffId !== 'frostbite' && buffId !== 'bleed' && buffId !== 'focal_mark') {
       return { executed: true, reason: 'no_buff' };
     }
     const normalizedDuration = Number.isInteger(durationTurns) ? Math.max(0, durationTurns) : 0;
@@ -1857,7 +1855,7 @@ class PhaseManagerServer {
       return { executed: true, reason: 'silence_applied' };
     }
 
-    if (buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite') {
+    if (buffId === 'poison' || buffId === 'fire' || buffId === 'frostbite' || buffId === 'bleed') {
       const dotHandler = DOT_HANDLERS[buffId];
       dotHandler?.apply(targetCard, normalizedDuration);
       return { executed: true, reason: `${buffId}_applied` };
@@ -2708,6 +2706,8 @@ class PhaseManagerServer {
         fireStacks: Number.isInteger(knownCard?.fireStacks) ? knownCard.fireStacks : 0,
         frostbiteTurnsRemaining: Number.isInteger(knownCard?.frostbiteTurnsRemaining) ? knownCard.frostbiteTurnsRemaining : 0,
         frostbiteStacks: Number.isInteger(knownCard?.frostbiteStacks) ? knownCard.frostbiteStacks : 0,
+        bleedTurnsRemaining: Number.isInteger(knownCard?.bleedTurnsRemaining) ? knownCard.bleedTurnsRemaining : 0,
+        bleedStacks: Number.isInteger(knownCard?.bleedStacks) ? knownCard.bleedStacks : 0,
         focalMarkTurnsRemaining: Number.isInteger(knownCard?.focalMarkTurnsRemaining) ? knownCard.focalMarkTurnsRemaining : 0,
         focalMarkBonusDamage: Number.isFinite(knownCard?.focalMarkBonusDamage) ? Math.max(0, Math.floor(knownCard.focalMarkBonusDamage)) : 0,
         disruptionDebuffTurnsRemaining: Number.isInteger(knownCard?.disruptionDebuffTurnsRemaining) ? knownCard.disruptionDebuffTurnsRemaining : 0,

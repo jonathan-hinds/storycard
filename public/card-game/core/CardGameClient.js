@@ -75,6 +75,7 @@ const BUFF_SILENCE = 'silence';
 const BUFF_POISON = 'poison';
 const BUFF_FIRE = 'fire';
 const BUFF_FROSTBITE = 'frostbite';
+const BUFF_BLEED = 'bleed';
 const BUFF_FOCAL_MARK = 'focal_mark';
 const BUFF_DISRUPTION = 'disruption';
 
@@ -253,6 +254,9 @@ export class CardGameClient {
     if (Number.isInteger(card?.userData?.frostbiteTurnsRemaining) && card.userData.frostbiteTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FROSTBITE)) {
       activeBuffs.push(BUFF_FROSTBITE);
     }
+    if (Number.isInteger(card?.userData?.bleedTurnsRemaining) && card.userData.bleedTurnsRemaining > 0 && !activeBuffs.includes(BUFF_BLEED)) {
+      activeBuffs.push(BUFF_BLEED);
+    }
     if (Number.isInteger(card?.userData?.focalMarkTurnsRemaining) && card.userData.focalMarkTurnsRemaining > 0 && !activeBuffs.includes(BUFF_FOCAL_MARK)) {
       activeBuffs.push(BUFF_FOCAL_MARK);
     }
@@ -312,6 +316,9 @@ export class CardGameClient {
     }
     if (buffId === BUFF_FROSTBITE) {
       return Number.isInteger(card.userData.frostbiteStacks) ? Math.max(0, card.userData.frostbiteStacks) : 0;
+    }
+    if (buffId === BUFF_BLEED) {
+      return Number.isInteger(card.userData.bleedStacks) ? Math.max(0, card.userData.bleedStacks) : 0;
     }
     return 0;
   }
@@ -408,6 +415,9 @@ export class CardGameClient {
     }
     if (buffId === BUFF_FROSTBITE) {
       return Number.isInteger(card.userData.frostbiteTurnsRemaining) ? Math.max(0, card.userData.frostbiteTurnsRemaining) : 0;
+    }
+    if (buffId === BUFF_BLEED) {
+      return Number.isInteger(card.userData.bleedTurnsRemaining) ? Math.max(0, card.userData.bleedTurnsRemaining) : 0;
     }
     if (buffId === BUFF_FOCAL_MARK) {
       return Number.isInteger(card.userData.focalMarkTurnsRemaining) ? Math.max(0, card.userData.focalMarkTurnsRemaining) : 0;
@@ -2106,6 +2116,8 @@ export class CardGameClient {
       card.userData.fireStacks = Number.isInteger(cfg.fireStacks) ? cfg.fireStacks : 0;
       card.userData.frostbiteTurnsRemaining = Number.isInteger(cfg.frostbiteTurnsRemaining) ? cfg.frostbiteTurnsRemaining : 0;
       card.userData.frostbiteStacks = Number.isInteger(cfg.frostbiteStacks) ? cfg.frostbiteStacks : 0;
+      card.userData.bleedTurnsRemaining = Number.isInteger(cfg.bleedTurnsRemaining) ? cfg.bleedTurnsRemaining : 0;
+      card.userData.bleedStacks = Number.isInteger(cfg.bleedStacks) ? cfg.bleedStacks : 0;
       card.userData.focalMarkTurnsRemaining = Number.isInteger(cfg.focalMarkTurnsRemaining) ? cfg.focalMarkTurnsRemaining : 0;
       card.userData.focalMarkBonusDamage = Number.isFinite(Number(cfg.focalMarkBonusDamage))
         ? Math.max(0, Math.floor(Number(cfg.focalMarkBonusDamage)))
@@ -2702,6 +2714,7 @@ export class CardGameClient {
               || animation.buffId === BUFF_POISON
               || animation.buffId === BUFF_FIRE
               || animation.buffId === BUFF_FROSTBITE
+              || animation.buffId === BUFF_BLEED
               || animation.buffId === BUFF_FOCAL_MARK);
           if (shouldApplyBuff) {
             const buffRecipient = animation.buffTarget === 'self'
@@ -2728,6 +2741,11 @@ export class CardGameClient {
                 buffRecipient.userData.frostbiteTurnsRemaining = buffDuration;
                 const currentStacks = Number.isInteger(buffRecipient.userData.frostbiteStacks) ? buffRecipient.userData.frostbiteStacks : 0;
                 buffRecipient.userData.frostbiteStacks = currentStacks > 0 ? currentStacks + 1 : 1;
+              }
+              if (animation.buffId === BUFF_BLEED) {
+                buffRecipient.userData.bleedTurnsRemaining = buffDuration;
+                const currentStacks = Number.isInteger(buffRecipient.userData.bleedStacks) ? buffRecipient.userData.bleedStacks : 0;
+                buffRecipient.userData.bleedStacks = currentStacks > 0 ? currentStacks + 1 : 1;
               }
               if (animation.buffId === BUFF_FOCAL_MARK) {
                 buffRecipient.userData.focalMarkTurnsRemaining = buffDuration;
