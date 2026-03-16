@@ -403,6 +403,98 @@ export class CardGameClient {
       .join(' ');
   }
 
+  escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  formatTurnsRemaining(turnsRemaining) {
+    if (!Number.isInteger(turnsRemaining) || turnsRemaining < 1) return '';
+    return `${turnsRemaining} Turn${turnsRemaining === 1 ? '' : 's'} Remaining`;
+  }
+
+  formatRollStatShortLabel(rollStat) {
+    const normalized = typeof rollStat === 'string' ? rollStat.trim().toLowerCase() : '';
+    if (normalized === 'damage' || normalized === 'dmg' || normalized === 'efct') return 'DMG';
+    if (normalized === 'speed' || normalized === 'spd') return 'SPD';
+    if (normalized === 'defense' || normalized === 'def') return 'DEF';
+    return 'DMG';
+  }
+
+  getDisruptionStatPenalties(card) {
+    const debuffs = card?.userData?.disruptionDebuffs;
+    if (!debuffs || typeof debuffs !== 'object') return [];
+    const statOrder = ['damage', 'speed', 'defense'];
+    return statOrder
+      .map((stat) => {
+        const value = Number(debuffs[stat]);
+        const normalizedValue = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+        if (normalizedValue < 1) return null;
+        return {
+          stat,
+          statLabel: this.formatRollStatShortLabel(stat),
+          value: normalizedValue,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  getBuffTooltipDescription(card, buffId) {
+    if (buffId === BUFF_TAUNT) {
+      return 'Enemies must target this card while Taunt is active.';
+    }
+    if (buffId === BUFF_SILENCE) {
+      return 'Silenced: this card cannot use abilities.';
+    }
+    if (buffId === BUFF_POISON) {
+      const stacks = this.getDotStackCountForBuff(card, buffId);
+      return `Poisoned: takes 1 damage at phase change. Stacks: ${Math.max(1, stacks)}.`;
+    }
+    if (buffId === BUFF_FIRE) {
+      const stacks = this.getDotStackCountForBuff(card, buffId);
+      return `Burning: takes ${Math.max(1, stacks)} damage at phase change.`;
+    }
+    if (buffId === BUFF_FROSTBITE) {
+      const stacks = this.getDotStackCountForBuff(card, buffId);
+      return `Frostbitten: -${Math.max(1, stacks)} on SPD rolls.`;
+    }
+    if (buffId === BUFF_BLEED) {
+      const stacks = this.getDotStackCountForBuff(card, buffId);
+      return `Bleeding: takes 1 damage at phase change. On expiry, takes 10% max health × ${Math.max(1, stacks)}.`;
+    }
+    if (buffId === BUFF_FOCAL_MARK) {
+      const bonus = Number.isFinite(Number(card?.userData?.focalMarkBonusDamage))
+        ? Math.max(0, Math.floor(Number(card.userData.focalMarkBonusDamage)))
+        : 0;
+      return `Marked: next incoming damage gains +${Math.max(1, bonus)}.`;
+    }
+    if (buffId === BUFF_REGENERATION) {
+      const healingPerTurn = Number.isFinite(Number(card?.userData?.regenerationHealingPerTurn))
+        ? Math.max(0, Math.floor(Number(card.userData.regenerationHealingPerTurn)))
+        : 0;
+      return `Regenerate: heals ${Math.max(1, healingPerTurn)} at phase change.`;
+    }
+    if (buffId === BUFF_DISRUPTION) {
+      const penalties = this.getDisruptionStatPenalties(card);
+      if (!penalties.length) {
+        return 'Disrupt enemy rolls.';
+      }
+      if (penalties.length === 1) {
+        const [penalty] = penalties;
+        return `Disrupt enemy ${penalty.statLabel}, -${penalty.value} on ${penalty.statLabel} rolls.`;
+      }
+      const segments = penalties
+        .map((penalty) => `${penalty.statLabel} -${penalty.value}`)
+        .join(', ');
+      return `Disrupt enemy rolls: ${segments}.`;
+    }
+    return '';
+  }
+
   getBuffTurnsRemaining(card, buffId) {
     if (!card?.userData || typeof buffId !== 'string') return 0;
     if (buffId === BUFF_TAUNT) {
@@ -435,12 +527,15 @@ export class CardGameClient {
     return 0;
   }
 
-  getBuffTooltipLabel(card, buffId) {
-    const label = this.formatBuffLabel(buffId);
-    if (!label) return '';
+  getBuffTooltipContent(card, buffId) {
+    const title = this.formatBuffLabel(buffId);
+    if (!title) return null;
     const turnsRemaining = this.getBuffTurnsRemaining(card, buffId);
-    if (turnsRemaining < 1) return label;
-    return `${label}: ${turnsRemaining} Turns Remaining`;
+    return {
+      title,
+      description: this.getBuffTooltipDescription(card, buffId),
+      duration: this.formatTurnsRemaining(turnsRemaining),
+    };
   }
 
   getBuffBadgeHit(event, card) {
@@ -465,8 +560,8 @@ export class CardGameClient {
 
   showBuffTooltip({ card, badgeMesh, buffId }) {
     if (!this.damagePopupLayer || !card || !badgeMesh || !buffId) return;
-    const label = this.getBuffTooltipLabel(card, buffId);
-    if (!label) return;
+    const content = this.getBuffTooltipContent(card, buffId);
+    if (!content?.title) return;
 
     let tooltipNode = this.activeBuffTooltip?.node;
     if (!tooltipNode) {
@@ -474,7 +569,11 @@ export class CardGameClient {
       tooltipNode.className = 'buff-tooltip-badge-label';
       this.damagePopupLayer.append(tooltipNode);
     }
-    tooltipNode.textContent = label;
+    tooltipNode.innerHTML = `
+      <p class="buff-tooltip-badge-label__title">${this.escapeHtml(content.title)}</p>
+      <p class="buff-tooltip-badge-label__description">${this.escapeHtml(content.description || '')}</p>
+      <p class="buff-tooltip-badge-label__duration">${this.escapeHtml(content.duration || '')}</p>
+    `;
 
     this.activeBuffTooltip = {
       node: tooltipNode,
@@ -493,7 +592,16 @@ export class CardGameClient {
   positionActiveBuffTooltip() {
     const activeTooltip = this.activeBuffTooltip;
     if (!activeTooltip?.node || !activeTooltip?.badgeMesh) return;
-    activeTooltip.node.textContent = this.getBuffTooltipLabel(activeTooltip.card, activeTooltip.buffId);
+    const content = this.getBuffTooltipContent(activeTooltip.card, activeTooltip.buffId);
+    if (!content?.title) {
+      this.clearBuffTooltip();
+      return;
+    }
+    activeTooltip.node.innerHTML = `
+      <p class="buff-tooltip-badge-label__title">${this.escapeHtml(content.title)}</p>
+      <p class="buff-tooltip-badge-label__description">${this.escapeHtml(content.description || '')}</p>
+      <p class="buff-tooltip-badge-label__duration">${this.escapeHtml(content.duration || '')}</p>
+    `;
     const worldPoint = activeTooltip.badgeMesh.getWorldPosition(new THREE.Vector3());
     worldPoint.y += 0.13;
     const screen = this.getScreenPositionForWorldPoint(worldPoint);

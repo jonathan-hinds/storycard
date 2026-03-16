@@ -562,16 +562,45 @@ button {
   left: 0;
   top: 0;
   transform: translate(-50%, -50%);
-  padding: 0.3rem 0.55rem;
-  border-radius: 0.35rem;
-  background: rgba(0, 0, 0, 0.75);
+  min-width: 220px;
+  max-width: min(300px, 70vw);
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(170, 196, 255, 0.45);
+  background: linear-gradient(160deg, rgba(8, 16, 37, 0.96), rgba(6, 11, 27, 0.92));
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.42);
   color: #ffffff;
-  font-size: clamp(0.68rem, 1.65vw, 0.92rem);
-  font-weight: 700;
-  line-height: 1.15;
-  white-space: nowrap;
+  font-size: clamp(0.67rem, 1.6vw, 0.88rem);
+  line-height: 1.2;
+  white-space: normal;
   pointer-events: none;
   z-index: 2;
+}
+
+.buff-tooltip-badge-label p {
+  margin: 0;
+}
+
+.buff-tooltip-badge-label__title {
+  font-size: clamp(0.76rem, 1.78vw, 0.96rem);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #ecf4ff;
+  margin-bottom: 0.24rem;
+}
+
+.buff-tooltip-badge-label__description {
+  color: #d5e2fb;
+  font-weight: 600;
+  margin-bottom: 0.34rem;
+}
+
+.buff-tooltip-badge-label__duration {
+  padding-top: 0.3rem;
+  border-top: 1px solid rgba(175, 199, 255, 0.25);
+  color: #b8d0ff;
+  font-size: clamp(0.65rem, 1.5vw, 0.82rem);
+  font-weight: 700;
 }
 
 .cards-project-layout {
