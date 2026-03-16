@@ -470,13 +470,13 @@ export class CardGameClient {
       const bonus = Number.isFinite(Number(card?.userData?.focalMarkBonusDamage))
         ? Math.max(0, Math.floor(Number(card.userData.focalMarkBonusDamage)))
         : 0;
-      return `Marked: next incoming damage gains +${bonus}.`;
+      return `Marked: next incoming damage gains +${Math.max(1, bonus)}.`;
     }
     if (buffId === BUFF_REGENERATION) {
       const healingPerTurn = Number.isFinite(Number(card?.userData?.regenerationHealingPerTurn))
         ? Math.max(0, Math.floor(Number(card.userData.regenerationHealingPerTurn)))
         : 0;
-      return `Regenerate: heals ${healingPerTurn} at phase change.`;
+      return `Regenerate: heals ${Math.max(1, healingPerTurn)} at phase change.`;
     }
     if (buffId === BUFF_DISRUPTION) {
       const penalties = this.getDisruptionStatPenalties(card);
@@ -2594,8 +2594,6 @@ export class CardGameClient {
         targetSide: step?.targetSide === 'player' || step?.targetSide === 'opponent' ? step.targetSide : 'opponent',
         startAtMs: now + index * interAttackDelayMs,
         durationMs: 760,
-        effectId: typeof step?.effectId === 'string' ? step.effectId : 'none',
-        resolvedValue: Number.isFinite(step?.resolvedValue) ? Math.max(0, Math.floor(step.resolvedValue)) : 0,
         resolvedDamage: Number.isFinite(step?.resolvedDamage) ? step.resolvedDamage : null,
         resolvedHealing: Number.isFinite(step?.resolvedHealing) ? step.resolvedHealing : null,
         resolvedLifeStealHealing: Number.isFinite(step?.resolvedLifeStealHealing) ? step.resolvedLifeStealHealing : null,
@@ -2609,9 +2607,6 @@ export class CardGameClient {
         buffId: typeof step?.buffId === 'string' ? step.buffId : 'none',
         buffTarget: typeof step?.buffTarget === 'string' ? step.buffTarget : 'none',
         buffDurationTurns: Number.isInteger(step?.buffDurationTurns) ? step.buffDurationTurns : 0,
-        buffResolvedValue: Number.isFinite(step?.buffResolvedValue)
-          ? Math.max(0, Math.floor(step.buffResolvedValue))
-          : (Number.isFinite(step?.resolvedValue) ? Math.max(0, Math.floor(step.resolvedValue)) : 0),
         speedOutcome: Number.isFinite(step?.speedOutcome) ? Math.max(0, Math.floor(step.speedOutcome)) : null,
         adjustedSpeedOutcome: Number.isFinite(step?.adjustedSpeedOutcome) ? Math.max(0, Math.floor(step.adjustedSpeedOutcome)) : null,
         adjustedRollOutcomes: step?.adjustedRollOutcomes && typeof step.adjustedRollOutcomes === 'object'
@@ -2876,10 +2871,6 @@ export class CardGameClient {
               }
               if (animation.buffId === BUFF_FOCAL_MARK) {
                 buffRecipient.userData.focalMarkTurnsRemaining = buffDuration;
-                const focalMarkBonusDamage = Number.isFinite(Number(animation.buffResolvedValue))
-                  ? Math.max(0, Math.floor(Number(animation.buffResolvedValue)))
-                  : 0;
-                buffRecipient.userData.focalMarkBonusDamage = focalMarkBonusDamage;
               }
               if (animation.buffId === BUFF_REGENERATION) {
                 buffRecipient.userData.regenerationTurnsRemaining = buffDuration;
