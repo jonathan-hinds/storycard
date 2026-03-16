@@ -2397,6 +2397,7 @@ class PhaseManagerServer {
 
       commitExecutionByAttackId.set(attack.id, {
         ...executionResult,
+        buffResolvedValue: Number.isFinite(resolvedAttack.baseResolvedValue) ? resolvedAttack.baseResolvedValue : 0,
         resolvedValue: Number.isFinite(resolvedAttack.resolvedValue) ? resolvedAttack.resolvedValue : 0,
         resolvedDamage: Number.isFinite(resolvedAttack.resolvedDamage) ? resolvedAttack.resolvedDamage : 0,
         resolvedHealing: Number.isFinite(resolvedAttack.resolvedHealing) ? resolvedAttack.resolvedHealing : 0,
