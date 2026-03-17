@@ -1608,6 +1608,54 @@ class PhaseManagerServer {
     });
   }
 
+  queueAttackDisruptionPenalty({ match, attackId, rollType, penaltyValue, targetStat = null }) {
+    if (!match || typeof attackId !== 'string' || typeof rollType !== 'string') return false;
+    const normalizedRollType = normalizeDisruptionTargetStat(rollType);
+    const normalizedPenalty = normalizeRollOutcome(Number(penaltyValue));
+    if (!Number.isFinite(normalizedPenalty) || normalizedPenalty < 1) return false;
+
+    if (!(match.pendingAttackDisruptionPenaltiesByRollKey instanceof Map)) {
+      match.pendingAttackDisruptionPenaltiesByRollKey = new Map();
+    }
+
+    const key = `${attackId}:${normalizedRollType}`;
+    const existing = match.pendingAttackDisruptionPenaltiesByRollKey.get(key);
+    const existingPenalty = normalizeRollOutcome(Number(existing?.penaltyValue));
+    match.pendingAttackDisruptionPenaltiesByRollKey.set(key, {
+      attackId,
+      rollType: normalizedRollType,
+      targetStat: targetStat || normalizedRollType,
+      penaltyValue: Number.isFinite(existingPenalty)
+        ? existingPenalty + normalizedPenalty
+        : normalizedPenalty,
+    });
+    return true;
+  }
+
+  applyPendingAttackDisruptionPenaltyToCommitRoll({ match, attackId, rollType }) {
+    if (!(match?.pendingAttackDisruptionPenaltiesByRollKey instanceof Map) || typeof attackId !== 'string' || typeof rollType !== 'string') {
+      return;
+    }
+    const normalizedRollType = normalizeDisruptionTargetStat(rollType);
+    const key = `${attackId}:${normalizedRollType}`;
+    const pendingPenalty = match.pendingAttackDisruptionPenaltiesByRollKey.get(key);
+    if (!pendingPenalty) return;
+
+    const adjustedOutcome = this.applyCommitRollPenalty({
+      match,
+      attackId,
+      rollType: normalizedRollType,
+      penaltyValue: pendingPenalty.penaltyValue,
+      source: 'attack',
+      targetStat: pendingPenalty.targetStat || normalizedRollType,
+    });
+    if (Number.isFinite(adjustedOutcome)) {
+      const rollEntry = match.commitRollsByAttackId?.get(key);
+      if (rollEntry) rollEntry.disruptedByAttackId = attackId;
+      match.pendingAttackDisruptionPenaltiesByRollKey.delete(key);
+    }
+  }
+
   applyPendingSpellDisruptionDebuffsToCommitRolls(match) {
     if (!match?.cardsByPlayer || !match?.pendingCommitAttacksByPlayer || !match?.commitRollsByAttackId) return;
 
@@ -2120,6 +2168,24 @@ class PhaseManagerServer {
             disruptionAdjustedOutcome: adjustedOutcome,
           };
         }
+
+        const queuedPenalty = this.queueAttackDisruptionPenalty({
+          match,
+          attackId: defenderAttack.id,
+          rollType: disruptionTargetStat,
+          penaltyValue: adjustedResolvedValue,
+          targetStat: disruptionTargetStat,
+        });
+        if (queuedPenalty) {
+          return {
+            executed: true,
+            appliedValue: adjustedResolvedValue,
+            reason: 'disruption_pending_roll',
+            disruptedAttackId: defenderAttack.id,
+            disruptionTargetStat,
+            disruptionAdjustedOutcome: null,
+          };
+        }
       }
     }
 
@@ -2521,6 +2587,7 @@ class PhaseManagerServer {
     });
     match.pendingCommitAttacksByPlayer = pendingAttacks;
     match.commitRollsByAttackId = new Map();
+    match.pendingAttackDisruptionPenaltiesByRollKey = new Map();
     match.commitExecutionByAttackId = new Map();
     match.executedCommitAttackIds = [];
     match.commitCompletedPlayers = new Set();
@@ -2641,6 +2708,12 @@ class PhaseManagerServer {
     this.applySpellDisruptionDebuffToCommitRoll({
       match,
       attackerId: playerId,
+      attackId,
+      rollType: normalizedRollType,
+    });
+
+    this.applyPendingAttackDisruptionPenaltyToCommitRoll({
+      match,
       attackId,
       rollType: normalizedRollType,
     });
@@ -2979,6 +3052,7 @@ class PhaseManagerServer {
         lastDrawnCardsByPlayer: new Map(),
         pendingCommitAttacksByPlayer: new Map(),
         commitRollsByAttackId: new Map(),
+        pendingAttackDisruptionPenaltiesByRollKey: new Map(),
         commitExecutionByAttackId: new Map(),
         executedCommitAttackIds: [],
         commitCompletedPlayers: new Set(),
