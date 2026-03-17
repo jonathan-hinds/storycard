@@ -114,6 +114,73 @@ assert.equal(
   'disruption should publish adjusted roll outcomes for affected attacks so UI can display them',
 );
 
+
+
+const pendingRollMatch = {
+  turnNumber: 1,
+  upkeep: 1,
+  phase: 2,
+  readyPlayers: new Set(),
+  commitCompletedPlayers: new Set(),
+  commitAnimationCompletedPlayers: new Set(),
+  lastDrawnCardsByPlayer: new Map(),
+  lastDotDamageEvents: [],
+  id: 'match-disruption-pending-roll',
+  players: ['p1', 'p2'],
+  cardsByPlayer: new Map([
+    ['p1', {
+      board: [buildCard({ id: 'a', slotIndex: 0, ability: disruptionAbility })],
+      hand: [], deck: [], discard: [],
+    }],
+    ['p2', {
+      board: [buildCard({ id: 'c', slotIndex: 0, ability: damageAbility })],
+      hand: [], deck: [], discard: [],
+    }],
+  ]),
+  pendingCommitAttacksByPlayer: new Map([
+    ['p1', [
+      { id: 'p1:0:opponent:0', attackerSlotIndex: 0, targetSide: 'opponent', targetSlotIndex: 0, selectedAbilityIndex: 0 },
+    ]],
+    ['p2', [
+      { id: 'p2:0:opponent:0', attackerSlotIndex: 0, targetSide: 'opponent', targetSlotIndex: 0, selectedAbilityIndex: 0 },
+    ]],
+  ]),
+  commitRollsByAttackId: new Map([
+    ['p1:0:opponent:0:damage', { roll: { outcome: 3 }, submittedAt: 1 }],
+    ['p1:0:opponent:0:speed', { roll: { outcome: 9 }, submittedAt: 1 }],
+  ]),
+  pendingAttackDisruptionPenaltiesByRollKey: new Map(),
+};
+
+const pendingDisruptionResult = server.applyResolvedAbilityEffect({
+  match: pendingRollMatch,
+  casterId: 'p1',
+  targetSide: 'opponent',
+  targetSlotIndex: 0,
+  effectId: 'disruption',
+  resolvedValue: 3,
+  sourceType: 'Creature',
+  enemyValueSourceStat: 'speed',
+});
+assert.equal(
+  pendingDisruptionResult.reason,
+  'disruption_pending_roll',
+  'disruption should queue a roll penalty when the target roll has not been submitted yet',
+);
+
+pendingRollMatch.commitRollsByAttackId.set('p2:0:opponent:0:speed', { roll: { outcome: 7 }, submittedAt: 2 });
+server.applyPendingAttackDisruptionPenaltyToCommitRoll({
+  match: pendingRollMatch,
+  attackId: 'p2:0:opponent:0',
+  rollType: 'speed',
+});
+
+assert.equal(
+  pendingRollMatch.commitRollsByAttackId.get('p2:0:opponent:0:speed').roll.outcome,
+  4,
+  'queued disruption should reduce the target speed roll once it is submitted',
+);
+
 const fallbackMatch = {
   turnNumber: 1,
   upkeep: 1,
